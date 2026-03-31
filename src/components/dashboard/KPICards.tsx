@@ -1,0 +1,42 @@
+export function KPICards({
+  all,
+  unpaidBiz,
+  paid,
+  dups,
+  review,
+  noCat,
+  onPickFilter,
+}: {
+  all: number
+  unpaidBiz: number
+  paid: number
+  dups: number
+  review: number
+  noCat: number
+  onPickFilter: (key: 'all' | 'unpaid' | 'paid' | 'dups' | 'review' | 'noCat') => void
+}) {
+  const cards = [
+    { key: 'all' as const, label: 'Wszystkie faktury', value: all, hint: 'Pełny inbox' },
+    { key: 'unpaid' as const, label: 'Do opłacenia', value: unpaidBiz, hint: 'Firmowe, niezapłacone' },
+    { key: 'paid' as const, label: 'Zapłacone', value: paid, hint: 'Potwierdzona płatność' },
+    { key: 'dups' as const, label: 'Duplikaty', value: dups, hint: 'Score ≥ 85% lub potwierdzone' },
+    { key: 'review' as const, label: 'Do sprawdzenia', value: review, hint: 'Status przeglądu' },
+    { key: 'noCat' as const, label: 'Bez kategorii', value: noCat, hint: 'Wymaga kategorii kosztu' },
+  ]
+  return (
+    <section className="kpi-grid" aria-label="Wskaźniki">
+      {cards.map((c) => (
+        <button
+          key={c.key}
+          type="button"
+          className="kpi-card"
+          onClick={() => onPickFilter(c.key)}
+        >
+          <span className="kpi-card__label">{c.label}</span>
+          <span className="kpi-card__value">{c.value}</span>
+          <span className="kpi-card__hint">{c.hint}</span>
+        </button>
+      ))}
+    </section>
+  )
+}
