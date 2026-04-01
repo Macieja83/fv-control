@@ -1,0 +1,45 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: fvresta
+      POSTGRES_PASSWORD: fvresta
+      POSTGRES_DB: fvresta
+    ports:
+      - "5432:5432"
+    volumes:
+      - fvresta_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fvresta -d fvresta"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 3000
+      DATABASE_URL: postgresql://fvresta:fvresta@postgres:5432/fvresta?schema=public
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-dev-access-secret-change-me-min-32-chars!!}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev-refresh-secret-change-me-min-32-chars!}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+      UPLOAD_DIR: /app/storage/uploads
+      LOG_LEVEL: info
+      APP_NAME: FV Resta API
+      APP_VERSION: "1.0.0"
+    ports:
+      - "3000:3000"
+    volumes:
+      - fvresta_uploads:/app/storage/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  fvresta_pg:
+  fvresta_uploads:
