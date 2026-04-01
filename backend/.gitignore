@@ -5,3 +5,6 @@ storage
 coverage
 *.log
 .DS_Store
+
+!src/adapters/storage/
+!src/adapters/storage/**
