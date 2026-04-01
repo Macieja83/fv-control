@@ -133,6 +133,37 @@ function attachAuthMiddleware(
       return
     }
 
+    /** Zgodny kształt z GET /api/auth/me (Fastify) — tylko dev. */
+    if (url === '/api/auth/me' && req.method === 'GET') {
+      const auth = req.headers.authorization
+      const token = auth?.startsWith('Bearer ') ? auth.slice(7) : ''
+      if (!token) {
+        sendJson(res, 401, {
+          error: { code: 'UNAUTHORIZED', message: 'Unauthorized', details: null },
+        })
+        return
+      }
+      const s = sessions.get(token)
+      if (!s || Date.now() > s.exp) {
+        if (token) sessions.delete(token)
+        sendJson(res, 401, {
+          error: { code: 'UNAUTHORIZED', message: 'Unauthorized', details: null },
+        })
+        return
+      }
+      const now = new Date().toISOString()
+      sendJson(res, 200, {
+        id: '00000000-0000-4000-8000-000000000002',
+        tenantId: '00000000-0000-4000-8000-000000000001',
+        email: s.email,
+        role: 'OWNER',
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+      })
+      return
+    }
+
     next()
   })
 }

@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
-import type { InvoiceSource, InvoiceStatus, PrismaClient, StorageType } from "@prisma/client";
+import type { InvoiceStatus, PrismaClient } from "@prisma/client";
 import { AppError } from "../../lib/errors.js";
+import { refreshInvoiceCompliance } from "../compliance/compliance.service.js";
 import { parseInvoiceDate } from "./invoice-dates.js";
 import { createInvoiceEvent } from "./invoice-events.js";
 import type {
@@ -9,6 +10,7 @@ import type {
   InvoiceListQuery,
   InvoiceUpdateInput,
 } from "./invoice.schema.js";
+import { serializeInvoiceDetail } from "./invoice-serialize.js";
 import { itemRowFromInput, sumTotalsFromItems } from "./invoice-totals.js";
 
 export async function listInvoices(prisma: PrismaClient, tenantId: string, q: InvoiceListQuery) {
@@ -16,6 +18,9 @@ export async function listInvoices(prisma: PrismaClient, tenantId: string, q: In
   const where: Prisma.InvoiceWhereInput = {
     tenantId,
     ...(q.status ? { status: q.status } : {}),
+    ...(q.ksefStatus ? { ksefStatus: q.ksefStatus } : {}),
+    ...(q.intakeSourceType ? { intakeSourceType: q.intakeSourceType } : {}),
+    ...(q.reviewStatus ? { reviewStatus: q.reviewStatus } : {}),
     ...(q.contractorId ? { contractorId: q.contractorId } : {}),
     ...(q.dateFrom || q.dateTo
       ? {
@@ -29,7 +34,7 @@ export async function listInvoices(prisma: PrismaClient, tenantId: string, q: In
       ? {
           OR: [
             { number: { contains: q.q, mode: "insensitive" } },
-            { contractor: { name: { contains: q.q, mode: "insensitive" } } },
+            { contractor: { is: { name: { contains: q.q, mode: "insensitive" } } } },
           ],
         }
       : {}),
@@ -44,6 +49,8 @@ export async function listInvoices(prisma: PrismaClient, tenantId: string, q: In
       orderBy: [{ issueDate: "desc" }, { number: "asc" }],
       include: {
         contractor: { select: { id: true, name: true, nip: true } },
+        tenant: { select: { name: true } },
+        primaryDoc: { select: { sha256: true } },
         _count: { select: { items: true, files: true } },
       },
     }),
@@ -55,6 +62,8 @@ export async function listInvoices(prisma: PrismaClient, tenantId: string, q: In
       netTotal: r.netTotal.toString(),
       vatTotal: r.vatTotal.toString(),
       grossTotal: r.grossTotal.toString(),
+      duplicateScore: r.duplicateScore?.toString() ?? null,
+      ocrConfidence: r.ocrConfidence?.toString() ?? null,
     })),
     meta: { total, page: q.page, limit: q.limit, totalPages: Math.ceil(total / q.limit) },
   };
@@ -140,7 +149,20 @@ export async function createInvoice(
     return created;
   });
 
-  return serializeInvoiceDetail(inv);
+  await refreshInvoiceCompliance(
+    prisma,
+    tenantId,
+    inv.id,
+    { intakeSourceType: "UPLOAD", documentKind: "INVOICE" },
+    { enqueueIngested: false },
+  );
+
+  const refreshed = await prisma.invoice.findFirst({
+    where: { id: inv.id, tenantId },
+    include: { contractor: true, items: { orderBy: { id: "asc" } }, files: true },
+  });
+  if (!refreshed) throw AppError.internal("Invoice missing after create");
+  return serializeInvoiceDetail(refreshed);
 }
 
 export async function updateInvoice(
@@ -171,6 +193,8 @@ export async function updateInvoice(
   if (input.status !== undefined) data.status = input.status;
   if (input.source !== undefined) data.source = input.source;
   if (input.notes !== undefined) data.notes = input.notes;
+  if (input.reviewStatus !== undefined) data.reviewStatus = input.reviewStatus;
+  if (input.legalChannel !== undefined) data.legalChannel = input.legalChannel;
 
   const inv = await prisma.$transaction(async (tx) => {
     const updated = await tx.invoice.update({
@@ -378,60 +402,4 @@ async function assertContractor(prisma: PrismaClient, tenantId: string, contract
     where: { id: contractorId, tenantId, deletedAt: null },
   });
   if (!c) throw AppError.validation("Invalid contractor for tenant");
-}
-
-function serializeInvoiceDetail(inv: {
-  id: string;
-  tenantId: string;
-  contractorId: string;
-  number: string;
-  issueDate: Date;
-  saleDate: Date | null;
-  dueDate: Date | null;
-  currency: string;
-  netTotal: Prisma.Decimal;
-  vatTotal: Prisma.Decimal;
-  grossTotal: Prisma.Decimal;
-  status: InvoiceStatus;
-  source: InvoiceSource;
-  notes: string | null;
-  createdById: string;
-  createdAt: Date;
-  updatedAt: Date;
-  contractor: unknown;
-  items: Array<{
-    id: string;
-    name: string;
-    quantity: Prisma.Decimal;
-    unit: string | null;
-    netPrice: Prisma.Decimal;
-    vatRate: Prisma.Decimal;
-    netValue: Prisma.Decimal;
-    grossValue: Prisma.Decimal;
-  }>;
-  files: Array<{
-    id: string;
-    storageType: StorageType;
-    path: string;
-    mimeType: string;
-    sizeBytes: number;
-    sha256: string;
-    uploadedAt: Date;
-  }>;
-}) {
-  return {
-    ...inv,
-    netTotal: inv.netTotal.toString(),
-    vatTotal: inv.vatTotal.toString(),
-    grossTotal: inv.grossTotal.toString(),
-    items: inv.items.map((i) => ({
-      ...i,
-      quantity: i.quantity.toString(),
-      netPrice: i.netPrice.toString(),
-      vatRate: i.vatRate.toString(),
-      netValue: i.netValue.toString(),
-      grossValue: i.grossValue.toString(),
-    })),
-    files: inv.files.map((f) => ({ ...f })),
-  };
 }

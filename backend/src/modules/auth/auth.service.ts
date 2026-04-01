@@ -43,18 +43,29 @@ export async function registerBootstrap(prisma: PrismaClient, input: RegisterInp
 }
 
 export async function login(prisma: PrismaClient, input: LoginInput) {
-  const user = await prisma.user.findUnique({
-    where: { email: input.email.toLowerCase() },
-  });
-  if (!user?.isActive) {
-    throw AppError.unauthorized("Invalid credentials");
+  try {
+    const user = await prisma.user.findUnique({
+      where: { email: input.email.toLowerCase() },
+    });
+    if (!user?.isActive) {
+      throw AppError.unauthorized("Invalid credentials");
+    }
+    const ok = await verifyPassword(input.password, user.passwordHash);
+    if (!ok) {
+      throw AppError.unauthorized("Invalid credentials");
+    }
+    const tokens = await issueTokens(prisma, user.id, user.tenantId, user.role);
+    return { user: sanitizeUser(user), ...tokens };
+  } catch (e) {
+    if (e instanceof AppError) throw e;
+    const msg = e instanceof Error ? e.message : String(e);
+    if (/P1001|Can't reach database|ECONNREFUSED/i.test(msg)) {
+      throw AppError.internal(
+        "Brak połączenia z bazą danych. Uruchom Postgres (np. docker compose up -d postgres).",
+      );
+    }
+    throw AppError.internal("Logowanie chwilowo niedostępne.");
   }
-  const ok = await verifyPassword(input.password, user.passwordHash);
-  if (!ok) {
-    throw AppError.unauthorized("Invalid credentials");
-  }
-  const tokens = await issueTokens(prisma, user.id, user.tenantId, user.role);
-  return { user: sanitizeUser(user), ...tokens };
 }
 
 export async function refreshSession(prisma: PrismaClient, refreshToken: string) {

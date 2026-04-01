@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { InvoiceRecord } from '../../types/invoice'
 import { DuplicateBadge, PaymentBadge, ScopeBadge, SourceBadge } from './Badges'
+import { InvoiceDocumentPreview } from './InvoiceDocumentPreview'
 
 const money = (amount: number, c: InvoiceRecord['currency']) =>
   new Intl.NumberFormat('pl-PL', {
@@ -13,6 +14,8 @@ type Props = {
   row: InvoiceRecord | null
   categories: readonly string[]
   linkedRow: InvoiceRecord | null
+  /** true = kategoria tylko lokalnie (nie ma pola w API). */
+  categoryLocalOnly: boolean
   onClose: () => void
   onPaid: (id: string) => void
   onUnpaid: (id: string) => void
@@ -32,6 +35,7 @@ export function DetailPanel({
   row,
   categories,
   linkedRow,
+  categoryLocalOnly,
   onClose,
   onPaid,
   onUnpaid,
@@ -46,7 +50,15 @@ export function DetailPanel({
   onClearReview,
   onDeleteInvoice,
 }: Props) {
-  const [draftNotes, setDraftNotes] = useState(() => row?.notes ?? '')
+  const [draftNotes, setDraftNotes] = useState('')
+
+  useEffect(() => {
+    if (!row) {
+      setDraftNotes('')
+      return
+    }
+    setDraftNotes(row.notes)
+  }, [row?.id])
 
   if (!row) {
     return (
@@ -67,6 +79,11 @@ export function DetailPanel({
           Zamknij
         </button>
       </div>
+
+      <section className="detail-section">
+        <h3>Podgląd dokumentu</h3>
+        <InvoiceDocumentPreview key={row.id} invoiceId={row.id} />
+      </section>
 
       <section className="detail-section">
         <h3>Dane</h3>
@@ -169,6 +186,11 @@ export function DetailPanel({
             <span className="field__label">Kategoria</span>
             <select
               className="input"
+              title={
+                categoryLocalOnly
+                  ? 'Kategoria jest zapamiętywana tylko w tej przeglądarce (do czasu odświeżenia strony); backend jej nie zapisuje.'
+                  : undefined
+              }
               value={row.category ?? ''}
               onChange={(e) =>
                 onCategory(row.id, e.target.value ? e.target.value : null)

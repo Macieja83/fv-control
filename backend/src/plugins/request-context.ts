@@ -25,7 +25,15 @@ const requestContextPlugin: FastifyPluginAsync = async (app) => {
   });
 };
 
-const SENSITIVE = new Set(["authorization", "cookie", "set-cookie"]);
+const SENSITIVE = new Set([
+  "authorization",
+  "cookie",
+  "set-cookie",
+  "proxy-authorization",
+  "x-api-key",
+  "x-fvcontrol-signature",
+  "x-signature",
+]);
 
 function redactHeaders(h: Record<string, unknown>): Record<string, string | string[] | undefined> {
   const out: Record<string, string | string[] | undefined> = {};

@@ -1,0 +1,71 @@
+export type ExtractedInvoiceDraft = {
+  number?: string;
+  issueDate?: string;
+  currency?: string;
+  netTotal?: string;
+  vatTotal?: string;
+  grossTotal?: string;
+  contractorNip?: string | null;
+  lineItems?: Array<{
+    name: string;
+    quantity: string;
+    netPrice: string;
+    vatRate: string;
+    netValue: string;
+    grossValue: string;
+  }>;
+};
+
+export type AiInvoiceAdapter = {
+  extractInvoiceData(documentMeta: {
+    mimeType: string;
+    sha256: string;
+    storageKey: string;
+  }): Promise<{ draft: ExtractedInvoiceDraft; confidence: number }>;
+  classifyInvoice(invoiceSnapshot: Record<string, unknown>): Promise<{ label: string; confidence: number }>;
+  anomalyCheck(
+    invoiceSnapshot: Record<string, unknown>,
+    history: Record<string, unknown>[],
+  ): Promise<{ score: number; flags: string[] }>;
+};
+
+export function createMockAiAdapter(featureMockEnabled: boolean): AiInvoiceAdapter {
+  return {
+    async extractInvoiceData(meta) {
+      if (!featureMockEnabled) {
+        return {
+          draft: {},
+          confidence: 0,
+        };
+      }
+      return {
+        draft: {
+          number: `MOCK/${meta.sha256.slice(0, 6).toUpperCase()}`,
+          issueDate: new Date().toISOString().slice(0, 10),
+          currency: "PLN",
+          netTotal: "100.00",
+          vatTotal: "23.00",
+          grossTotal: "123.00",
+          contractorNip: "1111111111",
+          lineItems: [
+            {
+              name: "Mock line",
+              quantity: "1",
+              netPrice: "100.00",
+              vatRate: "23.00",
+              netValue: "100.00",
+              grossValue: "123.00",
+            },
+          ],
+        },
+        confidence: 0.72,
+      };
+    },
+    async classifyInvoice() {
+      return { label: "PURCHASE", confidence: 0.61 };
+    },
+    async anomalyCheck() {
+      return { score: 0.12, flags: [] };
+    },
+  };
+}

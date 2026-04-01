@@ -12,9 +12,10 @@ const swaggerPlugin: FastifyPluginAsync = async (app) => {
       info: {
         title: cfg.APP_NAME,
         version: cfg.APP_VERSION,
-        description: "FV Resta — invoice inbox REST API",
+        description:
+          "FVControl — multi-source invoice ingestion, deduplication, workflows, webhooks (filter for Resta / standalone UI).",
       },
-      servers: [{ url: "/api" }],
+      servers: [{ url: "/api/v1" }],
       components: {
         securitySchemes: {
           bearerAuth: {

@@ -13,8 +13,8 @@ describe("app", () => {
     await app.close();
   });
 
-  it("GET /api/version returns JSON", async () => {
-    const res = await app.inject({ method: "GET", url: "/api/version" });
+  it("GET /api/v1/version returns JSON", async () => {
+    const res = await app.inject({ method: "GET", url: "/api/v1/version" });
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body) as { name: string; version: string };
     expect(body.name).toBeTruthy();

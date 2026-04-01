@@ -19,7 +19,10 @@ const contractorsRoutes: FastifyPluginAsync = async (app) => {
 
   app.post(
     "/contractors",
-    { preHandler: [app.authenticate], schema: { tags: ["Contractors"], summary: "Create contractor" } },
+    {
+      preHandler: [app.authenticate, app.checkIdempotency],
+      schema: { tags: ["Contractors"], summary: "Create contractor" },
+    },
     async (request, reply) => {
       assertCanMutate(request.authUser!.role);
       const body = parseOrThrow(contractorCreateSchema, request.body);
@@ -42,7 +45,10 @@ const contractorsRoutes: FastifyPluginAsync = async (app) => {
 
   app.patch(
     "/contractors/:id",
-    { preHandler: [app.authenticate], schema: { tags: ["Contractors"], summary: "Update contractor" } },
+    {
+      preHandler: [app.authenticate, app.checkIdempotency],
+      schema: { tags: ["Contractors"], summary: "Update contractor" },
+    },
     async (request) => {
       assertCanMutate(request.authUser!.role);
       const { id } = request.params as { id: string };

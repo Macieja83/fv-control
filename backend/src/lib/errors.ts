@@ -4,7 +4,9 @@ export type ErrorCode =
   | "FORBIDDEN"
   | "NOT_FOUND"
   | "CONFLICT"
+  | "PAYLOAD_TOO_LARGE"
   | "BOOTSTRAP_CLOSED"
+  | "UNAVAILABLE"
   | "INTERNAL";
 
 export class AppError extends Error {
@@ -40,8 +42,16 @@ export class AppError extends Error {
     return new AppError(message, 409, "CONFLICT");
   }
 
+  static payloadTooLarge(message: string): AppError {
+    return new AppError(message, 413, "PAYLOAD_TOO_LARGE");
+  }
+
   static bootstrapClosed(): AppError {
     return new AppError("Registration is closed", 403, "BOOTSTRAP_CLOSED");
+  }
+
+  static unavailable(message: string): AppError {
+    return new AppError(message, 503, "UNAVAILABLE");
   }
 
   static internal(message = "Internal server error"): AppError {

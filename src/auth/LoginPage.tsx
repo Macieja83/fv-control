@@ -75,8 +75,10 @@ export default function LoginPage() {
         </form>
 
         <p className="login-hint">
-          Hasło weryfikuje serwer deweloperski (Vite) — nie jest wbudowane w pliki JS. W produkcji
-          podłącz endpoint <code>/api/auth/login</code> w Resta.app.
+          Z prawdziwym API: <code>FV_RESTA_API_URL=http://localhost:3000</code>, Postgres +{' '}
+          <code>npm run prisma:seed</code> w <code>backend/</code>. Konta z seeda:{' '}
+          <code>admin@fvresta.local</code> / <code>Admin123!</code> lub{' '}
+          <code>kontakt@tuttopizza.pl</code> / <code>Aleksander11!!</code>
         </p>
       </div>
     </div>

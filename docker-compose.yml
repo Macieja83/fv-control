@@ -1,0 +1,22 @@
+# PostgreSQL dla backendu FV Resta — uruchom z katalogu głównego repozytorium:
+#   docker compose up -d postgres
+# Następnie: cd backend && npx prisma migrate deploy && npm run prisma:seed
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: fvresta
+      POSTGRES_PASSWORD: fvresta
+      POSTGRES_DB: fvresta
+    ports:
+      - "5432:5432"
+    volumes:
+      - fvresta_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fvresta -d fvresta"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  fvresta_pg:

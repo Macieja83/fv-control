@@ -5,3 +5,11 @@ process.env.JWT_REFRESH_SECRET ??= "test-refresh-secret-min-32-characters-long!"
 process.env.ENCRYPTION_KEY ??= "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=";
 process.env.CORS_ORIGINS ??= "http://localhost:5173";
 process.env.UPLOAD_DIR ??= "./storage/test-uploads";
+process.env.REDIS_URL ??= "redis://127.0.0.1:6379";
+process.env.BULLMQ_PREFIX ??= "fvcontrol-test";
+process.env.STORAGE_DRIVER ??= "local";
+process.env.FEATURE_AI_EXTRACTION_MOCK ??= "true";
+process.env.KSEF_ENV ??= "mock";
+process.env.WEBHOOK_DELIVERY_INTERVAL_MS ??= "60000";
+process.env.WEBHOOK_DELIVERY_MAX_ATTEMPTS ??= "3";
+process.env.WEBHOOK_HTTP_TIMEOUT_MS ??= "5000";

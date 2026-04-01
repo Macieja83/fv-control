@@ -1,4 +1,6 @@
+import { useState } from 'react'
 import type { InvoiceRecord } from '../../types/invoice'
+import { downloadInvoicePackage } from '../../lib/exportInvoicePackage'
 import {
   DuplicateBadge,
   PaymentBadge,
@@ -22,6 +24,8 @@ type Props = {
   onDelete: (id: string) => void
   followerDuplicateCount: number
   onDeleteFollowerDuplicates: () => void
+  loading?: boolean
+  dataSource?: 'mock' | 'api'
 }
 
 export function InvoiceTable({
@@ -31,13 +35,17 @@ export function InvoiceTable({
   onDelete,
   followerDuplicateCount,
   onDeleteFollowerDuplicates,
+  loading = false,
+  dataSource = 'mock',
 }: Props) {
+  const [packaging, setPackaging] = useState(false)
+
   const handleDelete = (id: string, label: string) => {
-    if (
-      !window.confirm(
-        `Usunąć wpis z inboxu?\n\n${label}\n\nTej operacji nie cofniesz w MVP (mock).`,
-      )
-    ) {
+    const irreversible =
+      dataSource === 'api'
+        ? 'Tej operacji nie cofniesz — faktura zostanie usunięta z bazy.'
+        : 'Tej operacji nie cofniesz w MVP (mock).'
+    if (!window.confirm(`Usunąć wpis z inboxu?\n\n${label}\n\n${irreversible}`)) {
       return
     }
     onDelete(id)
@@ -67,14 +75,39 @@ export function InvoiceTable({
             </span>
           )}
         </span>
-        <button
-          type="button"
-          className="btn btn--sm btn--danger-outline"
-          disabled={followerDuplicateCount === 0}
-          onClick={handlePurgeDuplicates}
-        >
-          Usuń duplikaty (zostaw pierwotne)
-        </button>
+        <div className="table-toolbar__actions">
+          <button
+            type="button"
+            className="btn btn--sm btn--primary"
+            disabled={rows.length === 0 || packaging}
+            title="Pobiera widoczną listę (po filtrach) jako archiwum ZIP (invoices.json + faktury/*.json)."
+            onClick={() => {
+              void (async () => {
+                setPackaging(true)
+                try {
+                  await downloadInvoicePackage(rows)
+                } catch (e) {
+                  console.error(e)
+                  window.alert(
+                    'Nie udało się utworzyć paczki ZIP. Spróbuj ponownie lub zmniejsz listę.',
+                  )
+                } finally {
+                  setPackaging(false)
+                }
+              })()
+            }}
+          >
+            {packaging ? 'Paczka…' : 'Paczka'}
+          </button>
+          <button
+            type="button"
+            className="btn btn--sm btn--danger-outline"
+            disabled={followerDuplicateCount === 0}
+            onClick={handlePurgeDuplicates}
+          >
+            Usuń duplikaty (zostaw pierwotne)
+          </button>
+        </div>
       </div>
       <div className="table-wrap">
         <table className="data-table">
@@ -111,7 +144,14 @@ export function InvoiceTable({
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
+            {loading && rows.length === 0 ? (
+              <tr>
+                <td colSpan={13} className="table-loading">
+                  Ładowanie listy faktur…
+                </td>
+              </tr>
+            ) : (
+              rows.map((row) => (
               <tr
                 key={row.id}
                 role="button"
@@ -181,10 +221,11 @@ export function InvoiceTable({
                   </button>
                 </td>
               </tr>
-            ))}
+              ))
+            )}
           </tbody>
         </table>
-        {rows.length === 0 && (
+        {!loading && rows.length === 0 && (
           <p className="table-empty">Brak rekordów dla wybranych filtrów.</p>
         )}
       </div>

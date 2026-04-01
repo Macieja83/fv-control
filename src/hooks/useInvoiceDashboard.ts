@@ -1,9 +1,33 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  deleteInvoiceRequest,
+  fetchInvoicesList,
+  patchInvoice,
+  patchInvoiceStatus,
+} from '../api/invoicesApi'
 import type { InvoiceFilters, InvoiceRecord } from '../types/invoice'
 import { EMPTY_FILTERS } from '../types/invoice'
 import { seedInvoices } from '../data/mockInvoices'
 import { enrichDuplicateMetadata, isDuplicateFlagged } from '../lib/duplicates'
 import { COST_CATEGORIES } from '../data/categories'
+import { mapApiInvoiceRowToRecord } from '../lib/mapApiInvoice'
+import { getStoredToken } from '../auth/session'
+
+const USE_MOCK_INVOICES =
+  import.meta.env.VITE_USE_MOCK_INVOICES === 'true' ||
+  import.meta.env.VITE_USE_MOCK_INVOICES === '1'
+
+/** W trybie API kategoria nie ma pola w backendzie — trzymamy wybór lokalnie i scalamy po każdym fetchu. */
+function mergeCategoryOverrides(
+  rows: InvoiceRecord[],
+  overrides: Record<string, string | null>,
+): InvoiceRecord[] {
+  return rows.map((r) =>
+    Object.prototype.hasOwnProperty.call(overrides, r.id)
+      ? { ...r, category: overrides[r.id] ?? null }
+      : r,
+  )
+}
 
 function nowIso() {
   return new Date().toISOString()
@@ -74,11 +98,49 @@ export type QuickFilter =
   | 'review'
   | 'noCat'
 
+export type InvoiceDataSource = 'mock' | 'api'
+
 export function useInvoiceDashboard() {
-  const [invoices, setInvoices] = useState<InvoiceRecord[]>(() => seedInvoices())
+  const [invoices, setInvoices] = useState<InvoiceRecord[]>(() =>
+    USE_MOCK_INVOICES ? enrichDuplicateMetadata(seedInvoices()) : [],
+  )
+  const [listLoading, setListLoading] = useState(() => !USE_MOCK_INVOICES)
+  const [listError, setListError] = useState<string | null>(null)
   const [filters, setFilters] = useState<InvoiceFilters>(EMPTY_FILTERS)
   const [quickFilter, setQuickFilter] = useState<QuickFilter>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const categoryOverridesRef = useRef<Record<string, string | null>>({})
+
+  const dataSource: InvoiceDataSource = USE_MOCK_INVOICES ? 'mock' : 'api'
+
+  const refreshFromApi = useCallback(async () => {
+    if (USE_MOCK_INVOICES) return
+    const token = getStoredToken()
+    if (!token) {
+      setListError('Brak sesji.')
+      setInvoices([])
+      setListLoading(false)
+      return
+    }
+    setListLoading(true)
+    setListError(null)
+    try {
+      const res = await fetchInvoicesList(token, { limit: 100 })
+      const mapped = res.data.map(mapApiInvoiceRowToRecord)
+      const merged = mergeCategoryOverrides(mapped, categoryOverridesRef.current)
+      setInvoices(enrichDuplicateMetadata(merged))
+    } catch (e) {
+      setListError(e instanceof Error ? e.message : 'Błąd ładowania listy')
+      setInvoices([])
+    } finally {
+      setListLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (USE_MOCK_INVOICES) return
+    void refreshFromApi()
+  }, [refreshFromApi])
 
   const filtered = useMemo(() => {
     let list = invoices.filter((r) => matchesFilters(r, filters))
@@ -132,35 +194,66 @@ export function useInvoiceDashboard() {
   }, [])
 
   const setPaid = useCallback(
-    (id: string) => {
-      updateRow(id, (r) =>
-        pushHistory(
-          { ...r, payment_status: 'paid', review_status: 'cleared' },
-          'operator',
-          'Oznaczono jako zapłacona',
-        ),
-      )
+    async (id: string) => {
+      if (USE_MOCK_INVOICES) {
+        updateRow(id, (r) =>
+          pushHistory(
+            { ...r, payment_status: 'paid', review_status: 'cleared' },
+            'operator',
+            'Oznaczono jako zapłacona',
+          ),
+        )
+        return
+      }
+      const token = getStoredToken()
+      if (!token) return
+      try {
+        await patchInvoiceStatus(token, id, 'PAID')
+        await refreshFromApi()
+      } catch (e) {
+        window.alert(e instanceof Error ? e.message : String(e))
+      }
     },
-    [updateRow],
+    [updateRow, refreshFromApi],
   )
 
   const setUnpaid = useCallback(
-    (id: string) => {
-      updateRow(id, (r) =>
-        pushHistory({ ...r, payment_status: 'unpaid' }, 'operator', 'Oznaczono jako niezapłacona'),
-      )
+    async (id: string) => {
+      if (USE_MOCK_INVOICES) {
+        updateRow(id, (r) =>
+          pushHistory({ ...r, payment_status: 'unpaid' }, 'operator', 'Oznaczono jako niezapłacona'),
+        )
+        return
+      }
+      const token = getStoredToken()
+      if (!token) return
+      try {
+        await patchInvoiceStatus(token, id, 'RECEIVED')
+        await refreshFromApi()
+      } catch (e) {
+        window.alert(e instanceof Error ? e.message : String(e))
+      }
     },
-    [updateRow],
+    [updateRow, refreshFromApi],
   )
 
   const setCategory = useCallback(
     (id: string, category: string | null) => {
-      updateRow(id, (r) =>
-        pushHistory(
-          { ...r, category },
-          'operator',
-          'Zmiana kategorii',
-          category ?? '(brak)',
+      if (USE_MOCK_INVOICES) {
+        updateRow(id, (r) =>
+          pushHistory(
+            { ...r, category },
+            'operator',
+            'Zmiana kategorii',
+            category ?? '(brak)',
+          ),
+        )
+        return
+      }
+      categoryOverridesRef.current = { ...categoryOverridesRef.current, [id]: category }
+      setInvoices((prev) =>
+        enrichDuplicateMetadata(
+          prev.map((r) => (r.id === id ? { ...r, category } : r)),
         ),
       )
     },
@@ -168,38 +261,73 @@ export function useInvoiceDashboard() {
   )
 
   const setScope = useCallback(
-    (id: string, scope: InvoiceRecord['document_scope']) => {
-      updateRow(id, (r) =>
-        pushHistory(
-          { ...r, document_scope: scope },
-          'operator',
-          scope === 'private' ? 'Oznaczono jako prywatna' : 'Oznaczono jako firmowa',
-        ),
-      )
+    async (id: string, scope: InvoiceRecord['document_scope']) => {
+      if (USE_MOCK_INVOICES) {
+        updateRow(id, (r) =>
+          pushHistory(
+            { ...r, document_scope: scope },
+            'operator',
+            scope === 'private' ? 'Oznaczono jako prywatna' : 'Oznaczono jako firmowa',
+          ),
+        )
+        return
+      }
+      const token = getStoredToken()
+      if (!token) return
+      try {
+        await patchInvoice(token, id, {
+          legalChannel: scope === 'private' ? 'EXCLUDED' : 'OUTSIDE_KSEF',
+        })
+        await refreshFromApi()
+      } catch (e) {
+        window.alert(e instanceof Error ? e.message : String(e))
+      }
     },
-    [updateRow],
+    [updateRow, refreshFromApi],
   )
 
   const setNeedsReview = useCallback(
-    (id: string) => {
-      updateRow(id, (r) =>
-        pushHistory(
-          { ...r, review_status: 'needs_review' },
-          'operator',
-          'Oznaczono: do sprawdzenia',
-        ),
-      )
+    async (id: string) => {
+      if (USE_MOCK_INVOICES) {
+        updateRow(id, (r) =>
+          pushHistory(
+            { ...r, review_status: 'needs_review' },
+            'operator',
+            'Oznaczono: do sprawdzenia',
+          ),
+        )
+        return
+      }
+      const token = getStoredToken()
+      if (!token) return
+      try {
+        await patchInvoice(token, id, { reviewStatus: 'NEEDS_REVIEW' })
+        await refreshFromApi()
+      } catch (e) {
+        window.alert(e instanceof Error ? e.message : String(e))
+      }
     },
-    [updateRow],
+    [updateRow, refreshFromApi],
   )
 
   const clearReview = useCallback(
-    (id: string) => {
-      updateRow(id, (r) =>
-        pushHistory({ ...r, review_status: 'cleared' }, 'operator', 'Wyczyszczono status przeglądu'),
-      )
+    async (id: string) => {
+      if (USE_MOCK_INVOICES) {
+        updateRow(id, (r) =>
+          pushHistory({ ...r, review_status: 'cleared' }, 'operator', 'Wyczyszczono status przeglądu'),
+        )
+        return
+      }
+      const token = getStoredToken()
+      if (!token) return
+      try {
+        await patchInvoice(token, id, { reviewStatus: 'NEW' })
+        await refreshFromApi()
+      } catch (e) {
+        window.alert(e instanceof Error ? e.message : String(e))
+      }
     },
-    [updateRow],
+    [updateRow, refreshFromApi],
   )
 
   const confirmDuplicate = useCallback(
@@ -240,35 +368,73 @@ export function useInvoiceDashboard() {
   )
 
   const setNotes = useCallback(
-    (id: string, notes: string) => {
-      updateRow(id, (r) => pushHistory({ ...r, notes }, 'operator', 'Zaktualizowano notatki'))
+    async (id: string, notes: string) => {
+      if (USE_MOCK_INVOICES) {
+        updateRow(id, (r) => pushHistory({ ...r, notes }, 'operator', 'Zaktualizowano notatki'))
+        return
+      }
+      const token = getStoredToken()
+      if (!token) return
+      try {
+        await patchInvoice(token, id, { notes })
+        await refreshFromApi()
+      } catch (e) {
+        window.alert(e instanceof Error ? e.message : String(e))
+      }
     },
-    [updateRow],
+    [updateRow, refreshFromApi],
   )
 
-  const goToLinked = useCallback(
-    (targetId: string) => {
-      setSelectedId(targetId)
+  const goToLinked = useCallback((targetId: string) => {
+    setSelectedId(targetId)
+  }, [])
+
+  const deleteInvoice = useCallback(
+    async (id: string) => {
+      if (USE_MOCK_INVOICES) {
+        setInvoices((prev) => {
+          const next = prev.filter((r) => r.id !== id)
+          return enrichDuplicateMetadata(next)
+        })
+        setSelectedId((cur) => (cur === id ? null : cur))
+        return
+      }
+      delete categoryOverridesRef.current[id]
+      const token = getStoredToken()
+      if (!token) return
+      try {
+        await deleteInvoiceRequest(token, id)
+        setSelectedId((cur) => (cur === id ? null : cur))
+        await refreshFromApi()
+      } catch (e) {
+        window.alert(e instanceof Error ? e.message : String(e))
+      }
     },
-    [],
+    [refreshFromApi],
   )
 
-  const deleteInvoice = useCallback((id: string) => {
-    setInvoices((prev) => {
-      const next = prev.filter((r) => r.id !== id)
-      return enrichDuplicateMetadata(next)
-    })
-    setSelectedId((cur) => (cur === id ? null : cur))
-  }, [])
-
-  /** Usuwa wpisy wskazane jako „drugie” w parze duplikatu (`duplicate_of_id` ustawione). Oryginały zostają. */
-  const deleteFollowerDuplicates = useCallback(() => {
-    setSelectedId(null)
-    setInvoices((prev) => {
-      const next = prev.filter((r) => r.duplicate_of_id === null)
-      return enrichDuplicateMetadata(next)
-    })
-  }, [])
+  const deleteFollowerDuplicates = useCallback(async () => {
+    if (USE_MOCK_INVOICES) {
+      setSelectedId(null)
+      setInvoices((prev) => {
+        const next = prev.filter((r) => r.duplicate_of_id === null)
+        return enrichDuplicateMetadata(next)
+      })
+      return
+    }
+    const token = getStoredToken()
+    if (!token) return
+    const followers = invoices.filter((r) => r.duplicate_of_id !== null)
+    try {
+      for (const r of followers) {
+        await deleteInvoiceRequest(token, r.id)
+      }
+      setSelectedId(null)
+      await refreshFromApi()
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : String(e))
+    }
+  }, [invoices, refreshFromApi])
 
   const pickKpi = useCallback((key: 'all' | 'unpaid' | 'paid' | 'dups' | 'review' | 'noCat') => {
     setQuickFilter(key === 'all' ? null : key)
@@ -306,5 +472,10 @@ export function useInvoiceDashboard() {
     deleteInvoice,
     deleteFollowerDuplicates,
     followerDuplicateCount,
+    listLoading,
+    listError,
+    dataSource,
+    /** true = kategoria nie trafia do API, tylko pamięć podręczna w tej sesji */
+    categoryLocalOnly: !USE_MOCK_INVOICES,
   }
 }

@@ -18,6 +18,7 @@ const errorHandlerPlugin: FastifyPluginAsync = async (app) => {
           code: err.code,
           message: err.message,
           details: err.details ?? null,
+          requestId: reqId,
         },
       });
     }
@@ -29,6 +30,7 @@ const errorHandlerPlugin: FastifyPluginAsync = async (app) => {
           code: "VALIDATION_ERROR",
           message: "Validation failed",
           details: err.flatten(),
+          requestId: reqId,
         },
       });
     }
@@ -40,6 +42,7 @@ const errorHandlerPlugin: FastifyPluginAsync = async (app) => {
           code: "VALIDATION_ERROR",
           message: err.message,
           details: err.validation,
+          requestId: reqId,
         },
       });
     }
@@ -50,6 +53,7 @@ const errorHandlerPlugin: FastifyPluginAsync = async (app) => {
         code: "INTERNAL",
         message: "Internal server error",
         details: null,
+        requestId: reqId,
       },
     });
   });

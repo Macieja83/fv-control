@@ -1,15 +1,35 @@
 import type { FastifyInstance } from "fastify";
+import adminSettingsRoutes from "./admin-settings.routes.js";
+import adminWebhooksRoutes from "./admin-webhooks.routes.js";
 import authRoutes from "./auth.routes.js";
+import connectorsRoutes from "./connectors.routes.js";
 import contractorsRoutes from "./contractors.routes.js";
+import dashboardRoutes from "./dashboard.routes.js";
+import documentsRoutes from "./documents.routes.js";
+import duplicatesRoutes from "./duplicates.routes.js";
 import filesDownloadRoutes from "./files-download.routes.js";
 import healthRoutes from "./health.routes.js";
+import ingestionRoutes from "./ingestion.routes.js";
 import invoiceFilesRoutes from "./invoice-files.routes.js";
 import invoicesRoutes from "./invoices.routes.js";
 import integrationsRoutes from "./integrations.routes.js";
+import webhooksRoutes from "./webhooks.routes.js";
+import workflowsRoutes from "./workflows.routes.js";
+import zenboxRoutes from "./zenbox.routes.js";
 
 export async function registerApiRoutes(app: FastifyInstance): Promise<void> {
   await app.register(healthRoutes);
   await app.register(authRoutes);
+  await app.register(dashboardRoutes);
+  await app.register(documentsRoutes);
+  await app.register(duplicatesRoutes);
+  await app.register(ingestionRoutes);
+  await app.register(connectorsRoutes);
+  await app.register(zenboxRoutes);
+  await app.register(workflowsRoutes);
+  await app.register(webhooksRoutes);
+  await app.register(adminSettingsRoutes);
+  await app.register(adminWebhooksRoutes);
   await app.register(contractorsRoutes);
   await app.register(invoicesRoutes);
   await app.register(invoiceFilesRoutes);

@@ -4,17 +4,36 @@ import { authDevPlugin } from './vite/auth-middleware'
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), '')
+  const env = {
+    ...loadEnv(mode, process.cwd(), 'VITE_'),
+    ...loadEnv(mode, process.cwd(), 'FV_RESTA_'),
+  }
   const loginPassword = env.FV_RESTA_LOGIN_PASSWORD ?? ''
   const loginEmail = env.FV_RESTA_LOGIN_EMAIL ?? ''
+  /** Pełny URL backendu (np. http://localhost:3000) — wtedy /api jest proxy i logowanie idzie do Fastify. */
+  const apiUrl = (env.FV_RESTA_API_URL ?? '').trim().replace(/\/$/, '')
 
   return {
     plugins: [
       react(),
-      authDevPlugin({
-        loginPassword,
-        loginEmail,
-      }),
+      ...(apiUrl
+        ? []
+        : [
+            authDevPlugin({
+              loginPassword,
+              loginEmail,
+            }),
+          ]),
     ],
+    server: {
+      proxy: apiUrl
+        ? {
+            '/api': {
+              target: apiUrl,
+              changeOrigin: true,
+            },
+          }
+        : undefined,
+    },
   }
 })

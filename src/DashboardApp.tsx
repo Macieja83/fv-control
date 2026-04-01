@@ -40,6 +40,10 @@ export default function DashboardApp() {
     deleteInvoice,
     deleteFollowerDuplicates,
     followerDuplicateCount,
+    listLoading,
+    listError,
+    dataSource,
+    categoryLocalOnly,
   } = useInvoiceDashboard()
 
   const linkedRow = useMemo(() => {
@@ -54,6 +58,11 @@ export default function DashboardApp() {
 
   return (
     <div className="app-shell">
+      {listError && (
+        <div className="app-banner app-banner--error" role="alert">
+          {listError}
+        </div>
+      )}
       <Topbar
         theme={theme}
         onThemeChange={setThemeAndDom}
@@ -82,9 +91,11 @@ export default function DashboardApp() {
             rows={filtered}
             selectedId={selected?.id ?? null}
             onSelect={(id) => setSelectedId(id)}
-            onDelete={deleteInvoice}
+            onDelete={(id) => void deleteInvoice(id)}
             followerDuplicateCount={followerDuplicateCount}
-            onDeleteFollowerDuplicates={deleteFollowerDuplicates}
+            onDeleteFollowerDuplicates={() => void deleteFollowerDuplicates()}
+            loading={listLoading}
+            dataSource={dataSource}
           />
         </div>
         <DetailPanel
@@ -92,19 +103,20 @@ export default function DashboardApp() {
           row={selected}
           categories={categories}
           linkedRow={linkedRow}
+          categoryLocalOnly={categoryLocalOnly}
           onClose={() => setSelectedId(null)}
-          onPaid={setPaid}
-          onUnpaid={setUnpaid}
+          onPaid={(id) => void setPaid(id)}
+          onUnpaid={(id) => void setUnpaid(id)}
           onCategory={setCategory}
-          onPrivate={(id) => setScope(id, 'private')}
-          onBusiness={(id) => setScope(id, 'business')}
+          onPrivate={(id) => void setScope(id, 'private')}
+          onBusiness={(id) => void setScope(id, 'business')}
           onConfirmDup={confirmDuplicate}
           onRejectDup={rejectDuplicate}
           onGoTo={goToLinked}
-          onNotes={setNotes}
-          onNeedsReview={setNeedsReview}
-          onClearReview={clearReview}
-          onDeleteInvoice={deleteInvoice}
+          onNotes={(id, notes) => void setNotes(id, notes)}
+          onNeedsReview={(id) => void setNeedsReview(id)}
+          onClearReview={(id) => void clearReview(id)}
+          onDeleteInvoice={(id) => void deleteInvoice(id)}
         />
       </main>
     </div>

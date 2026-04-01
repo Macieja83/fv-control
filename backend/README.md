@@ -1,6 +1,8 @@
-# FV Resta API
+# FVControl API (Fastify + Prisma)
 
-Produkcyjny backend **invoice inbox** dla projektu FV Resta: REST API na **Fastify** + **Prisma** + **PostgreSQL**, z JWT (access + refresh z rotacją w DB), audytem `invoice_events`, uploadem plików (lokalnie) oraz stubem integracji **POS-Resta**.
+Backend platformy **FVControl**: wieloźródłowe pobieranie i przetwarzanie faktur (ingestion + pipeline + deduplikacja + webhooks), z pełnym modelem pod **Resta** jako filtr lub **samodzielną aplikację**. Stos: **Fastify**, **PostgreSQL**, **Prisma**, **Redis + BullMQ**, **S3/MinIO**, **OpenAPI**, **Vitest**.
+
+Szczegóły produkcyjne: [README-PRODUCTION.md](./README-PRODUCTION.md). Dokumentacja: [docs/architecture.md](./docs/architecture.md).
 
 ## Wymagania
 
@@ -12,10 +14,10 @@ Produkcyjny backend **invoice inbox** dla projektu FV Resta: REST API na **Fasti
 
 1. Skopiuj `.env.example` → `.env` i uzupełnij sekrety (`JWT_*`, `ENCRYPTION_KEY`).
 
-2. Uruchom PostgreSQL (np. z katalogu `backend`):
+2. Uruchom infrastrukturę (z katalogu `backend`):
 
    ```bash
-   docker compose up -d postgres
+   docker compose up -d postgres redis
    ```
 
 3. Migracje i seed:
@@ -27,15 +29,19 @@ Produkcyjny backend **invoice inbox** dla projektu FV Resta: REST API na **Fasti
    npm run prisma:seed
    ```
 
-4. Serwer deweloperski:
+4. Serwer deweloperski + worker (pipeline):
 
    ```bash
    npm run dev
+   # osobny terminal:
+   npm run worker
    ```
 
-- API: `http://localhost:3000/api`
+- API: `http://localhost:3000/api/v1`
 - OpenAPI / Swagger UI: `http://localhost:3000/docs`
-- Health: `GET http://localhost:3000/api/health`
+- Liveness: `GET http://localhost:3000/api/v1/health`
+- Readiness: `GET http://localhost:3000/api/v1/ready`
+- Metrics: `GET http://localhost:3000/metrics`
 
 ### Konto z seeda (tylko dev)
 
@@ -43,19 +49,20 @@ Produkcyjny backend **invoice inbox** dla projektu FV Resta: REST API na **Fasti
 - Hasło: `Admin123!`
 - Tenant: **Resta Demo** (wraz z przykładowym kontrahentem i fakturą + 2 pozycjami)
 
-## Docker (API + Postgres)
+## Docker (API + Postgres + Redis + MinIO + Worker)
 
 ```bash
 docker compose up --build
 ```
 
-Obraz API wykonuje `prisma migrate deploy` przy starcie. Seed uruchom ręcznie:
+- **api** — `migrate deploy` + `node dist/index.js`
+- **worker** — `migrate deploy` + `node dist/worker.js`
+
+Seed (jednorazowo / po zmianach):
 
 ```bash
-docker compose exec api npx tsx prisma/seed.ts
+docker compose exec api npx prisma db seed
 ```
-
-(lub lokalnie z `DATABASE_URL` wskazującym na kontener).
 
 ## Makefile
 
@@ -75,7 +82,7 @@ docker compose exec api npx tsx prisma/seed.ts
 - **`src/lib/*`** — JWT, Argon2, szyfrowanie kluczy POS, role, pomocnicze typy.
 - **`prisma/`** — modele, migracje, seed.
 
-Przepływ autoryzacji: **access token** (JWT, ~15 min) w nagłówku `Authorization: Bearer …`; **refresh token** (losowy, hash SHA-256 w tabeli `RefreshToken`) z rotacją przy `/api/auth/refresh`.
+Przepływ autoryzacji: **access token** (JWT, ~15 min) w nagłówku `Authorization: Bearer …`; **refresh token** (losowy, hash SHA-256 w tabeli `RefreshToken`) z rotacją przy `/api/v1/auth/refresh`.
 
 Integracja POS nie dotyka tabel POS — wyłącznie HTTP do `baseUrl` konfigurowanego per tenant (`integrations_pos`), klucz API szyfrowany **AES-256-GCM**.
 

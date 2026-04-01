@@ -7,9 +7,11 @@ import { loadConfig, getCorsOriginList } from "./config.js";
 import authPlugin from "./plugins/auth.js";
 import errorHandlerPlugin from "./plugins/error-handler.js";
 import prismaPlugin from "./plugins/prisma.js";
+import idempotencyPlugin from "./plugins/idempotency.js";
 import requestContextPlugin from "./plugins/request-context.js";
 import swaggerPlugin from "./plugins/swagger.js";
 import { registerApiRoutes } from "./routes/index.js";
+import metricsRootRoutes from "./routes/metrics-root.routes.js";
 
 export async function buildApp() {
   const cfg = loadConfig();
@@ -51,6 +53,7 @@ export async function buildApp() {
   });
 
   await app.register(requestContextPlugin);
+  await app.register(metricsRootRoutes);
   await app.register(errorHandlerPlugin);
   await app.register(prismaPlugin);
   await app.register(authPlugin);
@@ -59,6 +62,7 @@ export async function buildApp() {
 
   await app.register(
     async (api) => {
+      await api.register(idempotencyPlugin);
       await api.register(multipart, {
         limits: {
           fileSize: cfg.MAX_UPLOAD_MB * 1024 * 1024,
@@ -67,7 +71,7 @@ export async function buildApp() {
       });
       await registerApiRoutes(api);
     },
-    { prefix: "/api" },
+    { prefix: "/api/v1" },
   );
 
   return app;

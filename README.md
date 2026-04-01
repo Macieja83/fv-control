@@ -1,3 +1,31 @@
+# FVControl (FV control + Resta)
+
+Monorepo: **React (Vite) dashboard** + **FVControl API** (Fastify) — platforma ingestion / deduplikacja / workflow pod Resta lub standalone.
+
+## Backend + kolejka (lokalnie)
+
+Pełny stack (Postgres, Redis, worker, opcjonalnie MinIO) z katalogu `backend/`:
+
+```bash
+cd backend
+docker compose up -d postgres redis
+npx prisma migrate deploy
+npx prisma db seed
+```
+
+W dwóch terminalach:
+
+```bash
+npm run dev          # API :3000
+npm run worker       # BullMQ consumer (pipeline)
+```
+
+Frontend (`/api/v1` przez proxy): ustaw `FV_RESTA_API_URL=http://localhost:3000` w `.env` (Vite). Szczegóły: [`backend/README.md`](backend/README.md), produkcja: [`backend/README-PRODUCTION.md`](backend/README-PRODUCTION.md).
+
+Makefile (z katalogu głównego): `make dev`, `make worker`, `make up`, `make test`, …
+
+---
+
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
