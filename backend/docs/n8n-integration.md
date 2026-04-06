@@ -1,5 +1,7 @@
 # n8n integration
 
+**OpenClaw (Discord) + n8n:** kiedy użyć agenta, a kiedy workflow — [openclaw-n8n-hybrid.md](./openclaw-n8n-hybrid.md).
+
 ## Outbound (FVControl → n8n)
 
 1. Pipeline step **EMIT_EVENTS** inserts into **`webhooks_outbox`** with `eventType` (e.g. `invoice.processed`), target `url`, and JSON `payload`.
