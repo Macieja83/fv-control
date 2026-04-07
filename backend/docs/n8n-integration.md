@@ -2,6 +2,8 @@
 
 **OpenClaw (Discord) + n8n:** kiedy użyć agenta, a kiedy workflow — [openclaw-n8n-hybrid.md](./openclaw-n8n-hybrid.md).
 
+**Plan wdrożenia (kolejność: mail → FV, potem n8n / OpenClaw / KSeF):** [integration-deployment-plan.md](./integration-deployment-plan.md).
+
 ## Outbound (FVControl → n8n)
 
 1. Pipeline step **EMIT_EVENTS** inserts into **`webhooks_outbox`** with `eventType` (e.g. `invoice.processed`), target `url`, and JSON `payload`.
@@ -76,7 +78,7 @@ return [{ json: { ok: sig.length === 64 && crypto.timingSafeEqual(Buffer.from(si
 ## Zenbox IMAP → pipeline → outbox
 
 1. Admin registers Zenbox in **`POST /api/v1/connectors/zenbox/accounts`** and triggers **`POST /api/v1/connectors/zenbox/accounts/:accountKey/sync`** (or the worker consumes recurring jobs you enqueue from n8n/cron).
-2. Worker job **`imap:sync:zenbox`** fetches new UIDs, writes **`source_messages` / `source_attachments`**, then calls the same **`ingestAttachmentAndEnqueue`** path as manual upload: **`Document` + `Invoice` + `processing_jobs`** on queue **`fvcontrol-pipeline`**.
+2. Worker job **`imap-sync-zenbox`** fetches new UIDs, writes **`source_messages` / `source_attachments`**, then calls the same **`ingestAttachmentAndEnqueue`** path as manual upload: **`Document` + `Invoice` + `processing_jobs`** on queue **`fvcontrol-pipeline`**.
 3. When the pipeline reaches **EMIT_EVENTS**, rows appear in **`webhooks_outbox`** with types such as **`invoice.ingested`** / **`invoice.classified`** (see table above). n8n should **dedupe** on `invoiceId` + `eventType` because retries are normal.
 
 ## Example flows

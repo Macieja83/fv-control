@@ -57,6 +57,7 @@ OpenClaw **może** wołać n8n Webhook jako narzędzie, jeśli chcecie centraliz
 
 ## Powiązane dokumenty
 
+- [integration-deployment-plan.md](./integration-deployment-plan.md) — **kolejność wdrożenia** (najpierw poczta do FV, potem n8n, OpenClaw, KSeF).
 - [n8n-integration.md](./n8n-integration.md) — webhooki, podpisy, auth REST.
 - [architecture.md](./architecture.md) — pipeline, źródła danych.
 - [security-hardening.md](./security-hardening.md) — HMAC, surowe body.

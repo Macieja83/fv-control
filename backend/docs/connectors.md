@@ -15,7 +15,7 @@ Each connector is an **adapter** behind a small TypeScript interface (see `src/c
 - **Credentials:** `IntegrationCredential` with `connector = IMAP_ZENBOX`, `kind = IMAP_PASSWORD`; JSON payload encrypted with existing **AES-256-GCM** (`ENCRYPTION_KEY`). Linked `Mailbox` row (`provider = IMAP`, `label = accountKey`).
 - **Cursor:** `mailbox_sync_state.imap_uid_validity_str` + `imap_last_processed_uid` (last UID processed). If **UIDVALIDITY** changes vs stored string, cursor resets (re-sync from start of UID space).
 - **Idempotency:** `source_messages` unique on `(tenantId, ZENBOX_IMAP, accountKey, externalMessageId)`; `source_attachments` unique on `(sourceMessageId, sha256)`. `externalMessageId` = `Message-ID` when present, else `imap:<uidvalidity>:<uid>`.
-- **Worker:** BullMQ queue **`imap:sync:zenbox`** (see `queue-constants.ts`); processed by **`npm run worker`** alongside pipeline + webhooks. Per-tenant/account Redis lock (`IMAP_ZENBOX_LOCK_TTL_SEC`).
+- **Worker:** BullMQ queue **`imap-sync-zenbox`** (see `queue-constants.ts`); processed by **`npm run worker`** alongside pipeline + webhooks. Per-tenant/account Redis lock (`IMAP_ZENBOX_LOCK_TTL_SEC`).
 - **API (OWNER/ADMIN):** `POST/PATCH /api/v1/connectors/zenbox/accounts`, `POST .../sync`, `GET .../status`. Setup: [zenbox-imap-setup.md](./zenbox-imap-setup.md).
 - **Metrics:** `fvcontrol_imap_*` on `/metrics` (runs, messages, attachments, duplicates skipped, duration, last UID gauge).
 

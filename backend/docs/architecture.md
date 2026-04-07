@@ -46,6 +46,7 @@ flowchart LR
 
 - **API prefix:** `/api/v1`
 - **OpenAPI:** `/docs` (Swagger UI)
+- **Plan wdrożenia integracji (mail → FV, n8n, OpenClaw, KSeF):** [integration-deployment-plan.md](./integration-deployment-plan.md)
 - **OpenClaw (Discord) + n8n:** [openclaw-n8n-hybrid.md](./openclaw-n8n-hybrid.md)
 - **Liveness:** `GET /api/v1/health`
 - **Readiness:** `GET /api/v1/ready` (Postgres + Redis)
