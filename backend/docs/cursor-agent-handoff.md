@@ -40,7 +40,8 @@ Ten plik jest **punktem odniesienia** dla Ciebie i dla asystenta w Cursorze. Na 
 5. Upewnić się, że **worker** działa.
 6. `POST .../sync` + `GET .../status` + test mail z PDF.
 
-Szczegóły poleceń: [zenbox-imap-setup.md](./zenbox-imap-setup.md).
+Szczegóły poleceń: [zenbox-imap-setup.md](./zenbox-imap-setup.md).  
+**Krok po kroku pod VPS (komendy po kolei):** [mail-imap-vps-step-by-step.md](./mail-imap-vps-step-by-step.md).
 
 ---
 
