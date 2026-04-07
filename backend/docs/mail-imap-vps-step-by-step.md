@@ -216,7 +216,7 @@ Albo sprawdź w **UI** aplikacji.
 **fv.resta.biz** to tylko adres UI/API — faktury z maila **nie „przechodzą same”**, dopóki na tym serwerze nie działa **nowy backend** + **worker** + **nowy mail** po ewentualnej poprawce IMAP.
 
 1. **Wdrożenie** — czy na produkcji jest obraz / build z commitem **`fix(imap): accept … octet-stream`** (parser PDF jako `application/octet-stream`)? Bez tego wiele PDF z poczty jest **ciszej odrzucanych**.
-2. **Worker** — `npm run worker` (lub kontener) musi działać z **tym samym** `REDIS_URL` co API. Bez workera dokument może powstać, ale **pipeline nie domknie** faktury w UI.
+2. **Worker** — **osobny proces** `npm run worker:start` (produkcja) lub `npm run worker` (dev). Sam **`npm run start`** (API) **nie** przetwarza kolejki — bez workera faktury z maila **nie dojdą** do UI. Instrukcja systemd: [deploy-systemd-api-and-worker.md](./deploy-systemd-api-and-worker.md).
 3. **`GET .../connectors/zenbox/accounts/.../status`** — czy **`counts.sourceAttachments`** rośnie po **nowym** mailu z **`nazwa.pdf`**? Jeśli **0** → załącznik nie jest kandydatem albo IMAP nie widzi maila w INBOX.
 4. **Stare maile** — jeśli sync wcześniej ustawił `processedAt` na wiadomości **bez** PDF, **ponowny sync tego maila nie pomoże**. Wyślij **nowy** test z załącznikiem PDF.
 5. **`.env` produkcji** — `FEATURE_AI_EXTRACTION_MOCK=true` (domyślnie tak). Przy `false` mock zwraca pusty draft i pipeline może paść na braku numeru faktury.
