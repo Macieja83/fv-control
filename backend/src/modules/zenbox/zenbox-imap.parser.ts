@@ -9,14 +9,26 @@ const INVOICE_MIME = new Set([
 
 /**
  * Heuristic: MIME allow-list + loose filename hint (FV, invoice, faktura).
+ * Many MTAs label PDF/XML/images as application/octet-stream — accept only with a matching extension.
  */
 export function isInvoiceCandidateAttachment(filename: string, mimeType: string): boolean {
   const mt = mimeType.split(";")[0]?.trim().toLowerCase() ?? "";
-  if (!INVOICE_MIME.has(mt)) return false;
   const base = filename.toLowerCase();
-  if (/\.(pdf|xml|jpg|jpeg|png)$/i.test(base)) return true;
-  if (/(faktura|fv|invoice|fa[_-]?\d)/i.test(base)) return true;
-  return mt === "application/pdf" || mt === "text/xml" || mt === "application/xml";
+  const hasInvoiceExtension = /\.(pdf|xml|jpg|jpeg|png)$/i.test(base);
+  const hasInvoiceFilenameHint = /(faktura|fv|invoice|fa[_-]?\d)/i.test(base);
+
+  if (INVOICE_MIME.has(mt)) {
+    if (hasInvoiceExtension) return true;
+    if (hasInvoiceFilenameHint) return true;
+    return mt === "application/pdf" || mt === "text/xml" || mt === "application/xml";
+  }
+
+  // Do not use filename-keyword-only here — avoids e.g. "invoice_setup.exe" with octet-stream.
+  if (mt === "application/octet-stream" || mt === "binary/octet-stream") {
+    return hasInvoiceExtension;
+  }
+
+  return false;
 }
 
 export function normalizeAttachmentFilename(raw: string | undefined, index: number): string {

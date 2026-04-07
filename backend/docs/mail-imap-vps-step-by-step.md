@@ -207,7 +207,7 @@ Albo sprawdź w **UI** aplikacji.
 | `401` na `/connectors/...` | Wygasł access token — ponów login (Krok 3). |
 | `403` | Użytkownik nie jest OWNER/ADMIN. |
 | `lastError` IMAP | App Password, IMAP w Gmailu, blokada admina Workspace. |
-| Sync OK, brak faktur | Worker nie działa; brak załącznika PDF w mailu; sprawdź logi workera. |
+| Sync OK, brak faktur | Worker; logi pipeline; w `status` czy rośnie `sourceAttachments`. PDF w mailu często ma MIME `application/octet-stream` — od wersji z poprawką w `isInvoiceCandidateAttachment` takie załączniki z `.pdf` są przyjmowane (**wdróż nowy backend**). Maile już oznaczone jako obsłużone (`processedAt`) bez załącznika nie są ponownie skanowane — **wyślij nowy testowy mail** po wdrożeniu. |
 
 ---
 
