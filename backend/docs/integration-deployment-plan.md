@@ -7,6 +7,8 @@ Ten dokument porządkuje **kolejność prac** i zakłada jedną ustaloną decyzj
 
 Szczegóły techniczne IMAP: [zenbox-imap-setup.md](./zenbox-imap-setup.md) (endpointy `connectors/zenbox/*` obsługują dowolny serwer IMAP z TLS; dla Google używasz `imap.gmail.com`).
 
+**Kto robi co (Cursor Agent vs serwer VPS):** [cursor-agent-handoff.md](./cursor-agent-handoff.md).
+
 ---
 
 ## Faza 0 — FV Control gotowy do produkcji
