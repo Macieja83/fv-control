@@ -29,6 +29,13 @@ describe("zenbox-imap.parser", () => {
     expect(isInvoiceCandidateAttachment("faktura.xml", "application/xml")).toBe(true);
   });
 
+  it("isInvoiceCandidateAttachment allows PDF when MIME is octet-stream (common in email)", () => {
+    expect(isInvoiceCandidateAttachment("faktura.pdf", "application/octet-stream")).toBe(true);
+    expect(isInvoiceCandidateAttachment("scan.jpg", "binary/octet-stream")).toBe(true);
+    expect(isInvoiceCandidateAttachment("unknown.bin", "application/octet-stream")).toBe(false);
+    expect(isInvoiceCandidateAttachment("invoice_malware.exe", "application/octet-stream")).toBe(false);
+  });
+
   it("normalizeAttachmentFilename sanitizes path segments", () => {
     expect(normalizeAttachmentFilename("a/b\\c.pdf", 0)).toBe("a_b_c.pdf");
     expect(normalizeAttachmentFilename("", 3)).toBe("attachment-3");

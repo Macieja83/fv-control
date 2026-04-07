@@ -5,7 +5,10 @@ Ten dokument porządkuje **kolejność prac** i zakłada jedną ustaloną decyzj
 - **Główna skrzynka, do której mają wpadać faktury (źródło dla IMAP):** `maciejewski@tuttos.pl`.
 - Pozostałe adresy firmowe (np. `kontakt@tuttopizza.pl`, inne aliasy na `tuttos.pl` / `tuttopizza.pl`) mają **doprowadzać pocztę do tej skrzynki** (alias Google Workspace albo forward w Admin Console), żeby FV Control czytał **jeden INBOX**.
 
-Szczegóły techniczne IMAP: [zenbox-imap-setup.md](./zenbox-imap-setup.md) (endpointy `connectors/zenbox/*` obsługują dowolny serwer IMAP z TLS; dla Google używasz `imap.gmail.com`).
+Szczegóły techniczne IMAP: [zenbox-imap-setup.md](./zenbox-imap-setup.md) (endpointy `connectors/zenbox/*` obsługują dowolny serwer IMAP z TLS; dla Google używasz `imap.gmail.com`).  
+**Instrukcja VPS komenda po komendzie:** [mail-imap-vps-step-by-step.md](./mail-imap-vps-step-by-step.md).
+
+**Kto robi co (Cursor Agent vs serwer VPS):** [cursor-agent-handoff.md](./cursor-agent-handoff.md).
 
 ---
 
