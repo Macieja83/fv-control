@@ -19,7 +19,28 @@ Jeśli Redis jest w Docker Compose i port **6379** jest wystawiony na hosta, pow
 
 Sprawdzenie: `curl` lub `redis-cli ping`.
 
-## Drugi unit systemd (user) — worker
+## Szybki instalator (jeden skrypt)
+
+Na VPS, w sklonowanym repo:
+
+```bash
+cd ~/fv-control/backend
+git pull
+chmod +x scripts/install-systemd-user-worker.sh
+./scripts/install-systemd-user-worker.sh
+```
+
+Jeśli backend nie jest w `~/fv-control/backend`:
+
+```bash
+BACKEND_DIR=/home/marcin/fv-control/backend ./scripts/install-systemd-user-worker.sh
+```
+
+Wymaga: istniejący `.env`, wykonane wcześniej `npm run build` (`dist/worker.js`).
+
+---
+
+## Drugi unit systemd (user) — worker (ręcznie)
 
 Po zbudowaniu backendu (`npm run build`) na serwerze:
 
