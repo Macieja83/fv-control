@@ -36,7 +36,7 @@ curl -sS -X POST "$API/api/v1/connectors/zenbox/accounts" \
 Synchronizacja działa w procesie **`npm run worker`** (lub kontener `worker` w Docker):
 
 - Ten sam **`REDIS_URL`** i **`BULLMQ_PREFIX`** co API.
-- Kolejka BullMQ: **`imap:sync:zenbox`**.
+- Kolejka BullMQ: **`imap-sync-zenbox`**.
 - Równoległe sync’e dla tej samej pary `(tenantId, accountKey)` są blokowane kluczem Redis (TTL: **`IMAP_ZENBOX_LOCK_TTL_SEC`**).
 
 ## 4. Ręczne odpalenie sync

@@ -26,6 +26,18 @@ Szczegóły techniczne IMAP: [zenbox-imap-setup.md](./zenbox-imap-setup.md) (end
 - Ustal, że **faktury zbieracie w skrzynce** `maciejewski@tuttos.pl`.
 - Dla adresów pokroju `kontakt@tuttopizza.pl`: **alias do tego użytkownika** lub **forward** na `maciejewski@tuttos.pl`, żeby wiadomości (i załączniki) lądowały w jednym miejscu.
 
+### 1.1b Forward już działa (tuttopizza → tuttos) — kolejne kroki
+
+Gdy poczta z `kontakt@tuttopizza.pl` (lub innych adresów) **jest już widoczna w Odebranych** u `maciejewski@tuttos.pl`:
+
+1. **Szybki test:** wyślij z zewnętrznej skrzynki mail na adres firmowy — sprawdź, że trafia do **INBOX** `maciejewski@tuttos.pl` (nie tylko „Wiadomości-śmieci”).
+2. **Sekcja 1.2 poniżej** — IMAP + 2FA + hasło aplikacji na **`maciejewski@tuttos.pl`**.
+3. **Faza 0** — API FV działa, **`npm run worker`** uruchomiony (Redis ten sam co API).
+4. **Sekcja 1.3** — `POST /api/v1/connectors/zenbox/accounts` (host `imap.gmail.com`).
+5. **Sekcja 1.4** — `POST .../sync`, potem `GET .../status`; wyślij **mail z PDF** na firmowy adres i sprawdź fakturę w FV.
+
+Szczegółowe komendy: [zenbox-imap-setup.md](./zenbox-imap-setup.md).
+
 ### 1.2 IMAP dla tej skrzynki
 
 - Włącz IMAP w ustawieniach Gmail dla tego konta.

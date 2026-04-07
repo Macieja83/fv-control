@@ -75,7 +75,7 @@ const envSchema = z.object({
   IMAP_FLOW_GREETING_TIMEOUT_MS: z.coerce.number().int().positive().default(16_000),
   IMAP_FLOW_SOCKET_TIMEOUT_MS: z.coerce.number().int().positive().default(120_000),
 
-  /** Max messages per BullMQ `imap:sync:zenbox` job iteration (UID batch). */
+  /** Max messages per BullMQ `imap-sync-zenbox` job iteration (UID batch). */
   IMAP_ZENBOX_FETCH_BATCH_SIZE: z.coerce.number().int().positive().default(25),
   /** Safety cap: max UID batches processed in one job run. */
   IMAP_ZENBOX_MAX_BATCHES_PER_JOB: z.coerce.number().int().positive().default(40),
