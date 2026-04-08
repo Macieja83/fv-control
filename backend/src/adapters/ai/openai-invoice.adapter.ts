@@ -47,6 +47,29 @@ function toStr(val: unknown, fallback: string): string {
   return fallback;
 }
 
+/**
+ * Normalize monetary string from any locale format to "12345.67".
+ * Handles: "10.434,50" (PL), "10,434.50" (US), "10 434,50", "10434.50".
+ */
+function normalizeMoneyStr(raw: string): string {
+  let s = raw.replace(/\s/g, "");
+  const lastComma = s.lastIndexOf(",");
+  const lastDot = s.lastIndexOf(".");
+  if (lastComma > lastDot) {
+    s = s.replace(/\./g, "").replace(",", ".");
+  } else if (lastDot > lastComma) {
+    s = s.replace(/,/g, "");
+  }
+  const n = Number.parseFloat(s);
+  return Number.isFinite(n) ? n.toFixed(2) : "0.00";
+}
+
+function toMoneyStr(val: unknown, fallback: string): string {
+  if (typeof val === "number") return val.toFixed(2);
+  if (typeof val === "string") return normalizeMoneyStr(val);
+  return fallback;
+}
+
 const NIP_CANDIDATE_KEYS = [
   "contractorNip",
   "sellerNip",
@@ -100,19 +123,19 @@ function mapResponseToDraft(raw: Record<string, unknown>): ExtractedInvoiceDraft
     number: typeof raw.number === "string" ? raw.number : undefined,
     issueDate: typeof raw.issueDate === "string" ? raw.issueDate : undefined,
     currency: typeof raw.currency === "string" ? raw.currency : undefined,
-    netTotal: toStr(raw.netTotal, "0"),
-    vatTotal: toStr(raw.vatTotal, "0"),
-    grossTotal: toStr(raw.grossTotal, "0"),
+    netTotal: toMoneyStr(raw.netTotal, "0"),
+    vatTotal: toMoneyStr(raw.vatTotal, "0"),
+    grossTotal: toMoneyStr(raw.grossTotal, "0"),
     contractorName: pickContractorName(raw),
     contractorNip: nip,
     lineItems: Array.isArray(raw.lineItems)
       ? raw.lineItems.map((li: Record<string, unknown>) => ({
           name: toStr(li.name, ""),
-          quantity: toStr(li.quantity, "1"),
-          netPrice: toStr(li.netPrice, "0"),
-          vatRate: toStr(li.vatRate, "23"),
-          netValue: toStr(li.netValue, "0"),
-          grossValue: toStr(li.grossValue, "0"),
+          quantity: toMoneyStr(li.quantity, "1"),
+          netPrice: toMoneyStr(li.netPrice, "0"),
+          vatRate: toMoneyStr(li.vatRate, "23"),
+          netValue: toMoneyStr(li.netValue, "0"),
+          grossValue: toMoneyStr(li.grossValue, "0"),
         }))
       : undefined,
   };
