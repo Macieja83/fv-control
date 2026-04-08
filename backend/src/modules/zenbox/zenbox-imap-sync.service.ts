@@ -20,6 +20,7 @@ import type { ZenboxImapCredentialsPlain } from "./zenbox-credentials.service.js
 import { createZenboxImapTransport, type ZenboxImapTransport } from "./zenbox-imap.connector.js";
 import {
   classifyImapFailure,
+  describeErrorWithCause,
   ZenboxImapPermanentError,
   ZenboxImapRetryableError,
 } from "./zenbox-imap-errors.js";
@@ -36,6 +37,30 @@ function sha256Buffer(buf: Buffer): string {
 
 function isPrismaUniqueViolation(err: unknown): boolean {
   return err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002";
+}
+
+function formatZenboxImapLastError(stage: string, err: unknown): string {
+  const detail = describeErrorWithCause(err);
+  const stack =
+    err instanceof Error && err.stack ? err.stack.split("\n").slice(0, 8).join(" ") : "";
+  return `[${stage}] ${detail}${stack ? ` || ${stack.slice(0, 800)}` : ""}`.slice(0, 4000);
+}
+
+function logZenboxImapSyncFailure(
+  stage: string,
+  err: unknown,
+  ctx: { tenantId: string; accountKey: string },
+): void {
+  console.error(
+    JSON.stringify({
+      msg: "zenbox_imap_sync_failed",
+      stage,
+      tenantId: ctx.tenantId,
+      accountKey: ctx.accountKey,
+      detail: describeErrorWithCause(err),
+      stack: err instanceof Error ? err.stack : undefined,
+    }),
+  );
 }
 
 export type ZenboxImapSyncDeps = {
@@ -60,26 +85,33 @@ export async function runZenboxImapSyncJob(
   const endTimer = imapSyncDurationSeconds.startTimer();
   let transport: ZenboxImapTransport | null = null;
   let mailboxId: string | null = null;
+  let syncStage = "init";
 
   try {
+    syncStage = "resolve_actor";
     const actorUserId = await resolveIntegrationActorUserId(
       prisma,
       data.tenantId,
       data.triggeredByUserId,
     );
 
+    syncStage = "load_mailbox";
     const { mailbox } = await loadMailboxWithCredential(prisma, data.tenantId, data.accountKey);
     mailboxId = mailbox.id;
+    syncStage = "decrypt_credentials";
     const creds = await getZenboxCredentialsDecrypted(prisma, data.tenantId, data.accountKey);
 
+    syncStage = "mark_running";
     await prisma.mailboxSyncState.update({
       where: { mailboxId: mailbox.id },
       data: { imapSyncStatus: "RUNNING", lastError: null },
     });
 
     transport = createTransport(creds);
+    syncStage = "imap_connect";
     await transport.connect();
 
+    syncStage = "mailbox_metadata";
     const meta = await transport.fetchMailboxMetadata();
     const syncRow = await prisma.mailboxSyncState.findUniqueOrThrow({ where: { mailboxId: mailbox.id } });
 
@@ -98,13 +130,16 @@ export async function runZenboxImapSyncJob(
 
     while (batches < cfg.IMAP_ZENBOX_MAX_BATCHES_PER_JOB) {
       batches += 1;
+      syncStage = "list_uids";
       const uids = await transport.listUidsAfter(cursorUid, cfg.IMAP_ZENBOX_FETCH_BATCH_SIZE);
       if (uids.length === 0) break;
 
+      syncStage = "fetch_raw";
       const rawList = await transport.fetchRawByUids(uids);
       imapMessagesFetchedTotal.inc(rawList.length);
 
       for (const raw of rawList) {
+        syncStage = "parse_message";
         const parsed = await parseImapRawSource(raw.rawSource);
         const envMid = raw.envelope?.messageId ?? undefined;
         const externalMessageId = stableExternalMessageId(envMid ?? parsed.messageIdHeader, meta.uidValidityStr, raw.uid);
@@ -129,6 +164,7 @@ export async function runZenboxImapSyncJob(
 
         if (!sourceMessage) {
           try {
+            syncStage = "persist_source_message";
             sourceMessage = await prisma.sourceMessage.create({
               data: {
                 tenantId: data.tenantId,
@@ -171,6 +207,7 @@ export async function runZenboxImapSyncJob(
         for (const att of parsed.attachments) {
           if (!att.isInvoiceCandidate) continue;
 
+          syncStage = "storage_put";
           const sha = sha256Buffer(att.content);
           const existingAtt = await prisma.sourceAttachment.findUnique({
             where: {
@@ -207,6 +244,7 @@ export async function runZenboxImapSyncJob(
           imapAttachmentsFetchedTotal.inc();
 
           const sourceExternalId = `zenbox:${externalMessageId}:${sha}`;
+          syncStage = "ingest_attachment";
           const ingest = await ingestAttachmentAndEnqueue(prisma, {
             tenantId: data.tenantId,
             actorUserId,
@@ -232,6 +270,7 @@ export async function runZenboxImapSyncJob(
           });
         }
 
+        syncStage = "mark_message_processed";
         await prisma.sourceMessage.update({
           where: { id: sourceMessage.id },
           data: { processedAt: new Date() },
@@ -241,6 +280,7 @@ export async function runZenboxImapSyncJob(
       }
 
       cursorUid = maxSeenUid;
+      syncStage = "checkpoint_cursor";
       await prisma.mailboxSyncState.update({
         where: { mailboxId: mailbox.id },
         data: {
@@ -251,6 +291,7 @@ export async function runZenboxImapSyncJob(
       });
     }
 
+    syncStage = "finalize_idle";
     await prisma.mailboxSyncState.update({
       where: { mailboxId: mailbox.id },
       data: {
@@ -265,13 +306,17 @@ export async function runZenboxImapSyncJob(
     imapLastUidGauge.set({ tenant_id: data.tenantId, account_key: data.accountKey }, Number(maxSeenUid));
     imapSyncRunsTotal.inc({ status: "success" });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    logZenboxImapSyncFailure(syncStage, err, {
+      tenantId: data.tenantId,
+      accountKey: data.accountKey,
+    });
+    const lastError = formatZenboxImapLastError(syncStage, err);
     if (mailboxId) {
       await prisma.mailboxSyncState.update({
         where: { mailboxId },
         data: {
           imapSyncStatus: "ERROR",
-          lastError: msg.slice(0, 4000),
+          lastError,
         },
       });
     }
