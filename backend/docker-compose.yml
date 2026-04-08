@@ -62,7 +62,10 @@ services:
       S3_SECRET_KEY: ${S3_SECRET_KEY:-minio123456}
       S3_BUCKET: ${S3_BUCKET:-fvcontrol-documents}
       S3_FORCE_PATH_STYLE: "true"
-      FEATURE_AI_EXTRACTION_MOCK: "true"
+      FEATURE_AI_EXTRACTION_MOCK: ${FEATURE_AI_EXTRACTION_MOCK:-true}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      N8N_WEBHOOK_URL: ${N8N_WEBHOOK_URL:-}
       WEBHOOK_SIGNING_SECRET: ${WEBHOOK_SIGNING_SECRET:-dev-webhook-signing-secret-min-16}
       WEBHOOK_MAX_SKEW_SECONDS: ${WEBHOOK_MAX_SKEW_SECONDS:-300}
     ports:
@@ -90,7 +93,19 @@ services:
       LOG_LEVEL: info
       APP_NAME: FVControl API
       APP_VERSION: "1.0.0"
-      FEATURE_AI_EXTRACTION_MOCK: "true"
+      STORAGE_DRIVER: ${STORAGE_DRIVER:-local}
+      UPLOAD_DIR: /app/storage/uploads
+      S3_ENDPOINT: ${S3_ENDPOINT:-http://minio:9000}
+      S3_REGION: us-east-1
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-minio}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-minio123456}
+      S3_BUCKET: ${S3_BUCKET:-fvcontrol-documents}
+      S3_FORCE_PATH_STYLE: "true"
+      FEATURE_AI_EXTRACTION_MOCK: ${FEATURE_AI_EXTRACTION_MOCK:-true}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      N8N_WEBHOOK_URL: ${N8N_WEBHOOK_URL:-}
+      IMAP_AUTO_SYNC_INTERVAL_MS: ${IMAP_AUTO_SYNC_INTERVAL_MS:-300000}
       WEBHOOK_SIGNING_SECRET: ${WEBHOOK_SIGNING_SECRET:-dev-webhook-signing-secret-min-16}
       WEBHOOK_DELIVERY_INTERVAL_MS: ${WEBHOOK_DELIVERY_INTERVAL_MS:-5000}
       WEBHOOK_DELIVERY_MAX_ATTEMPTS: ${WEBHOOK_DELIVERY_MAX_ATTEMPTS:-10}
@@ -99,6 +114,8 @@ services:
       WEBHOOK_OUTBOX_SENT_RETENTION_DAYS: ${WEBHOOK_OUTBOX_SENT_RETENTION_DAYS:-90}
       WEBHOOK_PROCESSING_STALE_MS: ${WEBHOOK_PROCESSING_STALE_MS:-900000}
       HOUSEKEEPING_INTERVAL_MS: ${HOUSEKEEPING_INTERVAL_MS:-60000}
+    volumes:
+      - fvcontrol_uploads:/app/storage/uploads
     depends_on:
       postgres:
         condition: service_healthy

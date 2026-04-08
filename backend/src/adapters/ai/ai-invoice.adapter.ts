@@ -21,6 +21,7 @@ export type AiInvoiceAdapter = {
     mimeType: string;
     sha256: string;
     storageKey: string;
+    buffer?: Buffer;
   }): Promise<{ draft: ExtractedInvoiceDraft; confidence: number }>;
   classifyInvoice(invoiceSnapshot: Record<string, unknown>): Promise<{ label: string; confidence: number }>;
   anomalyCheck(
