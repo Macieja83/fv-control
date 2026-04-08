@@ -212,13 +212,17 @@ export function InvoiceDocumentPreview({ invoiceId }: Props) {
         </pre>
       )}
       {isPdf(mime) && blobUrl && (
-        <iframe
-          title="Podgląd PDF faktury"
+        <object
+          data={`${blobUrl}#toolbar=1&navpanes=0`}
+          type="application/pdf"
           className="doc-preview__frame"
-          src={blobUrl}
-          sandbox="allow-scripts allow-same-origin allow-downloads"
-          referrerPolicy="no-referrer"
-        />
+          aria-label="Podgląd PDF faktury"
+        >
+          <p>
+            Przeglądarka nie obsługuje podglądu PDF.{' '}
+            <a href={blobUrl} download={fileName}>Pobierz plik</a>
+          </p>
+        </object>
       )}
       {isImage(mime) && blobUrl && (
         <img className="doc-preview__img" src={blobUrl} alt={`Faktura — ${fileName}`} loading="lazy" />
