@@ -34,13 +34,14 @@ function imapTimeouts() {
  */
 export class ZenboxImapFlowTransport implements ZenboxImapTransport {
   private client: ImapFlow | null = null;
+  private onClientError: ((err: unknown) => void) | null = null;
 
   constructor(private readonly creds: ZenboxImapCredentialsPlain) {}
 
   async connect(): Promise<void> {
     await this.disconnect();
     const t = imapTimeouts();
-    this.client = new ImapFlow({
+    const client = new ImapFlow({
       host: this.creds.host,
       port: this.creds.port,
       secure: this.creds.tls,
@@ -48,9 +49,20 @@ export class ZenboxImapFlowTransport implements ZenboxImapTransport {
       logger: false,
       ...t,
     });
+    // ImapFlow may emit `error` on socket timeout; without a listener Node treats it as fatal.
+    this.onClientError = (err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`[imap] client error (${this.creds.host}:${this.creds.port}): ${msg}`);
+    };
+    client.on("error", this.onClientError);
+    this.client = client;
     try {
-      await this.client.connect();
+      await client.connect();
     } catch (e) {
+      if (this.onClientError) {
+        client.off("error", this.onClientError);
+        this.onClientError = null;
+      }
       this.client = null;
       throw classifyImapFailure(e);
     }
@@ -59,6 +71,10 @@ export class ZenboxImapFlowTransport implements ZenboxImapTransport {
   async disconnect(): Promise<void> {
     if (!this.client) return;
     const c = this.client;
+    if (this.onClientError) {
+      c.off("error", this.onClientError);
+      this.onClientError = null;
+    }
     this.client = null;
     try {
       await c.logout();
