@@ -5,6 +5,7 @@ import { KPICards } from './components/dashboard/KPICards'
 import { FilterBar } from './components/dashboard/FilterBar'
 import { InvoiceTable } from './components/dashboard/InvoiceTable'
 import { DetailPanel } from './components/dashboard/DetailPanel'
+import { InvoiceUpload } from './components/dashboard/InvoiceUpload'
 import { useInvoiceDashboard } from './hooks/useInvoiceDashboard'
 import './styles/dashboard.css'
 
@@ -44,6 +45,7 @@ export default function DashboardApp() {
     listError,
     dataSource,
     categoryLocalOnly,
+    refreshFromApi,
   } = useInvoiceDashboard()
 
   const linkedRow = useMemo(() => {
@@ -80,6 +82,7 @@ export default function DashboardApp() {
             noCat={kpi.noCat}
             onPickFilter={pickKpi}
           />
+          <InvoiceUpload onUploaded={() => void refreshFromApi()} />
           <FilterBar
             filters={filters}
             onChange={setFilters}

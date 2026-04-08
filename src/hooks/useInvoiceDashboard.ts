@@ -477,5 +477,6 @@ export function useInvoiceDashboard() {
     dataSource,
     /** true = kategoria nie trafia do API, tylko pamięć podręczna w tej sesji */
     categoryLocalOnly: !USE_MOCK_INVOICES,
+    refreshFromApi,
   }
 }
