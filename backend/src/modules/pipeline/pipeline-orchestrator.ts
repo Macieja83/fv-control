@@ -1,8 +1,11 @@
 import { randomUUID } from "node:crypto";
+import type { Readable } from "node:stream";
 import { Prisma } from "@prisma/client";
 import type { IngestionSourceType, InvoiceIntakeSourceType, PipelineStep, PrismaClient } from "@prisma/client";
 import type { ExtractedInvoiceDraft } from "../../adapters/ai/ai-invoice.adapter.js";
 import { createMockAiAdapter } from "../../adapters/ai/ai-invoice.adapter.js";
+import { createOpenAiAdapter } from "../../adapters/ai/openai-invoice.adapter.js";
+import { createObjectStorage } from "../../adapters/storage/create-storage.js";
 import { buildInvoiceFingerprint } from "../../domain/deduplication/invoice-fingerprint.js";
 import { scoreInvoiceDuplicatePair } from "../../domain/deduplication/duplicate-score.js";
 import { loadConfig } from "../../config.js";
@@ -10,6 +13,14 @@ import { pipelineJobsTotal } from "../../lib/metrics.js";
 import { classifyDocumentType } from "../compliance/compliance-engine.js";
 import { refreshInvoiceCompliance } from "../compliance/compliance.service.js";
 import { parseInvoiceDate } from "../invoices/invoice-dates.js";
+
+async function streamToBuffer(stream: Readable): Promise<Buffer> {
+  const chunks: Uint8Array[] = [];
+  for await (const chunk of stream) {
+    chunks.push(chunk instanceof Uint8Array ? chunk : Buffer.from(String(chunk)));
+  }
+  return Buffer.concat(chunks);
+}
 
 function mapIngestionToIntake(kind: IngestionSourceType | null | undefined): InvoiceIntakeSourceType {
   switch (kind) {
@@ -48,7 +59,9 @@ async function recordAttempt(
 
 export async function runPipelineJob(prisma: PrismaClient, processingJobId: string): Promise<void> {
   const cfg = loadConfig();
-  const ai = createMockAiAdapter(cfg.FEATURE_AI_EXTRACTION_MOCK);
+  const ai = cfg.OPENAI_API_KEY
+    ? createOpenAiAdapter(cfg.OPENAI_API_KEY, cfg.OPENAI_MODEL)
+    : createMockAiAdapter(cfg.FEATURE_AI_EXTRACTION_MOCK);
 
   const jobRow = await prisma.processingJob.findUnique({
     where: { id: processingJobId },
@@ -75,10 +88,23 @@ export async function runPipelineJob(prisma: PrismaClient, processingJobId: stri
     await recordAttempt(prisma, processingJobId, attemptNo, "PERSIST_RAW", "ok");
     await recordAttempt(prisma, processingJobId, attemptNo, "PARSE_METADATA", "ok");
 
+    let documentBuffer: Buffer | undefined;
+    try {
+      const storage = createObjectStorage();
+      const { stream } = await storage.getObjectStream({
+        key: document.storageKey,
+        bucket: document.storageBucket,
+      });
+      documentBuffer = await streamToBuffer(stream);
+    } catch (storageErr) {
+      console.warn("[pipeline] Could not read document from storage:", storageErr instanceof Error ? storageErr.message : storageErr);
+    }
+
     const { draft: extractedDraft, confidence } = await ai.extractInvoiceData({
       mimeType: document.mimeType,
       sha256: document.sha256,
       storageKey: document.storageKey,
+      buffer: documentBuffer,
     });
     workingDraft = extractedDraft;
     await prisma.extractionRun.create({
@@ -251,19 +277,21 @@ export async function runPipelineJob(prisma: PrismaClient, processingJobId: stri
     );
     await recordAttempt(prisma, processingJobId, attemptNo, "COMPLIANCE", "compliance layer applied");
 
-    await prisma.webhookOutbox.create({
-      data: {
-        tenantId: jobRow.tenantId,
-        eventType: "invoice.processed",
-        url: "https://hooks.example.invalid/n8n",
-        payload: {
-          invoiceId: invoice.id,
-          documentId: document.id,
-          correlationId: jobRow.correlationId,
-        } as object,
-        status: "PENDING",
-      },
-    });
+    if (cfg.N8N_WEBHOOK_URL) {
+      await prisma.webhookOutbox.create({
+        data: {
+          tenantId: jobRow.tenantId,
+          eventType: "invoice.processed",
+          url: cfg.N8N_WEBHOOK_URL,
+          payload: {
+            invoiceId: invoice.id,
+            documentId: document.id,
+            correlationId: jobRow.correlationId,
+          } as object,
+          status: "PENDING",
+        },
+      });
+    }
     await recordAttempt(prisma, processingJobId, attemptNo, "EMIT_EVENTS", "outbox");
 
     await prisma.auditLog.create({

@@ -12,6 +12,7 @@ import {
 import { sweepWebhookOutbox } from "./modules/webhooks/webhook-delivery.service.js";
 import { getRedisConnection } from "./lib/redis-connection.js";
 import { IMAP_ZENBOX_SYNC_QUEUE_NAME, PIPELINE_QUEUE_NAME } from "./lib/queue-constants.js";
+import { enqueueZenboxImapSync } from "./lib/imap-sync-queue.js";
 import type { ImapZenboxSyncJobData } from "./lib/imap-sync-queue.js";
 import { runZenboxImapSyncJob } from "./modules/zenbox/zenbox-imap-sync.service.js";
 import { ZenboxImapPermanentError } from "./modules/zenbox/zenbox-imap-errors.js";
@@ -85,6 +86,36 @@ const webhookTimer = setInterval(() => {
 }, cfg.WEBHOOK_DELIVERY_INTERVAL_MS);
 webhookTimer.unref();
 
+async function autoScheduleImapSync(): Promise<void> {
+  try {
+    const mailboxes = await prisma.mailbox.findMany({
+      where: { isActive: true, provider: "IMAP" },
+      include: { syncState: true },
+    });
+    for (const mb of mailboxes) {
+      if (mb.syncState?.imapSyncStatus === "RUNNING") continue;
+      await enqueueZenboxImapSync({
+        tenantId: mb.tenantId,
+        accountKey: mb.label,
+      }).catch(() => {});
+    }
+  } catch (err) {
+    console.error("auto imap sync scheduling failed", err);
+  }
+}
+
+const imapAutoSyncTimer =
+  cfg.IMAP_AUTO_SYNC_INTERVAL_MS > 0
+    ? setInterval(() => {
+        void autoScheduleImapSync();
+      }, cfg.IMAP_AUTO_SYNC_INTERVAL_MS)
+    : null;
+imapAutoSyncTimer?.unref();
+
+if (cfg.IMAP_AUTO_SYNC_INTERVAL_MS > 0) {
+  void autoScheduleImapSync();
+}
+
 const housekeepingTimer = setInterval(() => {
   void (async () => {
     try {
@@ -102,6 +133,7 @@ process.on("SIGTERM", () => {
   void (async () => {
     clearInterval(webhookTimer);
     clearInterval(housekeepingTimer);
+    if (imapAutoSyncTimer) clearInterval(imapAutoSyncTimer);
     await imapZenboxWorker.close();
     await worker.close();
     await prisma.$disconnect();
@@ -110,5 +142,5 @@ process.on("SIGTERM", () => {
 });
 
 console.info(
-  `FVControl worker: pipeline ${PIPELINE_QUEUE_NAME}, IMAP ${IMAP_ZENBOX_SYNC_QUEUE_NAME} (prefix=${cfg.BULLMQ_PREFIX}); webhooks every ${cfg.WEBHOOK_DELIVERY_INTERVAL_MS}ms`,
+  `FVControl worker: pipeline ${PIPELINE_QUEUE_NAME}, IMAP ${IMAP_ZENBOX_SYNC_QUEUE_NAME} (prefix=${cfg.BULLMQ_PREFIX}); webhooks every ${cfg.WEBHOOK_DELIVERY_INTERVAL_MS}ms; IMAP auto-sync every ${cfg.IMAP_AUTO_SYNC_INTERVAL_MS}ms`,
 );

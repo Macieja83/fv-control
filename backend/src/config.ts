@@ -38,6 +38,11 @@ const envSchema = z.object({
   STORAGE_DRIVER: z.enum(["local", "s3"]).default("local"),
 
   FEATURE_AI_EXTRACTION_MOCK: z.coerce.boolean().default(true),
+  OPENAI_API_KEY: z.string().optional(),
+  OPENAI_MODEL: z.string().default("gpt-4o"),
+
+  /** How often (ms) the worker auto-enqueues IMAP sync for every active mailbox. 0 = disabled. */
+  IMAP_AUTO_SYNC_INTERVAL_MS: z.coerce.number().int().min(0).default(300_000),
   WEBHOOK_SIGNING_SECRET: z
     .preprocess((v) => (v === "" || v === undefined ? undefined : v), z.string().min(16).optional()),
 
