@@ -60,11 +60,15 @@ export async function ingestAttachmentAndEnqueue(
       orderBy: { createdAt: "desc" },
     });
     if (inv) {
+      const ingestingHint =
+        inv.status === "INGESTING"
+          ? " Ten sam plik jest już w systemie — jeśli dane się nie uzupełniają, uruchom worker (Redis + kolejka fvcontrol-pipeline) z tymi samymi zmiennymi STORAGE/UPLOAD_DIR co API."
+          : "";
       return {
         kind: "idempotent_document",
         documentId: existingDoc.id,
         invoiceId: inv.id,
-        message: "Document with same SHA-256 already ingested",
+        message: `Dokument o tym samym skrócie SHA-256 jest już w systemie.${ingestingHint}`,
       };
     }
   }

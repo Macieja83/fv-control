@@ -5,6 +5,8 @@ export type ExtractedInvoiceDraft = {
   netTotal?: string;
   vatTotal?: string;
   grossTotal?: string;
+  /** Nazwa sprzedawcy (Sprzedawca) — nie Nabywca */
+  contractorName?: string | null;
   contractorNip?: string | null;
   lineItems?: Array<{
     name: string;
@@ -48,6 +50,7 @@ export function createMockAiAdapter(featureMockEnabled: boolean): AiInvoiceAdapt
           vatTotal: "23.00",
           grossTotal: "123.00",
           contractorNip: "1111111111",
+          contractorName: "Mock Sp. z o.o.",
           lineItems: [
             {
               name: "Mock line",

@@ -35,6 +35,9 @@ export function SourceBadge({ type }: { type: SourceType }) {
 }
 
 export function ReviewBadge({ row }: { row: InvoiceRecord }) {
+  if (row.invoice_status === 'INGESTING') {
+    return <span className="badge badge--review">OCR / kolejka…</span>
+  }
   if (row.review_status === 'needs_review') {
     return <span className="badge badge--review">Do sprawdzenia</span>
   }

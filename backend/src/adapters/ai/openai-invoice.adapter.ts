@@ -5,6 +5,10 @@ const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024;
 
 const EXTRACTION_PROMPT = `You are an invoice data extraction system. Analyze the provided invoice document and extract data as JSON.
 
+Polish invoices (FV) usually label the issuer as "Sprzedawca" and the buyer as "Nabywca". You MUST extract the SELLER only:
+- contractorName = full company/person name of Sprzedawca (the party issuing the invoice)
+- contractorNip = NIP / numer identyfikacji podatkowej of Sprzedawca only (never the buyer's NIP)
+
 Required JSON structure:
 {
   "number": "invoice number (numer faktury)",
@@ -13,7 +17,8 @@ Required JSON structure:
   "netTotal": "0.00",
   "vatTotal": "0.00",
   "grossTotal": "0.00",
-  "contractorNip": "10-digit NIP or null",
+  "contractorName": "legal name of seller (Sprzedawca) or null",
+  "contractorNip": "exactly 10 digits, no dashes/spaces, or null",
   "lineItems": [
     {
       "name": "item description",
@@ -29,7 +34,9 @@ Required JSON structure:
 
 Rules:
 - Monetary values: strings with exactly 2 decimal places (e.g. "123.45")
-- NIP: 10 digits only, no dashes or spaces
+- NIP: Polish tax ID is 10 digits. If shown as XXX-XXX-XX-XX or with spaces, output contractorNip as 10 digits only
+- If multiple NIPs appear, use only Sprzedawca's NIP
+- contractorName: include full name as on document (firma, spółka, imię i nazwisko)
 - confidence: 0.0 to 1.0 reflecting extraction certainty
 - Omit or set to null any unknown fields
 - Return ONLY valid JSON, no markdown fences`;
@@ -40,7 +47,55 @@ function toStr(val: unknown, fallback: string): string {
   return fallback;
 }
 
+const NIP_CANDIDATE_KEYS = [
+  "contractorNip",
+  "sellerNip",
+  "vendorNip",
+  "nipSprzedawcy",
+  "nip_sprzedawcy",
+  "sprzedawcaNip",
+  "nip",
+] as const;
+
+const NAME_CANDIDATE_KEYS = [
+  "contractorName",
+  "supplierName",
+  "sellerName",
+  "vendorName",
+  "sprzedawca",
+  "companyName",
+  "seller",
+] as const;
+
+/** Polish NIP: 10 digits after stripping separators (dashes, spaces, "NIP"). */
+function normalizeNipFromRaw(val: unknown): string | null {
+  if (typeof val !== "string") return null;
+  const digits = val.replace(/\D/g, "");
+  if (digits.length === 10) return digits;
+  return null;
+}
+
+function pickNipFromObject(raw: Record<string, unknown>): string | null {
+  for (const key of NIP_CANDIDATE_KEYS) {
+    const n = normalizeNipFromRaw(raw[key]);
+    if (n) return n;
+  }
+  return null;
+}
+
+function pickContractorName(raw: Record<string, unknown>): string | null {
+  for (const key of NAME_CANDIDATE_KEYS) {
+    const v = raw[key];
+    if (typeof v === "string") {
+      const t = v.trim();
+      if (t.length > 1) return t;
+    }
+  }
+  return null;
+}
+
 function mapResponseToDraft(raw: Record<string, unknown>): ExtractedInvoiceDraft {
+  const nip = pickNipFromObject(raw);
   return {
     number: typeof raw.number === "string" ? raw.number : undefined,
     issueDate: typeof raw.issueDate === "string" ? raw.issueDate : undefined,
@@ -48,10 +103,8 @@ function mapResponseToDraft(raw: Record<string, unknown>): ExtractedInvoiceDraft
     netTotal: toStr(raw.netTotal, "0"),
     vatTotal: toStr(raw.vatTotal, "0"),
     grossTotal: toStr(raw.grossTotal, "0"),
-    contractorNip:
-      typeof raw.contractorNip === "string"
-        ? raw.contractorNip.replace(/\D/g, "") || null
-        : null,
+    contractorName: pickContractorName(raw),
+    contractorNip: nip,
     lineItems: Array.isArray(raw.lineItems)
       ? raw.lineItems.map((li: Record<string, unknown>) => ({
           name: toStr(li.name, ""),

@@ -23,10 +23,12 @@ export function InvoiceUpload({ onUploaded }: Props) {
       const result = await uploadInvoiceFile(file)
       if (result.kind === 'idempotent_document') {
         setState('success')
-        setMessage('Taki dokument już istnieje w systemie.')
+        setMessage(result.message?.trim() || 'Taki dokument już istnieje w systemie.')
       } else {
         setState('success')
-        setMessage('Faktura wysłana do przetworzenia!')
+        setMessage(
+          'Wysłano do kolejki OCR. Dane pojawią się po przetworzeniu przez worker (Redis); bez workera faktura zostanie w stanie „przetwarzanie”.',
+        )
       }
       onUploaded()
       setTimeout(() => setState('idle'), 3000)

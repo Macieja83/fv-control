@@ -23,6 +23,8 @@ export interface AuditEntry {
 
 export interface InvoiceRecord {
   id: string
+  /** Status z API (`Invoice.status`), np. INGESTING podczas OCR. */
+  invoice_status?: string
   source_type: SourceType
   /** Konto skrzynki / integracji KSeF / serwera Discord. */
   source_account: string

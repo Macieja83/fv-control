@@ -4,7 +4,17 @@ Monorepo: **React (Vite) dashboard** + **FVControl API** (Fastify) — platforma
 
 ## Backend + kolejka (lokalnie)
 
-Pełny stack (Postgres, Redis, worker, opcjonalnie MinIO) z katalogu `backend/`:
+**Najszybciej (z katalogu głównego repozytorium):**
+
+1. Skopiuj env (jeśli jeszcze nie masz): `cp backend/.env.example backend/.env` oraz w katalogu głównym utwórz `.env` z `FV_RESTA_API_URL=http://localhost:3000` i `VITE_USE_MOCK_INVOICES=false` (szablon: [`.env.example`](.env.example)).
+2. Baza + Redis: `npm run infra:up` (używa [`docker-compose.yml`](docker-compose.yml) z roota).
+3. Migracje i seed (raz): `cd backend && npx prisma migrate deploy && npx prisma db seed`
+4. **API + worker + Vite jednym poleceniem:** `npm run dev:all`  
+   Albo z podniesieniem Dockera przed startem: `npm run dev:stack`
+
+Skrypty: `dev:backend`, `dev:worker`, `web` = `vite`; `infra:down` zatrzymuje kontenery.
+
+Alternatywa — ręcznie z `backend/`:
 
 ```bash
 cd backend
@@ -13,14 +23,9 @@ npx prisma migrate deploy
 npx prisma db seed
 ```
 
-W dwóch terminalach:
+W dwóch terminalach: `npm run dev` (API :3000) oraz `npm run worker`.
 
-```bash
-npm run dev          # API :3000
-npm run worker       # BullMQ consumer (pipeline)
-```
-
-Frontend (`/api/v1` przez proxy): ustaw `FV_RESTA_API_URL=http://localhost:3000` w `.env` (Vite). Szczegóły: [`backend/README.md`](backend/README.md), produkcja: [`backend/README-PRODUCTION.md`](backend/README-PRODUCTION.md).
+Szczegóły: [`backend/README.md`](backend/README.md), produkcja: [`backend/README-PRODUCTION.md`](backend/README-PRODUCTION.md).
 
 Makefile (z katalogu głównego): `make dev`, `make worker`, `make up`, `make test`, …
 

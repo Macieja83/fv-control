@@ -26,7 +26,7 @@ export async function manualUploadAndEnqueue(
 
   if (result.kind === "idempotent_document") {
     return {
-      idempotent: true as const,
+      kind: "idempotent_document" as const,
       documentId: result.documentId,
       invoiceId: result.invoiceId,
       message: result.message,
@@ -34,7 +34,7 @@ export async function manualUploadAndEnqueue(
   }
 
   return {
-    idempotent: false as const,
+    kind: "created" as const,
     documentId: result.documentId,
     invoiceId: result.invoiceId,
     processingJobId: result.processingJobId,

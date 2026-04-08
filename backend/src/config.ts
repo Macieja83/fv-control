@@ -1,3 +1,4 @@
+import path from "node:path";
 import { z } from "zod";
 
 const envSchema = z.object({
@@ -10,7 +11,10 @@ const envSchema = z.object({
   JWT_ACCESS_TTL_MIN: z.coerce.number().int().positive().default(15),
   JWT_REFRESH_TTL_DAYS: z.coerce.number().int().positive().default(30),
   CORS_ORIGINS: z.string().default("http://localhost:5173"),
-  UPLOAD_DIR: z.string().default("./storage/uploads"),
+  UPLOAD_DIR: z
+    .string()
+    .default("./storage/uploads")
+    .transform((p) => (path.isAbsolute(p) ? p : path.resolve(process.cwd(), p))),
   MAX_UPLOAD_MB: z.coerce.number().positive().default(25),
   /** Max size for streaming GET …/primary-document (preview); independent of upload limit. */
   MAX_DOCUMENT_PREVIEW_MB: z.coerce.number().positive().default(35),
