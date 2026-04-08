@@ -10,6 +10,12 @@ export type UploadResult = {
   message?: string
 }
 
+function isUploadResult(x: unknown): x is UploadResult {
+  if (!x || typeof x !== 'object') return false
+  const k = (x as { kind?: unknown }).kind
+  return k === 'created' || k === 'idempotent_document'
+}
+
 export async function uploadInvoiceFile(file: File): Promise<UploadResult> {
   const token = getStoredToken()
   if (!token) throw new Error('Brak sesji — zaloguj się ponownie.')
@@ -33,5 +39,9 @@ export async function uploadInvoiceFile(file: File): Promise<UploadResult> {
     throw new Error(msg)
   }
 
-  return (await res.json()) as UploadResult
+  const body: unknown = await res.json()
+  if (!isUploadResult(body)) {
+    throw new Error('Nieprawidłowa odpowiedź serwera po przesłaniu pliku.')
+  }
+  return body
 }

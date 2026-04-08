@@ -21,7 +21,7 @@ const ingestionRoutes: FastifyPluginAsync = async (app) => {
         filename: data.filename || "upload.bin",
         mimeType: data.mimetype || "application/octet-stream",
       });
-      const status = result.idempotent ? 200 : 202;
+      const status = result.kind === "idempotent_document" ? 200 : 202;
       return reply.status(status).send(result);
     },
   );

@@ -114,18 +114,23 @@ export function useInvoiceDashboard() {
   const dataSource: InvoiceDataSource = USE_MOCK_INVOICES ? 'mock' : 'api'
 
   const refreshFromApi = useCallback(async () => {
-    if (USE_MOCK_INVOICES) return
     const token = getStoredToken()
     if (!token) {
-      setListError('Brak sesji.')
-      setInvoices([])
+      if (USE_MOCK_INVOICES) {
+        setListError(null)
+        setInvoices(enrichDuplicateMetadata(seedInvoices()))
+      } else {
+        setListError('Brak sesji.')
+        setInvoices([])
+      }
       setListLoading(false)
       return
     }
+    // Z sesją zawsze pobierz z API — nawet gdy VITE_USE_MOCK_INVOICES=1 (inaczej upload trafia na backend, a lista zostaje na mocku).
     setListLoading(true)
     setListError(null)
     try {
-      const res = await fetchInvoicesList(token, { limit: 100 })
+      const res = await fetchInvoicesList(token, { limit: 200 })
       const mapped = res.data.map(mapApiInvoiceRowToRecord)
       const merged = mergeCategoryOverrides(mapped, categoryOverridesRef.current)
       setInvoices(enrichDuplicateMetadata(merged))
@@ -138,9 +143,17 @@ export function useInvoiceDashboard() {
   }, [])
 
   useEffect(() => {
-    if (USE_MOCK_INVOICES) return
     void refreshFromApi()
   }, [refreshFromApi])
+
+  /** Dopóki któraś faktura jest w INGESTING, odświeżaj listę (worker kończy OCR w tle). */
+  useEffect(() => {
+    if (USE_MOCK_INVOICES) return
+    const ingesting = invoices.some((r) => r.invoice_status === 'INGESTING')
+    if (!ingesting) return
+    const id = window.setInterval(() => void refreshFromApi(), 4000)
+    return () => window.clearInterval(id)
+  }, [invoices, refreshFromApi])
 
   const filtered = useMemo(() => {
     let list = invoices.filter((r) => matchesFilters(r, filters))

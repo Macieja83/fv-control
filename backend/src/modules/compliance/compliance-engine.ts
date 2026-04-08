@@ -141,19 +141,10 @@ export function buildAccountingPackage(invoice: {
 }
 
 export function routeReviewStatus(input: ComplianceRuleInput, legalChannel: LegalChannel): InvoiceReviewStatus {
-  if (input.intakeSourceType === "OCR_SCAN") {
-    return "NEEDS_REVIEW";
-  }
-  if (input.ocrConfidence != null && input.ocrConfidence < 0.75) {
-    return "NEEDS_REVIEW";
-  }
-  if (legalChannel === "UNKNOWN") {
-    return "NEEDS_REVIEW";
-  }
-  if (input.duplicateConfidence != null && input.duplicateConfidence >= 0.72) {
-    return "NEEDS_REVIEW";
-  }
-  return "PARSED";
+  // Every ingested invoice requires human verification before bookkeeping.
+  void input;
+  void legalChannel;
+  return "NEEDS_REVIEW";
 }
 
 export function evaluateComplianceRules(input: ComplianceRuleInput, cfg: AppConfig): ComplianceRuleResult {

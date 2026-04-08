@@ -61,7 +61,12 @@ export async function runPipelineJob(prisma: PrismaClient, processingJobId: stri
   const cfg = loadConfig();
   const ai = cfg.OPENAI_API_KEY
     ? createOpenAiAdapter(cfg.OPENAI_API_KEY, cfg.OPENAI_MODEL)
-    : createMockAiAdapter(cfg.FEATURE_AI_EXTRACTION_MOCK);
+    : createMockAiAdapter(true);
+  if (!cfg.OPENAI_API_KEY && !cfg.FEATURE_AI_EXTRACTION_MOCK) {
+    console.warn(
+      "[pipeline] OPENAI_API_KEY is unset; using mock OCR. Set OPENAI_API_KEY for real extraction or FEATURE_AI_EXTRACTION_MOCK=true to silence this.",
+    );
+  }
 
   const jobRow = await prisma.processingJob.findUnique({
     where: { id: processingJobId },
@@ -100,6 +105,12 @@ export async function runPipelineJob(prisma: PrismaClient, processingJobId: stri
       console.warn("[pipeline] Could not read document from storage:", storageErr instanceof Error ? storageErr.message : storageErr);
     }
 
+    if (!documentBuffer?.length) {
+      throw new Error(
+        "VALIDATION: could not load document bytes from storage — check STORAGE_DRIVER/S3_* or UPLOAD_DIR (API and worker must use the same env and reach the same files)",
+      );
+    }
+
     const { draft: extractedDraft, confidence } = await ai.extractInvoiceData({
       mimeType: document.mimeType,
       sha256: document.sha256,
@@ -127,14 +138,6 @@ export async function runPipelineJob(prisma: PrismaClient, processingJobId: stri
 
     const draft = workingDraft;
     const invoiceNumber = draft.number!;
-    let contractorId = invoice.contractorId;
-    const nip = draft.contractorNip?.replace(/\D/g, "") ?? "";
-    if (nip) {
-      const c = await prisma.contractor.findFirst({
-        where: { tenantId: jobRow.tenantId, nip, deletedAt: null },
-      });
-      if (c) contractorId = c.id;
-    }
 
     const issueDate = draft.issueDate
       ? parseInvoiceDate(draft.issueDate)
@@ -167,6 +170,25 @@ export async function runPipelineJob(prisma: PrismaClient, processingJobId: stri
       });
       if (clash) {
         finalNumber = `${finalNumber}-${randomUUID().slice(0, 6)}`;
+      }
+
+      let contractorId = invoice.contractorId;
+      const nipDigits = (draft.contractorNip ?? "").replace(/\D/g, "");
+      const ocrContractorName = draft.contractorName?.trim();
+      if (nipDigits.length === 10) {
+        let contractor = await tx.contractor.findFirst({
+          where: { tenantId: jobRow.tenantId, nip: nipDigits, deletedAt: null },
+        });
+        if (!contractor) {
+          const name =
+            ocrContractorName && ocrContractorName.length > 0
+              ? ocrContractorName.slice(0, 500)
+              : `Kontrahent ${nipDigits}`;
+          contractor = await tx.contractor.create({
+            data: { tenantId: jobRow.tenantId, nip: nipDigits, name },
+          });
+        }
+        contractorId = contractor.id;
       }
 
       await tx.invoiceItem.deleteMany({ where: { invoiceId: invoice.id } });

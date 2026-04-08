@@ -23,8 +23,15 @@ export function mapApiInvoiceRowToRecord(row: ApiInvoiceListRow): InvoiceRecord 
   const gross = Number.parseFloat(row.grossTotal)
   const dup = row.duplicateScore != null ? Number.parseFloat(row.duplicateScore) : 0
 
+  const needsReviewByWorkflow =
+    row.status === 'INGESTING' ||
+    row.status === 'PENDING_REVIEW' ||
+    row.status === 'FAILED_NEEDS_REVIEW' ||
+    row.reviewStatus === 'NEEDS_REVIEW'
+
   return {
     id: row.id,
+    invoice_status: row.status,
     source_type: mapIntakeToSource(row.intakeSourceType),
     source_account: row.sourceAccount?.trim() || '—',
     restaurant_name: row.tenant?.name?.trim() || '—',
@@ -38,7 +45,7 @@ export function mapApiInvoiceRowToRecord(row: ApiInvoiceListRow): InvoiceRecord 
     category: null,
     payment_status: row.status === 'PAID' ? 'paid' : 'unpaid',
     document_scope: row.legalChannel === 'EXCLUDED' ? 'private' : 'business',
-    review_status: row.reviewStatus === 'NEEDS_REVIEW' ? 'needs_review' : 'cleared',
+    review_status: needsReviewByWorkflow ? 'needs_review' : 'cleared',
     duplicate_score: Number.isFinite(dup) ? dup : 0,
     duplicate_of_id: null,
     duplicate_reason: null,
