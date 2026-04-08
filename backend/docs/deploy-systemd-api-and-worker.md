@@ -1,11 +1,11 @@
 # VPS: systemd — API **i** worker (wymagane pod mail → faktury)
 
-Sam proces **`npm run start`** (Fastify) **tylko przyjmuje HTTP** (login, `POST .../sync`, itd.).  
+Sam proces `**npm run start`** (Fastify) **tylko przyjmuje HTTP** (login, `POST .../sync`, itd.).  
 **Nie wykonuje** synchronizacji IMAP ani kroków pipeline na kolejce BullMQ.
 
-Te rzeczy robi **osobny proces**: **`npm run worker:start`** (`node dist/worker.js`) — musi działać **równolegle** z API, z **tym samym** `.env` (`DATABASE_URL`, `REDIS_URL`, `JWT_*`, `ENCRYPTION_KEY`, `BULLMQ_PREFIX`).
+Te rzeczy robi **osobny proces**: `**npm run worker:start`** (`node dist/worker.js`) — musi działać **równolegle** z API, z **tym samym** `.env` (`DATABASE_URL`, `REDIS_URL`, `JWT_`*, `ENCRYPTION_KEY`, `BULLMQ_PREFIX`).
 
-Bez workera typowy objaw: **`POST .../sync` zwraca `jobId`**, ale **faktury nie pojawiają się** w UI — joby czekają lub nie są w ogóle przetwarzane.
+Bez workera typowy objaw: `**POST .../sync` zwraca `jobId`**, ale **faktury nie pojawiają się** w UI — joby czekają lub nie są w ogóle przetwarzane.
 
 ## Redis — najczęstszy powód „dalej nic nie wpada”
 
@@ -39,7 +39,7 @@ Sprawdź:
 curl -sS http://127.0.0.1:3001/api/v1/ready
 ```
 
-W JSON musi być **`"redis":"ok"`** (jeśli jest `"down"` — worker nie przetworzy kolejki).
+W JSON musi być `**"redis":"ok"**` (jeśli jest `"down"` — worker nie przetworzy kolejki).
 
 ## Redis (alternatywy)
 
@@ -115,7 +115,7 @@ systemctl --user restart fv-control-worker.service
 
 ## Uwaga: `postgres` w `DATABASE_URL` na hoście
 
-Jeśli API działa **na hoście** (systemd), a w `DATABASE_URL` jest host **`postgres`**, to zadziała tylko wtedy, gdy ten hostname jest rozwiązywany (np. wpis w `/etc/hosts` albo Docker network — rzadko domyślnie).  
+Jeśli API działa **na hoście** (systemd), a w `DATABASE_URL` jest host `**postgres`**, to zadziała tylko wtedy, gdy ten hostname jest rozwiązywany (np. wpis w `/etc/hosts` albo Docker network — rzadko domyślnie).  
 Jeśli Postgres z Compose ma port na hoście, często używa się `127.0.0.1:5432`.
 
 Skrypt diagnostyczny (VPS): `backend/scripts/diagnose-vps-mail-pipeline.sh`.
