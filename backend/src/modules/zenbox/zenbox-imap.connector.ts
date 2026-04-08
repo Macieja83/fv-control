@@ -71,15 +71,21 @@ export class ZenboxImapFlowTransport implements ZenboxImapTransport {
   async disconnect(): Promise<void> {
     if (!this.client) return;
     const c = this.client;
-    if (this.onClientError) {
-      c.off("error", this.onClientError);
-      this.onClientError = null;
-    }
     this.client = null;
     try {
-      await c.logout();
-    } catch {
-      c.close();
+      try {
+        await c.logout();
+      } catch {
+        c.close();
+      }
+    } finally {
+      // Keep the `error` listener until the socket is closed; ImapFlow may emit
+      // on timeout during logout — removing the listener first caused fatal
+      // "Unhandled 'error' event" and took down the whole worker process.
+      if (this.onClientError) {
+        c.off("error", this.onClientError);
+        this.onClientError = null;
+      }
     }
   }
 
