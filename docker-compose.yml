@@ -1,7 +1,22 @@
-# PostgreSQL dla backendu FV Resta — uruchom z katalogu głównego repozytorium:
-#   docker compose up -d postgres
+# PostgreSQL + Redis dla backendu FV Resta — z katalogu głównego repozytorium:
+#   docker compose up -d postgres redis
+# API i worker na hoście (systemd) wymagają Redis na hoście → port 6379 poniżej.
+# W backend/.env: REDIS_URL=redis://127.0.0.1:6379
 # Następnie: cd backend && npx prisma migrate deploy && npm run prisma:seed
 services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - fvresta_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   postgres:
     image: postgres:16-alpine
     environment:
@@ -20,3 +35,4 @@ services:
 
 volumes:
   fvresta_pg:
+  fvresta_redis:
