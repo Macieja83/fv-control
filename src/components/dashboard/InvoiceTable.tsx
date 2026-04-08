@@ -130,16 +130,16 @@ export function InvoiceTable({
             <tr>
               <th>Status</th>
               <th>Źródło</th>
-              <th>Lokal</th>
+              <th className="hide-mobile">Lokal</th>
               <th>Dostawca</th>
-              <th>NIP</th>
+              <th className="hide-mobile">NIP</th>
               <th>Nr FV</th>
               <th>Daty</th>
               <th className="num">Brutto</th>
-              <th>Kategoria</th>
-              <th>Typ</th>
+              <th className="hide-mobile">Kategoria</th>
+              <th className="hide-mobile">Typ</th>
               <th>Płatn.</th>
-              <th>Dup.</th>
+              <th className="hide-mobile">Dup.</th>
               <th className="col-actions-th" aria-label="Akcje" />
             </tr>
           </thead>
@@ -175,13 +175,13 @@ export function InvoiceTable({
                 <td className="td-clip">
                   <SourceBadge type={row.source_type} />
                 </td>
-                <td className="td-clip" title={row.restaurant_name}>
+                <td className="td-clip hide-mobile" title={row.restaurant_name}>
                   {row.restaurant_name}
                 </td>
                 <td className="td-clip cell-strong" title={row.supplier_name}>
                   {row.supplier_name}
                 </td>
-                <td className="td-clip mono" title={row.supplier_nip}>
+                <td className="td-clip mono hide-mobile" title={row.supplier_nip}>
                   {row.supplier_nip}
                 </td>
                 <td className="td-clip mono" title={row.invoice_number}>
@@ -194,16 +194,16 @@ export function InvoiceTable({
                 <td className="num cell-strong td-clip">
                   {formatMoney(row.gross_amount, row.currency)}
                 </td>
-                <td className="td-clip" title={row.category ?? ''}>
+                <td className="td-clip hide-mobile" title={row.category ?? ''}>
                   {row.category ?? '—'}
                 </td>
-                <td className="td-clip">
+                <td className="td-clip hide-mobile">
                   <ScopeBadge scope={row.document_scope} />
                 </td>
                 <td className="td-clip">
                   <PaymentBadge status={row.payment_status} />
                 </td>
-                <td className="td-clip">
+                <td className="td-clip hide-mobile">
                   <DuplicateBadge row={row} />
                 </td>
                 <td className="td-actions">
