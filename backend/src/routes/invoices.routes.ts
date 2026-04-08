@@ -94,9 +94,6 @@ const invoicesRoutes: FastifyPluginAsync = async (app) => {
       reply.header("Content-Type", mimeType);
       reply.header("X-Content-Type-Options", "nosniff");
       reply.header("Cache-Control", "private, max-age=60");
-      reply.header("Cross-Origin-Resource-Policy", "same-site");
-      reply.removeHeader("Cross-Origin-Opener-Policy");
-      reply.removeHeader("X-Frame-Options");
       if (contentLength !== undefined) {
         reply.header("Content-Length", String(contentLength));
       }

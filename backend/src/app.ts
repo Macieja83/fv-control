@@ -34,6 +34,8 @@ export async function buildApp() {
   await app.register(helmet, {
     global: true,
     contentSecurityPolicy: false,
+    crossOriginOpenerPolicy: { policy: "same-origin-allow-popups" },
+    crossOriginResourcePolicy: { policy: "same-site" },
   });
 
   await app.register(cors, {
