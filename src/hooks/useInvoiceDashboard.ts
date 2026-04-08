@@ -130,7 +130,7 @@ export function useInvoiceDashboard() {
     setListLoading(true)
     setListError(null)
     try {
-      const res = await fetchInvoicesList(token, { limit: 200 })
+      const res = await fetchInvoicesList(token, { limit: 100 })
       const mapped = res.data.map(mapApiInvoiceRowToRecord)
       const merged = mergeCategoryOverrides(mapped, categoryOverridesRef.current)
       setInvoices(enrichDuplicateMetadata(merged))
