@@ -285,10 +285,9 @@ export class KsefClient {
   private encryptToken(ksefToken: string, timestampMs: number, certBase64: string): string {
     const certDer = Buffer.from(certBase64, "base64");
     const x509 = new X509Certificate(certDer);
-    const key = createPublicKey(x509.publicKey);
     const plaintext = Buffer.from(`${ksefToken}|${timestampMs}`, "utf-8");
     const encrypted = publicEncrypt(
-      { key, padding: cryptoConstants.RSA_PKCS1_OAEP_PADDING, oaepHash: "sha256" },
+      { key: x509.publicKey, padding: cryptoConstants.RSA_PKCS1_OAEP_PADDING, oaepHash: "sha256" },
       plaintext,
     );
     return encrypted.toString("base64");
