@@ -34,6 +34,7 @@ export interface InvoiceRecord {
   invoice_number: string
   issue_date: string
   due_date: string
+  net_amount: number
   gross_amount: number
   currency: CurrencyCode
   category: string | null
