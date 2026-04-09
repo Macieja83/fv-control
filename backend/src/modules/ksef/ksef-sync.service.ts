@@ -42,16 +42,9 @@ export async function runKsefSyncJob(
   }
 
   const env = cfg.KSEF_ENV as "production" | "sandbox";
-  let client: KsefClient;
-  if (cfg.KSEF_CERT && cfg.KSEF_TOKEN_PASSWORD) {
-    client = KsefClient.fromEncryptedCertificate(
-      env, cfg.KSEF_TOKEN, cfg.KSEF_TOKEN_PASSWORD, cfg.KSEF_CERT, cfg.KSEF_NIP,
-    );
-  } else if (cfg.KSEF_TOKEN_PASSWORD) {
-    client = KsefClient.fromEncryptedToken(env, cfg.KSEF_TOKEN, cfg.KSEF_TOKEN_PASSWORD, cfg.KSEF_NIP);
-  } else {
-    client = new KsefClient(env, cfg.KSEF_NIP, { kind: "token", ksefToken: cfg.KSEF_TOKEN });
-  }
+  const client = await KsefClient.fromEncryptedCertificate(
+    env, cfg.KSEF_TOKEN, cfg.KSEF_TOKEN_PASSWORD!, cfg.KSEF_NIP, cfg.KSEF_CERT,
+  );
 
   console.info(`[KSeF sync] Authenticating (env=${env}, NIP=${cfg.KSEF_NIP})…`);
   await client.authenticate();
