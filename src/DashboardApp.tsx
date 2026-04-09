@@ -71,57 +71,55 @@ export default function DashboardApp() {
         userEmail={user?.email}
         onLogout={() => void logout()}
       />
-      <main className="main-grid">
-        <div className="main-col">
-          <KPICards
-            all={kpi.all}
-            unpaidBiz={kpi.unpaidBiz}
-            paid={kpi.paid}
-            dups={kpi.dups}
-            review={kpi.review}
-            noCat={kpi.noCat}
-            onPickFilter={pickKpi}
-          />
-          <InvoiceUpload onUploaded={() => void refreshFromApi()} />
-          <FilterBar
-            filters={filters}
-            onChange={setFilters}
-            suppliers={suppliers}
-            restaurants={restaurants}
-            categories={categories}
-          />
-          <InvoiceTable
-            rows={filtered}
-            selectedId={selected?.id ?? null}
-            onSelect={(id) => setSelectedId(id)}
-            onDelete={(id) => void deleteInvoice(id)}
-            followerDuplicateCount={followerDuplicateCount}
-            onDeleteFollowerDuplicates={() => void deleteFollowerDuplicates()}
-            loading={listLoading}
-            dataSource={dataSource}
-          />
-        </div>
-        <DetailPanel
-          key={selected?.id ?? 'none'}
-          row={selected}
+      <main className="main-content">
+        <KPICards
+          all={kpi.all}
+          unpaidBiz={kpi.unpaidBiz}
+          paid={kpi.paid}
+          dups={kpi.dups}
+          review={kpi.review}
+          noCat={kpi.noCat}
+          onPickFilter={pickKpi}
+        />
+        <InvoiceUpload onUploaded={() => void refreshFromApi()} />
+        <FilterBar
+          filters={filters}
+          onChange={setFilters}
+          suppliers={suppliers}
+          restaurants={restaurants}
           categories={categories}
-          linkedRow={linkedRow}
-          categoryLocalOnly={categoryLocalOnly}
-          onClose={() => setSelectedId(null)}
-          onPaid={(id) => void setPaid(id)}
-          onUnpaid={(id) => void setUnpaid(id)}
-          onCategory={setCategory}
-          onPrivate={(id) => void setScope(id, 'private')}
-          onBusiness={(id) => void setScope(id, 'business')}
-          onConfirmDup={confirmDuplicate}
-          onRejectDup={rejectDuplicate}
-          onGoTo={goToLinked}
-          onNotes={(id, notes) => void setNotes(id, notes)}
-          onNeedsReview={(id) => void setNeedsReview(id)}
-          onClearReview={(id) => void clearReview(id)}
-          onDeleteInvoice={(id) => void deleteInvoice(id)}
+        />
+        <InvoiceTable
+          rows={filtered}
+          selectedId={selected?.id ?? null}
+          onSelect={(id) => setSelectedId(id)}
+          onDelete={(id) => void deleteInvoice(id)}
+          followerDuplicateCount={followerDuplicateCount}
+          onDeleteFollowerDuplicates={() => void deleteFollowerDuplicates()}
+          loading={listLoading}
+          dataSource={dataSource}
         />
       </main>
+      <DetailPanel
+        key={selected?.id ?? 'none'}
+        row={selected}
+        categories={categories}
+        linkedRow={linkedRow}
+        categoryLocalOnly={categoryLocalOnly}
+        onClose={() => setSelectedId(null)}
+        onPaid={(id) => void setPaid(id)}
+        onUnpaid={(id) => void setUnpaid(id)}
+        onCategory={setCategory}
+        onPrivate={(id) => void setScope(id, 'private')}
+        onBusiness={(id) => void setScope(id, 'business')}
+        onConfirmDup={confirmDuplicate}
+        onRejectDup={rejectDuplicate}
+        onGoTo={goToLinked}
+        onNotes={(id, notes) => void setNotes(id, notes)}
+        onNeedsReview={(id) => void setNeedsReview(id)}
+        onClearReview={(id) => void clearReview(id)}
+        onDeleteInvoice={(id) => void deleteInvoice(id)}
+      />
     </div>
   )
 }
