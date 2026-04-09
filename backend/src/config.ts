@@ -53,6 +53,12 @@ const envSchema = z.object({
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   KSEF_ENV: z.enum(["sandbox", "production", "mock"]).default("mock"),
+  /** KSeF authorization token generated in the KSeF portal (for token-based auth). */
+  KSEF_TOKEN: z.string().optional(),
+  /** NIP of the company context for KSeF API auth. */
+  KSEF_NIP: z.string().optional(),
+  /** How often (ms) the worker auto-enqueues KSeF invoice sync. 0 = disabled. */
+  KSEF_AUTO_SYNC_INTERVAL_MS: z.coerce.number().int().min(0).default(0),
   RESTA_API_BASE_URL: z.string().optional(),
 
   PIPELINE_MAX_ATTEMPTS: z.coerce.number().int().positive().default(8),
