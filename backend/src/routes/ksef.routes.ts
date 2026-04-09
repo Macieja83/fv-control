@@ -15,10 +15,10 @@ const ksefRoutes: FastifyPluginAsync = async (app) => {
       const tenantId = request.authUser!.tenantId;
       const source = await app.prisma.ingestionSource.findFirst({
         where: { tenantId, kind: "KSEF" },
-        select: { cursorData: true, updatedAt: true },
+        select: { metadata: true, updatedAt: true },
       });
-      const hwmDate = source?.cursorData
-        ? (source.cursorData as Record<string, unknown>).hwmDate ?? null
+      const hwmDate = source?.metadata
+        ? (source.metadata as Record<string, unknown>).hwmDate ?? null
         : null;
       const ksefInvoiceCount = await app.prisma.invoice.count({
         where: { tenantId, intakeSourceType: "KSEF_API" },

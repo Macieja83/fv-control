@@ -63,7 +63,7 @@ export class KsefClient {
   private tokens: KsefSessionTokens | null = null;
 
   constructor(
-    private readonly env: "production" | "sandbox",
+    env: "production" | "sandbox",
     private readonly ksefToken: string,
     private readonly nip: string,
   ) {

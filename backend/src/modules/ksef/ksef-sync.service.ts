@@ -158,16 +158,16 @@ async function processOneInvoice(
 async function getHighWaterMark(prisma: PrismaClient, tenantId: string): Promise<string | null> {
   const source = await prisma.ingestionSource.findFirst({
     where: { tenantId, kind: "KSEF" },
-    select: { cursorData: true },
+    select: { metadata: true },
   });
-  if (!source?.cursorData) return null;
-  const data = source.cursorData as Record<string, unknown>;
+  if (!source?.metadata) return null;
+  const data = source.metadata as Record<string, unknown>;
   return typeof data.hwmDate === "string" ? data.hwmDate : null;
 }
 
 async function setHighWaterMark(prisma: PrismaClient, tenantId: string, hwmDate: string): Promise<void> {
   await prisma.ingestionSource.updateMany({
     where: { tenantId, kind: "KSEF" },
-    data: { cursorData: { hwmDate } },
+    data: { metadata: { hwmDate } },
   });
 }
