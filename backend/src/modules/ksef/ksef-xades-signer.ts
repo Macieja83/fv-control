@@ -5,7 +5,7 @@
  * compatible with POST /auth/xades-signature.
  */
 
-import { createHash, createSign, X509Certificate, randomUUID } from "node:crypto";
+import { createHash, createPrivateKey, createSign, X509Certificate, randomUUID } from "node:crypto";
 
 const AUTH_NS = "http://ksef.mf.gov.pl/auth/token/2.0";
 const DS_NS = "http://www.w3.org/2000/09/xmldsig#";
@@ -64,14 +64,10 @@ export function signAuthTokenRequest(params: XadesSignParams): string {
   const signedInfoXml = buildSignedInfo(signedInfoId, refBodyId, bodyDigest, refPropsId, propsDigest, signedPropsId);
 
   // 6. Sign the SignedInfo with ECDSA-SHA256
-  const privateKey = {
-    key: privateKeyDer,
-    format: "der" as const,
-    type: "pkcs8" as const,
-  };
+  const keyObj = createPrivateKey({ key: privateKeyDer, format: "der", type: "pkcs8" });
   const signer = createSign("SHA256");
   signer.update(signedInfoXml);
-  const signatureValue = signer.sign({ key: privateKey, dsaEncoding: "ieee-p1363" }, "base64");
+  const signatureValue = signer.sign({ key: keyObj, dsaEncoding: "ieee-p1363" }, "base64");
 
   // 7. Assemble the full signed XML
   const signatureBlock = [
