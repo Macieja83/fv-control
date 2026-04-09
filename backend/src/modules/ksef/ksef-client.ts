@@ -15,16 +15,12 @@
  */
 
 import {
-  createPrivateKey,
-  createPublicKey,
   publicEncrypt,
   pbkdf2Sync,
   createDecipheriv,
   X509Certificate,
   constants as cryptoConstants,
 } from "node:crypto";
-import * as x509 from "@peculiar/x509";
-import { Crypto } from "@peculiar/webcrypto";
 import { signAuthTokenRequest } from "./ksef-xades-signer.js";
 
 const KSEF_URLS: Record<string, string> = {
@@ -174,37 +170,6 @@ function parsePbes2Asn1(buf: Buffer): {
   return { salt, iterations, iv, ciphertext };
 }
 
-// ─── Self-signed cert generation ───
-
-const nodeCrypto = new Crypto();
-x509.cryptoProvider.set(nodeCrypto);
-
-async function generateSelfSignedCert(privateKeyDer: Buffer, nip: string): Promise<Buffer> {
-  const keyObj = createPrivateKey({ key: privateKeyDer, format: "der", type: "pkcs8" });
-  const jwk = keyObj.export({ format: "jwk" });
-
-  const alg: EcKeyImportParams = { name: "ECDSA", namedCurve: jwk.crv ?? "P-256" };
-  const privCryptoKey = await nodeCrypto.subtle.importKey("jwk", jwk, alg, true, ["sign"]);
-
-  const { d: _d, ...pubJwk } = jwk;
-  const pubCryptoKey = await nodeCrypto.subtle.importKey("jwk", pubJwk, alg, true, ["verify"]);
-
-  const cert = await x509.X509CertificateGenerator.createSelfSigned({
-    serialNumber: "01",
-    name: `CN=FVControl KSeF, O=FVControl, C=PL, 2.5.4.97=VATPL-${nip}`,
-    notBefore: new Date(),
-    notAfter: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
-    signingAlgorithm: { name: "ECDSA", hash: "SHA-256" },
-    keys: { privateKey: privCryptoKey, publicKey: pubCryptoKey },
-    extensions: [
-      new x509.BasicConstraintsExtension(false, undefined, true),
-      new x509.KeyUsagesExtension(x509.KeyUsageFlags.digitalSignature | x509.KeyUsageFlags.nonRepudiation, true),
-    ],
-  });
-
-  return Buffer.from(cert.rawData);
-}
-
 // ─── Client ───
 
 type AuthMode =
@@ -238,27 +203,19 @@ export class KsefClient {
   }
 
   /**
-   * Create a KsefClient from an encrypted PKCS#5 private key + optional DER certificate (XAdES auth).
-   * If no certificate is provided, a self-signed cert is generated from the key.
+   * Create a KsefClient from an encrypted PKCS#5 private key + base64 DER certificate (XAdES auth).
    */
-  static async fromEncryptedCertificate(
+  static fromEncryptedCertificate(
     env: "production" | "sandbox",
     encryptedKeyBase64: string,
     password: string,
+    certBase64: string,
     nip: string,
-    certBase64?: string,
-  ): Promise<KsefClient> {
+  ): KsefClient {
     const privateKeyDer = decryptKsefPkcs5Raw(encryptedKeyBase64, password);
     console.info(`[KSeF] Private key decrypted OK (${privateKeyDer.length} bytes).`);
-
-    let certDer: Buffer;
-    if (certBase64) {
-      certDer = Buffer.from(certBase64, "base64");
-      console.info("[KSeF] Using provided certificate.");
-    } else {
-      certDer = await generateSelfSignedCert(privateKeyDer, nip);
-      console.info("[KSeF] Generated self-signed certificate from private key.");
-    }
+    const certDer = Buffer.from(certBase64, "base64");
+    console.info("[KSeF] Certificate loaded OK.");
     return new KsefClient(env, nip, { kind: "certificate", privateKeyDer, certDer });
   }
 
