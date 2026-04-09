@@ -55,8 +55,10 @@ const envSchema = z.object({
   KSEF_ENV: z.enum(["sandbox", "production", "mock"]).default("mock"),
   /** KSeF authorization token — raw string or base64-encoded PKCS#5 encrypted blob from the portal. */
   KSEF_TOKEN: z.string().optional(),
-  /** Password/PIN used when generating the KSeF token (required if KSEF_TOKEN is PKCS#5-encrypted). */
+  /** Password/PIN used when generating the KSeF token/key (required if KSEF_TOKEN is PKCS#5-encrypted). */
   KSEF_TOKEN_PASSWORD: z.string().optional(),
+  /** Base64-encoded DER X.509 certificate for XAdES auth. Required when KSEF_TOKEN is a private key. */
+  KSEF_CERT: z.string().optional(),
   /** NIP of the company context for KSeF API auth. */
   KSEF_NIP: z.string().optional(),
   /** How often (ms) the worker auto-enqueues KSeF invoice sync. 0 = disabled. */

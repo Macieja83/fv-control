@@ -22,6 +22,7 @@ import {
   X509Certificate,
   constants as cryptoConstants,
 } from "node:crypto";
+import { signAuthTokenRequest } from "./ksef-xades-signer.js";
 
 const KSEF_URLS: Record<string, string> = {
   production: "https://api.ksef.mf.gov.pl/v2",
@@ -70,12 +71,15 @@ export type KsefMetadataPage = {
  * Structure: SEQUENCE { AlgorithmIdentifier(PBES2 { PBKDF2, AES-256-CBC }), OCTET STRING(ciphertext) }
  */
 export function decryptKsefTokenPkcs5(encryptedBase64: string, password: string): string {
+  return decryptKsefPkcs5Raw(encryptedBase64, password).toString("utf-8").trim();
+}
+
+export function decryptKsefPkcs5Raw(encryptedBase64: string, password: string): Buffer {
   const buf = Buffer.from(encryptedBase64, "base64");
   const { salt, iterations, iv, ciphertext } = parsePbes2Asn1(buf);
   const key = pbkdf2Sync(password, salt, iterations, 32, "sha256");
   const decipher = createDecipheriv("aes-256-cbc", key, iv);
-  const decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
-  return decrypted.toString("utf-8").trim();
+  return Buffer.concat([decipher.update(ciphertext), decipher.final()]);
 }
 
 function parsePbes2Asn1(buf: Buffer): {
@@ -169,21 +173,24 @@ function parsePbes2Asn1(buf: Buffer): {
 
 // ─── Client ───
 
+type AuthMode =
+  | { kind: "token"; ksefToken: string }
+  | { kind: "certificate"; privateKeyDer: Buffer; certDer: Buffer };
+
 export class KsefClient {
   private readonly baseUrl: string;
   private tokens: KsefSessionTokens | null = null;
 
   constructor(
     env: "production" | "sandbox",
-    private readonly ksefToken: string,
     private readonly nip: string,
+    private readonly authMode: AuthMode,
   ) {
     this.baseUrl = KSEF_URLS[env]!;
   }
 
   /**
-   * Create a KsefClient from an encrypted PKCS#5 token blob + password.
-   * Decrypts the token and returns a ready-to-use client.
+   * Create a KsefClient from an encrypted PKCS#5 token blob + password (token-based auth).
    */
   static fromEncryptedToken(
     env: "production" | "sandbox",
@@ -193,20 +200,62 @@ export class KsefClient {
   ): KsefClient {
     const rawToken = decryptKsefTokenPkcs5(encryptedTokenBase64, password);
     console.info(`[KSeF] Token decrypted OK (${rawToken.length} chars).`);
-    return new KsefClient(env, rawToken, nip);
+    return new KsefClient(env, nip, { kind: "token", ksefToken: rawToken });
+  }
+
+  /**
+   * Create a KsefClient from an encrypted PKCS#5 private key + DER certificate (XAdES auth).
+   */
+  static fromEncryptedCertificate(
+    env: "production" | "sandbox",
+    encryptedKeyBase64: string,
+    password: string,
+    certBase64: string,
+    nip: string,
+  ): KsefClient {
+    const privateKeyDer = decryptKsefPkcs5Raw(encryptedKeyBase64, password);
+    console.info(`[KSeF] Private key decrypted OK (${privateKeyDer.length} bytes).`);
+    const certDer = Buffer.from(certBase64, "base64");
+    return new KsefClient(env, nip, { kind: "certificate", privateKeyDer, certDer });
   }
 
   get isAuthenticated(): boolean {
     return this.tokens !== null;
   }
 
-  /** Full auth handshake: challenge → encrypt → init → poll → redeem tokens. */
+  /** Full auth handshake — dispatches to token or XAdES based on auth mode. */
   async authenticate(): Promise<KsefSessionTokens> {
+    if (this.authMode.kind === "certificate") {
+      return this.authenticateXades();
+    }
+    return this.authenticateToken();
+  }
+
+  private async authenticateToken(): Promise<KsefSessionTokens> {
+    if (this.authMode.kind !== "token") throw new Error("Token auth mode required.");
     const { challenge, timestampMs } = await this.getChallenge();
     const publicKey = await this.fetchPublicKey();
-    const encrypted = this.encryptToken(this.ksefToken, timestampMs, publicKey);
+    const encrypted = this.encryptToken(this.authMode.ksefToken, timestampMs, publicKey);
 
     const { referenceNumber, authToken } = await this.initTokenAuth(challenge, encrypted);
+    await this.pollAuthStatus(referenceNumber, authToken);
+    this.tokens = await this.redeemTokens(authToken);
+    return this.tokens;
+  }
+
+  private async authenticateXades(): Promise<KsefSessionTokens> {
+    if (this.authMode.kind !== "certificate") throw new Error("Certificate auth mode required.");
+    const { challenge } = await this.getChallenge();
+
+    const signedXml = signAuthTokenRequest({
+      challenge,
+      nip: this.nip,
+      privateKeyDer: this.authMode.privateKeyDer,
+      certDer: this.authMode.certDer,
+    });
+    console.info("[KSeF] XAdES signed XML created, sending to /auth/xades-signature…");
+
+    const { referenceNumber, authToken } = await this.initXadesAuth(signedXml);
     await this.pollAuthStatus(referenceNumber, authToken);
     this.tokens = await this.redeemTokens(authToken);
     return this.tokens;
@@ -291,6 +340,20 @@ export class KsefClient {
       plaintext,
     );
     return encrypted.toString("base64");
+  }
+
+  private async initXadesAuth(signedXml: string): Promise<{ referenceNumber: string; authToken: string }> {
+    const res = await fetch(`${this.baseUrl}/auth/xades-signature`, {
+      method: "POST",
+      headers: { "Content-Type": "application/xml" },
+      body: signedXml,
+    });
+    if (!res.ok) throw await this.apiError(res, "xades auth");
+    const body = (await res.json()) as {
+      referenceNumber: string;
+      authenticationToken: { token: string };
+    };
+    return { referenceNumber: body.referenceNumber, authToken: body.authenticationToken.token };
   }
 
   private async initTokenAuth(
