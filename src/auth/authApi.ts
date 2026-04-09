@@ -66,24 +66,16 @@ export async function loginRequest(email: string, password: string): Promise<Log
 }
 
 export async function sessionRequest(token: string): Promise<{ valid: boolean; email?: string }> {
-  let res = await fetch('/api/v1/auth/me', {
+  const res = await fetch('/api/v1/auth/me', {
     method: 'GET',
     headers: { Authorization: `Bearer ${token}` },
   })
-  if (res.ok) {
-    const data = (await res.json()) as { email?: string }
-    if (typeof data.email === 'string') {
-      return { valid: true, email: data.email }
-    }
-    return { valid: false }
-  }
-  res = await fetch('/api/v1/auth/session', {
-    method: 'GET',
-    headers: { Authorization: `Bearer ${token}` },
-  })
-  const legacy = (await res.json()) as { valid: boolean; email?: string }
   if (!res.ok) return { valid: false }
-  return legacy
+  const data = (await res.json()) as { email?: string }
+  if (typeof data.email === 'string') {
+    return { valid: true, email: data.email }
+  }
+  return { valid: false }
 }
 
 export async function logoutRequest(token: string): Promise<void> {
