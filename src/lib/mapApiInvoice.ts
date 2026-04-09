@@ -20,6 +20,7 @@ function mapCurrency(c: string): CurrencyCode {
 
 export function mapApiInvoiceRowToRecord(row: ApiInvoiceListRow): InvoiceRecord {
   const contractor = row.contractor
+  const net = Number.parseFloat(row.netTotal)
   const gross = Number.parseFloat(row.grossTotal)
   const dup = row.duplicateScore != null ? Number.parseFloat(row.duplicateScore) : 0
 
@@ -40,6 +41,7 @@ export function mapApiInvoiceRowToRecord(row: ApiInvoiceListRow): InvoiceRecord 
     invoice_number: row.number,
     issue_date: toYmd(row.issueDate),
     due_date: row.dueDate ? toYmd(row.dueDate) : '',
+    net_amount: Number.isFinite(net) ? net : 0,
     gross_amount: Number.isFinite(gross) ? gross : 0,
     currency: mapCurrency(row.currency),
     category: null,

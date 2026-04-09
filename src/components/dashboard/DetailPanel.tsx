@@ -100,6 +100,8 @@ export function DetailPanel({
           <dd>
             wystawienie {row.issue_date} · płatność do {row.due_date}
           </dd>
+          <dt>Kwota netto</dt>
+          <dd>{money(row.net_amount, row.currency)}</dd>
           <dt>Kwota brutto</dt>
           <dd className="cell-strong">{money(row.gross_amount, row.currency)}</dd>
           <dt>Restauracja</dt>
