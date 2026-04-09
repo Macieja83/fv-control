@@ -36,21 +36,21 @@ export async function runKsefSyncJob(
 ): Promise<KsefSyncResult> {
   const cfg = loadConfig();
 
-  if (cfg.KSEF_ENV === "mock" || !cfg.KSEF_TOKEN || !cfg.KSEF_NIP || !cfg.KSEF_TOKEN_PASSWORD) {
-    console.warn("KSeF sync skipped: KSEF_ENV=mock or missing KSEF_TOKEN/KSEF_NIP/KSEF_TOKEN_PASSWORD.");
+  if (cfg.KSEF_ENV === "mock" || !cfg.KSEF_TOKEN || !cfg.KSEF_NIP) {
+    console.warn("KSeF sync skipped: KSEF_ENV=mock or missing KSEF_TOKEN/KSEF_NIP.");
     return { fetched: 0, ingested: 0, skippedDuplicate: 0, errors: [], newHwmDate: null };
   }
 
   const env = cfg.KSEF_ENV as "production" | "sandbox";
   let client: KsefClient;
-  if (cfg.KSEF_CERT) {
+  if (cfg.KSEF_CERT && cfg.KSEF_TOKEN_PASSWORD) {
     client = KsefClient.fromEncryptedCertificate(
       env, cfg.KSEF_TOKEN, cfg.KSEF_TOKEN_PASSWORD, cfg.KSEF_CERT, cfg.KSEF_NIP,
     );
+  } else if (cfg.KSEF_TOKEN_PASSWORD) {
+    client = KsefClient.fromEncryptedToken(env, cfg.KSEF_TOKEN, cfg.KSEF_TOKEN_PASSWORD, cfg.KSEF_NIP);
   } else {
-    client = KsefClient.fromEncryptedToken(
-      env, cfg.KSEF_TOKEN, cfg.KSEF_TOKEN_PASSWORD, cfg.KSEF_NIP,
-    );
+    client = new KsefClient(env, cfg.KSEF_NIP, { kind: "token", ksefToken: cfg.KSEF_TOKEN });
   }
 
   console.info(`[KSeF sync] Authenticating (env=${env}, NIP=${cfg.KSEF_NIP})…`);

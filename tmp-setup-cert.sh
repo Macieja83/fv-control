@@ -1,0 +1,28 @@
+#!/bin/bash
+set -e
+
+cd /opt/fv-control/backend
+
+# Update KSEF_TOKEN with new key (remove PEM headers, join lines)
+NEW_KEY="MIHzMF4GCSqGSIb3DQEFDTBRMDAGCSqGSIb3DQEFDDAjBBDiXlqGcfRNBiJcjY5Ba15IAgMBhqAwCgYIKoZIhvcNAgkwHQYJYIZIAWUDBAEqBBCmj+JRwZFUd3zVlxipCWZZBIGQXvza0Hx7Z+Pxo1qhxhafbwIuzW/bpo76tiOVxHaHkhJx0qhiR+pmzARfd8ToN0hVRNWayczM+pBR6DKyQhjDIIKymMdRfRSIushGHdppmZo9xa+7Cya6GjE+WswXw1jrEbK9tZx/etljTu1I6pjrj3VttN3eRmWs2p/4BByyYqDWUErY8snFMnH3S8RHNSr4"
+
+CERT="MIIDRzCCAsygAwIBAgIIAqN4n3/UPywwCgYIKoZIzj0EAwIwaTELMAkGA1UEBhMCUEwxHjAcBgNVBAoMFU1pbmlzdGVyc3R3byBGaW5hbnNvdzEnMCUGA1UECwweS3Jham93YSBBZG1pbmlzdHJhY2phIFNrYXJib3dhMREwDwYDVQQDDAhDQ0sgS1NlRjAeFw0yNjA0MTAwMDAwMDBaFw0yODA0MTAwMDAwMDBaMIGAMQswCQYDVQQGEwJQTDEaMBgGA1UEBRMRUE5PUEwtOTAwMjA3MDU4NTQxDzANBgNVBCoMBk1BUkNJTjEUMBIGA1UEBAwLTUFDSUVKRVdTS0kxLjAsBgNVBAMMJU1BUkNJTiBNQUNJRUpFV1NLSSAodXdpZXJ6eXRlbG5pZW5pZSkwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAAQP4osqCWKPAgwuSU9zvW4NMnUF/3Rlobvxa7GKEDdHYkGVHG0bDGBFZnYyh80/zaXogDDsmdaC8IiJRbjsL/uoo4IBRDCCAUAwHwYDVR0jBBgwFoAUHv9wjqXKFRNk2RDl7WrliUJo+kIwbAYDVR0gBGUwYzBhBgYEAI96AQMwVzBVBggrBgEFBQcCARZJaHR0cHM6Ly9rc2VmLnBvZGF0a2kuZ292LnBsL2tzZWYtbmEtb2tyZXMtb2JsaWdhdG9yeWpueS9jZXJ0eWZpa2F0eS1rc2VmLzAMBgNVHRMBAf8EAjAAMA4GA1UdDwEB/wQEAwIHgDAdBgNVHQ4EFgQUeUuujKW/nPNuw812ptqMK583AF8wQAYDVR0fBDkwNzA1oDOgMYYvaHR0cHM6Ly9rc2VmLm1mLmdvdi5wbC9zZWN1cml0eS9jcmwvbWZrc2VmNS5jcmwwMAYIKwYBBQUHAQMEJDAiMAsGBgQAjkYBAwIBADATBgYEAI5GAQYwCQYHBACORgEGATAKBggqhkjOPQQDAgNpADBmAjEA3Qym92fzd2VPck1hfW90uhLj5KGcl0qotBNljWOp+SFvt0REs3QYrGjAOzY8dUv5AjEAzFoVAauF3Ibx2jN2UskStd1yzU/QRJtKAyQHUhiqm100EM+2FwaKQGA3GeF/+tqj"
+
+# Remove old KSEF_TOKEN and KSEF_CERT lines, add new ones
+sed -i '/^KSEF_TOKEN=/d' .env
+sed -i '/^KSEF_CERT=/d' .env
+
+echo "KSEF_TOKEN=$NEW_KEY" >> .env
+echo "KSEF_CERT=$CERT" >> .env
+
+echo "=== KSeF vars ==="
+grep KSEF .env
+
+echo ""
+echo "=== Pull and build ==="
+cd /opt/fv-control && git fetch origin && git reset --hard origin/main
+cd backend && npm install --silent 2>&1 | tail -3
+npx tsc --build 2>&1 | grep -v 'webhook-log-redaction'
+
+echo ""
+echo "SETUP DONE"

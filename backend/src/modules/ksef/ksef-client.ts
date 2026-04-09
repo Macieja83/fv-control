@@ -15,6 +15,7 @@
  */
 
 import {
+  createPublicKey,
   publicEncrypt,
   pbkdf2Sync,
   createDecipheriv,
@@ -203,7 +204,7 @@ export class KsefClient {
   }
 
   /**
-   * Create a KsefClient from an encrypted PKCS#5 private key + base64 DER certificate (XAdES auth).
+   * Create a KsefClient from an encrypted PKCS#5 private key + DER certificate (XAdES auth).
    */
   static fromEncryptedCertificate(
     env: "production" | "sandbox",
@@ -215,7 +216,6 @@ export class KsefClient {
     const privateKeyDer = decryptKsefPkcs5Raw(encryptedKeyBase64, password);
     console.info(`[KSeF] Private key decrypted OK (${privateKeyDer.length} bytes).`);
     const certDer = Buffer.from(certBase64, "base64");
-    console.info("[KSeF] Certificate loaded OK.");
     return new KsefClient(env, nip, { kind: "certificate", privateKeyDer, certDer });
   }
 
