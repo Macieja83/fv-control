@@ -42,7 +42,9 @@ export async function runKsefSyncJob(
   }
 
   const env = cfg.KSEF_ENV as "production" | "sandbox";
-  const client = new KsefClient(env, cfg.KSEF_TOKEN, cfg.KSEF_NIP);
+  const client = cfg.KSEF_TOKEN_PASSWORD
+    ? KsefClient.fromEncryptedToken(env, cfg.KSEF_TOKEN, cfg.KSEF_TOKEN_PASSWORD, cfg.KSEF_NIP)
+    : new KsefClient(env, cfg.KSEF_TOKEN, cfg.KSEF_NIP);
 
   console.info(`[KSeF sync] Authenticating (env=${env}, NIP=${cfg.KSEF_NIP})…`);
   await client.authenticate();

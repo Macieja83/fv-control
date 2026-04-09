@@ -14,7 +14,13 @@
  *   GET  /invoices/ksef/{ksefNumber}     → raw invoice XML
  */
 
-import { createPublicKey, publicEncrypt, constants as cryptoConstants } from "node:crypto";
+import {
+  createPublicKey,
+  publicEncrypt,
+  pbkdf2Sync,
+  createDecipheriv,
+  constants as cryptoConstants,
+} from "node:crypto";
 
 const KSEF_URLS: Record<string, string> = {
   production: "https://api.ksef.mf.gov.pl/v2",
@@ -56,6 +62,110 @@ export type KsefMetadataPage = {
   invoices: KsefInvoiceMetadata[];
 };
 
+// ─── PKCS#5 / PBES2 token decryption ───
+
+/**
+ * Decrypt a PKCS#5 PBES2-encrypted KSeF token blob.
+ * Structure: SEQUENCE { AlgorithmIdentifier(PBES2 { PBKDF2, AES-256-CBC }), OCTET STRING(ciphertext) }
+ */
+export function decryptKsefTokenPkcs5(encryptedBase64: string, password: string): string {
+  const buf = Buffer.from(encryptedBase64, "base64");
+  const { salt, iterations, iv, ciphertext } = parsePbes2Asn1(buf);
+  const key = pbkdf2Sync(password, salt, iterations, 32, "sha256");
+  const decipher = createDecipheriv("aes-256-cbc", key, iv);
+  const decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+  return decrypted.toString("utf-8").trim();
+}
+
+function parsePbes2Asn1(buf: Buffer): {
+  salt: Buffer;
+  iterations: number;
+  iv: Buffer;
+  ciphertext: Buffer;
+} {
+  let pos = 0;
+
+  function readTag(): { tag: number; length: number } {
+    const tag = buf[pos++]!;
+    let length = buf[pos++]!;
+    if (length & 0x80) {
+      const numBytes = length & 0x7f;
+      length = 0;
+      for (let i = 0; i < numBytes; i++) {
+        length = (length << 8) | buf[pos++]!;
+      }
+    }
+    return { tag, length };
+  }
+
+  function readBytes(len: number): Buffer {
+    const slice = buf.subarray(pos, pos + len);
+    pos += len;
+    return slice;
+  }
+
+  function expectSequence(): number {
+    const { tag, length } = readTag();
+    if (tag !== 0x30) throw new Error(`Expected SEQUENCE (0x30), got 0x${tag.toString(16)}`);
+    return length;
+  }
+
+  function expectOid(): Buffer {
+    const { tag, length } = readTag();
+    if (tag !== 0x06) throw new Error(`Expected OID (0x06), got 0x${tag.toString(16)}`);
+    return readBytes(length);
+  }
+
+  function expectOctetString(): Buffer {
+    const { tag, length } = readTag();
+    if (tag !== 0x04) throw new Error(`Expected OCTET STRING (0x04), got 0x${tag.toString(16)}`);
+    return readBytes(length);
+  }
+
+  function expectInteger(): number {
+    const { tag, length } = readTag();
+    if (tag !== 0x02) throw new Error(`Expected INTEGER (0x02), got 0x${tag.toString(16)}`);
+    const bytes = readBytes(length);
+    let val = 0;
+    for (const b of bytes) val = (val << 8) | b;
+    return val;
+  }
+
+  // outer SEQUENCE
+  expectSequence();
+  // AlgorithmIdentifier SEQUENCE (PBES2)
+  expectSequence();
+  const pbes2Oid = expectOid();
+  if (!pbes2Oid.equals(Buffer.from([0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x05, 0x0d]))) {
+    throw new Error("Not a PBES2 encrypted structure.");
+  }
+  // PBES2 params SEQUENCE
+  expectSequence();
+  // PBKDF2 params SEQUENCE
+  expectSequence();
+  const pbkdf2Oid = expectOid();
+  if (!pbkdf2Oid.equals(Buffer.from([0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x05, 0x0c]))) {
+    throw new Error("Expected PBKDF2 OID.");
+  }
+  // PBKDF2 inner params
+  expectSequence();
+  const salt = expectOctetString();
+  const iterations = expectInteger();
+  // optional PRF AlgorithmIdentifier (HMAC-SHA256)
+  if (buf[pos] === 0x30) {
+    const prfLen = readTag().length;
+    readBytes(prfLen); // skip PRF params
+  }
+  // Encryption scheme SEQUENCE (AES-256-CBC)
+  expectSequence();
+  expectOid(); // AES-256-CBC OID — skip
+  const iv = expectOctetString();
+  // Ciphertext OCTET STRING
+  const ciphertext = expectOctetString();
+
+  return { salt, iterations, iv, ciphertext };
+}
+
 // ─── Client ───
 
 export class KsefClient {
@@ -68,6 +178,21 @@ export class KsefClient {
     private readonly nip: string,
   ) {
     this.baseUrl = KSEF_URLS[env]!;
+  }
+
+  /**
+   * Create a KsefClient from an encrypted PKCS#5 token blob + password.
+   * Decrypts the token and returns a ready-to-use client.
+   */
+  static fromEncryptedToken(
+    env: "production" | "sandbox",
+    encryptedTokenBase64: string,
+    password: string,
+    nip: string,
+  ): KsefClient {
+    const rawToken = decryptKsefTokenPkcs5(encryptedTokenBase64, password);
+    console.info(`[KSeF] Token decrypted OK (${rawToken.length} chars).`);
+    return new KsefClient(env, rawToken, nip);
   }
 
   get isAuthenticated(): boolean {
