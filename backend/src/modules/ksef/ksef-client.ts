@@ -19,6 +19,7 @@ import {
   publicEncrypt,
   pbkdf2Sync,
   createDecipheriv,
+  X509Certificate,
   constants as cryptoConstants,
 } from "node:crypto";
 
@@ -281,9 +282,10 @@ export class KsefClient {
   }
 
   /** Encrypt `ksefToken|timestampMs` with MF public RSA key using RSA-OAEP + SHA-256. */
-  private encryptToken(ksefToken: string, timestampMs: number, publicKeyBase64: string): string {
-    const derBuffer = Buffer.from(publicKeyBase64, "base64");
-    const key = createPublicKey({ key: derBuffer, format: "der", type: "spki" });
+  private encryptToken(ksefToken: string, timestampMs: number, certBase64: string): string {
+    const certDer = Buffer.from(certBase64, "base64");
+    const x509 = new X509Certificate(certDer);
+    const key = createPublicKey(x509.publicKey);
     const plaintext = Buffer.from(`${ksefToken}|${timestampMs}`, "utf-8");
     const encrypted = publicEncrypt(
       { key, padding: cryptoConstants.RSA_PKCS1_OAEP_PADDING, oaepHash: "sha256" },
