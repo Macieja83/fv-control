@@ -11,11 +11,13 @@ import {
 } from "./lib/housekeeping.js";
 import { sweepWebhookOutbox } from "./modules/webhooks/webhook-delivery.service.js";
 import { getRedisConnection } from "./lib/redis-connection.js";
-import { IMAP_ZENBOX_SYNC_QUEUE_NAME, PIPELINE_QUEUE_NAME } from "./lib/queue-constants.js";
+import { IMAP_ZENBOX_SYNC_QUEUE_NAME, KSEF_SYNC_QUEUE_NAME, PIPELINE_QUEUE_NAME } from "./lib/queue-constants.js";
 import { enqueueZenboxImapSync } from "./lib/imap-sync-queue.js";
 import type { ImapZenboxSyncJobData } from "./lib/imap-sync-queue.js";
 import { runZenboxImapSyncJob } from "./modules/zenbox/zenbox-imap-sync.service.js";
 import { ZenboxImapPermanentError } from "./modules/zenbox/zenbox-imap-errors.js";
+import { enqueueKsefSync } from "./lib/ksef-sync-queue.js";
+import { runKsefSyncJob, type KsefSyncJobData } from "./modules/ksef/ksef-sync.service.js";
 
 type PipelineJobData = { processingJobId: string };
 
@@ -47,6 +49,14 @@ const imapZenboxWorker = new Worker<ImapZenboxSyncJobData>(
       }
       throw e;
     }
+  },
+  { connection, prefix: cfg.BULLMQ_PREFIX, concurrency: 1 },
+);
+
+const ksefWorker = new Worker<KsefSyncJobData>(
+  KSEF_SYNC_QUEUE_NAME,
+  async (job: Job<KsefSyncJobData>) => {
+    await runKsefSyncJob(prisma, job.data);
   },
   { connection, prefix: cfg.BULLMQ_PREFIX, concurrency: 1 },
 );
@@ -116,6 +126,30 @@ if (cfg.IMAP_AUTO_SYNC_INTERVAL_MS > 0) {
   void autoScheduleImapSync();
 }
 
+async function autoScheduleKsefSync(): Promise<void> {
+  if (!cfg.KSEF_TOKEN || !cfg.KSEF_NIP || cfg.KSEF_ENV === "mock") return;
+  try {
+    const tenants = await prisma.tenant.findMany({ select: { id: true } });
+    for (const t of tenants) {
+      await enqueueKsefSync({ tenantId: t.id }).catch(() => {});
+    }
+  } catch (err) {
+    console.error("auto ksef sync scheduling failed", err);
+  }
+}
+
+const ksefAutoSyncTimer =
+  cfg.KSEF_AUTO_SYNC_INTERVAL_MS > 0
+    ? setInterval(() => {
+        void autoScheduleKsefSync();
+      }, cfg.KSEF_AUTO_SYNC_INTERVAL_MS)
+    : null;
+ksefAutoSyncTimer?.unref();
+
+if (cfg.KSEF_AUTO_SYNC_INTERVAL_MS > 0) {
+  void autoScheduleKsefSync();
+}
+
 const housekeepingTimer = setInterval(() => {
   void (async () => {
     try {
@@ -134,6 +168,8 @@ process.on("SIGTERM", () => {
     clearInterval(webhookTimer);
     clearInterval(housekeepingTimer);
     if (imapAutoSyncTimer) clearInterval(imapAutoSyncTimer);
+    if (ksefAutoSyncTimer) clearInterval(ksefAutoSyncTimer);
+    await ksefWorker.close();
     await imapZenboxWorker.close();
     await worker.close();
     await prisma.$disconnect();
@@ -142,5 +178,5 @@ process.on("SIGTERM", () => {
 });
 
 console.info(
-  `FVControl worker: pipeline ${PIPELINE_QUEUE_NAME}, IMAP ${IMAP_ZENBOX_SYNC_QUEUE_NAME} (prefix=${cfg.BULLMQ_PREFIX}); webhooks every ${cfg.WEBHOOK_DELIVERY_INTERVAL_MS}ms; IMAP auto-sync every ${cfg.IMAP_AUTO_SYNC_INTERVAL_MS}ms`,
+  `FVControl worker: pipeline ${PIPELINE_QUEUE_NAME}, IMAP ${IMAP_ZENBOX_SYNC_QUEUE_NAME}, KSeF ${KSEF_SYNC_QUEUE_NAME} (prefix=${cfg.BULLMQ_PREFIX}); webhooks every ${cfg.WEBHOOK_DELIVERY_INTERVAL_MS}ms; IMAP auto-sync every ${cfg.IMAP_AUTO_SYNC_INTERVAL_MS}ms; KSeF auto-sync every ${cfg.KSEF_AUTO_SYNC_INTERVAL_MS}ms`,
 );
