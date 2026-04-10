@@ -30,23 +30,35 @@ export type KsefSyncResult = {
 const KSEF_SYNC_ACTOR_ID = "00000000-0000-0000-0000-000000000000";
 const PAGE_SIZE = 100;
 
-/** KSeF allows 16 requests/minute. We stay safely under with 14 req / 60 s. */
-const RATE_LIMIT_WINDOW_MS = 60_000;
-const RATE_LIMIT_MAX_REQUESTS = 14;
-
+/**
+ * KSeF enforces two rate limits:
+ *   - 16 requests per minute
+ *   - 64 requests per hour
+ * We stay safely under with 14 req/min and 58 req/hour.
+ */
 class RateLimiter {
   private timestamps: number[] = [];
 
   async throttle(): Promise<void> {
     const now = Date.now();
-    this.timestamps = this.timestamps.filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
-    if (this.timestamps.length >= RATE_LIMIT_MAX_REQUESTS) {
-      const oldest = this.timestamps[0]!;
-      const waitMs = RATE_LIMIT_WINDOW_MS - (now - oldest) + 500;
-      console.info(`[KSeF sync] Rate limit reached, waiting ${Math.ceil(waitMs / 1000)}s…`);
+    this.timestamps = this.timestamps.filter((t) => now - t < 3_600_000);
+
+    const lastMinute = this.timestamps.filter((t) => now - t < 60_000);
+    if (lastMinute.length >= 14) {
+      const oldest = lastMinute[0]!;
+      const waitMs = 60_000 - (now - oldest) + 1_000;
+      console.info(`[KSeF sync] Minute limit reached (${lastMinute.length}/14), waiting ${Math.ceil(waitMs / 1000)}s…`);
       await sleep(waitMs);
-      this.timestamps = this.timestamps.filter((t) => Date.now() - t < RATE_LIMIT_WINDOW_MS);
     }
+
+    if (this.timestamps.length >= 58) {
+      const oldest = this.timestamps[0]!;
+      const waitMs = 3_600_000 - (Date.now() - oldest) + 1_000;
+      console.info(`[KSeF sync] Hourly limit reached (${this.timestamps.length}/58), waiting ${Math.ceil(waitMs / 1000)}s…`);
+      await sleep(waitMs);
+      this.timestamps = this.timestamps.filter((t) => Date.now() - t < 3_600_000);
+    }
+
     this.timestamps.push(Date.now());
   }
 }

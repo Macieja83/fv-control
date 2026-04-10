@@ -293,22 +293,45 @@ export class KsefClient {
       pageOffset: String(pageOffset),
       pageSize: String(Math.min(pageSize, 250)),
     });
-    const res = await this.authedFetch(`/invoices/query/metadata?${params}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
+    const doRequest = async (): Promise<Response> => {
+      const res = await this.authedFetch(`/invoices/query/metadata?${params}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (res.status === 429) {
+        const waitSec = parseRetryAfterSeconds(await res.text());
+        console.info(`[KSeF] 429 on metadata query, waiting ${waitSec}s…`);
+        await sleep(waitSec * 1000);
+        return doRequest();
+      }
+      return res;
+    };
+    const res = await doRequest();
     if (!res.ok) throw await this.apiError(res, "query metadata");
     return (await res.json()) as KsefMetadataPage;
   }
 
-  /** Download raw invoice XML by KSeF number. */
+  /** Download raw invoice XML by KSeF number, with automatic 429 retry. */
   async fetchInvoiceXml(ksefNumber: string): Promise<string> {
-    const res = await this.authedFetch(`/invoices/ksef/${encodeURIComponent(ksefNumber)}`, {
-      headers: { Accept: "application/xml" },
-    });
-    if (!res.ok) throw await this.apiError(res, `fetch invoice ${ksefNumber}`);
-    return res.text();
+    const MAX_RETRIES = 4;
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      const res = await this.authedFetch(`/invoices/ksef/${encodeURIComponent(ksefNumber)}`, {
+        headers: { Accept: "application/xml" },
+      });
+      if (res.status === 429) {
+        const waitSec = parseRetryAfterSeconds(await res.text());
+        if (attempt === MAX_RETRIES) {
+          throw new Error(`KSeF fetch invoice ${ksefNumber} rate limited after ${MAX_RETRIES} retries`);
+        }
+        console.info(`[KSeF] 429 for ${ksefNumber}, waiting ${waitSec}s (attempt ${attempt + 1}/${MAX_RETRIES})…`);
+        await sleep(waitSec * 1000);
+        continue;
+      }
+      if (!res.ok) throw await this.apiError(res, `fetch invoice ${ksefNumber}`);
+      return res.text();
+    }
+    throw new Error(`KSeF fetch invoice ${ksefNumber} exhausted retries`);
   }
 
   // ─── Auth internals ───
@@ -439,6 +462,19 @@ export class KsefClient {
     } catch { /* ignore */ }
     return new Error(`KSeF ${context} failed (${res.status}): ${detail}`);
   }
+}
+
+/**
+ * Parse KSeF 429 body for retry delay.
+ * E.g. "Spróbuj ponownie po 50 minutach i 13 sekundach." or "po 56 sekundach."
+ */
+function parseRetryAfterSeconds(body: string): number {
+  let total = 0;
+  const minMatch = body.match(/(\d+)\s*minut/);
+  if (minMatch) total += parseInt(minMatch[1]!, 10) * 60;
+  const secMatch = body.match(/(\d+)\s*sekund/);
+  if (secMatch) total += parseInt(secMatch[1]!, 10);
+  return total > 0 ? total + 5 : 65;
 }
 
 function sleep(ms: number): Promise<void> {
