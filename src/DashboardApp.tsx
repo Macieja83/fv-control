@@ -39,6 +39,11 @@ export default function DashboardApp() {
     setNeedsReview,
     clearReview,
     deleteInvoice,
+    bulkMarkPaid,
+    bulkMarkUnpaid,
+    bulkMarkNeedsReview,
+    bulkMarkReviewOk,
+    bulkDeleteInvoices,
     deleteFollowerDuplicates,
     followerDuplicateCount,
     listLoading,
@@ -99,6 +104,11 @@ export default function DashboardApp() {
           onDeleteFollowerDuplicates={() => void deleteFollowerDuplicates()}
           loading={listLoading}
           dataSource={dataSource}
+          onBulkMarkPaid={(ids) => bulkMarkPaid(ids)}
+          onBulkMarkUnpaid={(ids) => bulkMarkUnpaid(ids)}
+          onBulkMarkNeedsReview={(ids) => bulkMarkNeedsReview(ids)}
+          onBulkMarkReviewOk={(ids) => bulkMarkReviewOk(ids)}
+          onBulkDelete={(ids) => bulkDeleteInvoices(ids)}
         />
       </main>
       <DetailPanel

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { InvoiceRecord } from '../../types/invoice'
 import { downloadInvoicePackage } from '../../lib/exportInvoicePackage'
 import {
@@ -26,6 +26,11 @@ type Props = {
   onDeleteFollowerDuplicates: () => void
   loading?: boolean
   dataSource?: 'mock' | 'api'
+  onBulkMarkPaid: (ids: string[]) => Promise<boolean>
+  onBulkMarkUnpaid: (ids: string[]) => Promise<boolean>
+  onBulkMarkNeedsReview: (ids: string[]) => Promise<boolean>
+  onBulkMarkReviewOk: (ids: string[]) => Promise<boolean>
+  onBulkDelete: (ids: string[]) => Promise<boolean>
 }
 
 export function InvoiceTable({
@@ -37,8 +42,84 @@ export function InvoiceTable({
   onDeleteFollowerDuplicates,
   loading = false,
   dataSource = 'mock',
+  onBulkMarkPaid,
+  onBulkMarkUnpaid,
+  onBulkMarkNeedsReview,
+  onBulkMarkReviewOk,
+  onBulkDelete,
 }: Props) {
   const [packaging, setPackaging] = useState(false)
+  const [bulkBusy, setBulkBusy] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
+  const headerCheckRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    const allowed = new Set(rows.map((r) => r.id))
+    setSelectedIds((prev) => {
+      const next = new Set([...prev].filter((id) => allowed.has(id)))
+      return next.size === prev.size ? prev : next
+    })
+  }, [rows])
+
+  const selectedIdList = useMemo(() => [...selectedIds], [selectedIds])
+  const visibleSelectedCount = useMemo(
+    () => rows.filter((r) => selectedIds.has(r.id)).length,
+    [rows, selectedIds],
+  )
+  const allVisibleSelected = rows.length > 0 && visibleSelectedCount === rows.length
+  const someVisibleSelected = visibleSelectedCount > 0 && !allVisibleSelected
+
+  useLayoutEffect(() => {
+    const el = headerCheckRef.current
+    if (!el) return
+    el.indeterminate = someVisibleSelected
+    el.checked = allVisibleSelected
+  }, [allVisibleSelected, someVisibleSelected, rows.length])
+
+  const grossByCurrency = useMemo(() => {
+    const m = new Map<InvoiceRecord['currency'], number>()
+    for (const r of rows) {
+      if (!selectedIds.has(r.id)) continue
+      m.set(r.currency, (m.get(r.currency) ?? 0) + r.gross_amount)
+    }
+    return m
+  }, [rows, selectedIds])
+
+  const grossSummary =
+    grossByCurrency.size === 0
+      ? null
+      : [...grossByCurrency.entries()]
+          .map(([c, v]) => formatMoney(v, c))
+          .join(' · ')
+
+  const toggleRow = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const toggleSelectAllVisible = () => {
+    if (allVisibleSelected) {
+      setSelectedIds(new Set())
+      return
+    }
+    setSelectedIds(new Set(rows.map((r) => r.id)))
+  }
+
+  const runBulk = async (fn: (ids: string[]) => Promise<boolean>) => {
+    const ids = selectedIdList
+    if (ids.length === 0) return
+    setBulkBusy(true)
+    try {
+      const ok = await fn(ids)
+      if (ok) setSelectedIds(new Set())
+    } finally {
+      setBulkBusy(false)
+    }
+  }
 
   const handleDelete = (id: string, label: string) => {
     const irreversible =
@@ -49,6 +130,23 @@ export function InvoiceTable({
       return
     }
     onDelete(id)
+  }
+
+  const handleBulkDelete = () => {
+    const n = selectedIdList.length
+    if (n === 0) return
+    const irreversible =
+      dataSource === 'api'
+        ? 'Tej operacji nie cofniesz — faktury zostaną usunięte z bazy.'
+        : 'Tej operacji nie cofniesz w MVP (mock).'
+    if (
+      !window.confirm(
+        `Usunąć z inboxu ${n} ${n === 1 ? 'zaznaczony rekord' : 'zaznaczonych rekordów'}?\n\n${irreversible}`,
+      )
+    ) {
+      return
+    }
+    void runBulk(onBulkDelete)
   }
 
   const handlePurgeDuplicates = () => {
@@ -109,9 +207,66 @@ export function InvoiceTable({
           </button>
         </div>
       </div>
+
+      {selectedIds.size > 0 && (
+        <div className="table-bulk-bar" role="region" aria-label="Akcje zbiorcze">
+          <span className="table-bulk-bar__count">
+            Zaznaczono: <strong>{selectedIds.size}</strong>
+          </span>
+          {grossSummary && (
+            <span className="table-bulk-bar__sum" title="Suma brutto zaznaczonych (per waluta)">
+              Brutto: {grossSummary}
+            </span>
+          )}
+          <div className="table-bulk-bar__actions">
+            <button
+              type="button"
+              className="btn btn--sm btn--ghost"
+              disabled={bulkBusy}
+              onClick={() => void runBulk(onBulkMarkPaid)}
+            >
+              Zapłacone
+            </button>
+            <button
+              type="button"
+              className="btn btn--sm btn--ghost"
+              disabled={bulkBusy}
+              onClick={() => void runBulk(onBulkMarkUnpaid)}
+            >
+              Niezapłacone
+            </button>
+            <button
+              type="button"
+              className="btn btn--sm btn--ghost"
+              disabled={bulkBusy}
+              onClick={() => void runBulk(onBulkMarkNeedsReview)}
+            >
+              Do sprawdzenia
+            </button>
+            <button
+              type="button"
+              className="btn btn--sm btn--ghost"
+              disabled={bulkBusy}
+              onClick={() => void runBulk(onBulkMarkReviewOk)}
+            >
+              Przegląd OK
+            </button>
+            <button
+              type="button"
+              className="btn btn--sm btn--danger-outline"
+              disabled={bulkBusy}
+              onClick={handleBulkDelete}
+            >
+              Usuń zaznaczone
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="table-wrap">
         <table className="data-table">
           <colgroup>
+            <col className="col-check" />
             <col className="col-status" />
             <col className="col-source" />
             <col className="col-rest" />
@@ -128,6 +283,15 @@ export function InvoiceTable({
           </colgroup>
           <thead>
             <tr>
+              <th className="th-check" scope="col">
+                <input
+                  ref={headerCheckRef}
+                  type="checkbox"
+                  className="table-row-check"
+                  aria-label="Zaznacz wszystkie widoczne faktury"
+                  onChange={toggleSelectAllVisible}
+                />
+              </th>
               <th>Status</th>
               <th>Źródło</th>
               <th className="hide-mobile">Lokal</th>
@@ -146,81 +310,91 @@ export function InvoiceTable({
           <tbody>
             {loading && rows.length === 0 ? (
               <tr>
-                <td colSpan={13} className="table-loading">
+                <td colSpan={14} className="table-loading">
                   Ładowanie listy faktur…
                 </td>
               </tr>
             ) : (
               rows.map((row) => (
-              <tr
-                key={row.id}
-                role="button"
-                tabIndex={0}
-                className={
-                  selectedId === row.id
-                    ? 'data-table__row data-table__row--active'
-                    : 'data-table__row'
-                }
-                onClick={() => onSelect(row.id)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault()
-                    onSelect(row.id)
+                <tr
+                  key={row.id}
+                  role="button"
+                  tabIndex={0}
+                  className={
+                    selectedId === row.id
+                      ? 'data-table__row data-table__row--active'
+                      : 'data-table__row'
                   }
-                }}
-              >
-                <td className="td-clip">
-                  <ReviewBadge row={row} />
-                </td>
-                <td className="td-clip">
-                  <SourceBadge type={row.source_type} />
-                </td>
-                <td className="td-clip hide-mobile" title={row.restaurant_name}>
-                  {row.restaurant_name}
-                </td>
-                <td className="td-clip cell-strong" title={row.supplier_name}>
-                  {row.supplier_name}
-                </td>
-                <td className="td-clip mono hide-mobile" title={row.supplier_nip}>
-                  {row.supplier_nip}
-                </td>
-                <td className="td-clip mono" title={row.invoice_number}>
-                  {row.invoice_number}
-                </td>
-                <td className="td-dates">
-                  <span className="td-dates__line">{row.issue_date}</span>
-                  <span className="td-dates__sub">→ {row.due_date}</span>
-                </td>
-                <td className="num cell-strong td-clip">
-                  {formatMoney(row.gross_amount, row.currency)}
-                </td>
-                <td className="td-clip hide-mobile" title={row.category ?? ''}>
-                  {row.category ?? '—'}
-                </td>
-                <td className="td-clip hide-mobile">
-                  <ScopeBadge scope={row.document_scope} />
-                </td>
-                <td className="td-clip">
-                  <PaymentBadge status={row.payment_status} />
-                </td>
-                <td className="td-clip hide-mobile">
-                  <DuplicateBadge row={row} />
-                </td>
-                <td className="td-actions">
-                  <button
-                    type="button"
-                    className="btn-icon-del"
-                    title="Usuń wpis"
-                    aria-label={`Usuń fakturę ${row.invoice_number}`}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      handleDelete(row.id, `${row.invoice_number} · ${row.supplier_name}`)
-                    }}
-                  >
-                    Usuń
-                  </button>
-                </td>
-              </tr>
+                  onClick={() => onSelect(row.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      onSelect(row.id)
+                    }
+                  }}
+                >
+                  <td className="td-check" onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      className="table-row-check"
+                      checked={selectedIds.has(row.id)}
+                      aria-label={`Zaznacz fakturę ${row.invoice_number}`}
+                      onChange={() => toggleRow(row.id)}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  </td>
+                  <td className="td-clip">
+                    <ReviewBadge row={row} />
+                  </td>
+                  <td className="td-clip">
+                    <SourceBadge type={row.source_type} />
+                  </td>
+                  <td className="td-clip hide-mobile" title={row.restaurant_name}>
+                    {row.restaurant_name}
+                  </td>
+                  <td className="td-clip cell-strong" title={row.supplier_name}>
+                    {row.supplier_name}
+                  </td>
+                  <td className="td-clip mono hide-mobile" title={row.supplier_nip}>
+                    {row.supplier_nip}
+                  </td>
+                  <td className="td-clip mono" title={row.invoice_number}>
+                    {row.invoice_number}
+                  </td>
+                  <td className="td-dates">
+                    <span className="td-dates__line">{row.issue_date}</span>
+                    <span className="td-dates__sub">→ {row.due_date}</span>
+                  </td>
+                  <td className="num cell-strong td-clip">
+                    {formatMoney(row.gross_amount, row.currency)}
+                  </td>
+                  <td className="td-clip hide-mobile" title={row.category ?? ''}>
+                    {row.category ?? '—'}
+                  </td>
+                  <td className="td-clip hide-mobile">
+                    <ScopeBadge scope={row.document_scope} />
+                  </td>
+                  <td className="td-clip">
+                    <PaymentBadge status={row.payment_status} />
+                  </td>
+                  <td className="td-clip hide-mobile">
+                    <DuplicateBadge row={row} />
+                  </td>
+                  <td className="td-actions">
+                    <button
+                      type="button"
+                      className="btn-icon-del"
+                      title="Usuń wpis"
+                      aria-label={`Usuń fakturę ${row.invoice_number}`}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleDelete(row.id, `${row.invoice_number} · ${row.supplier_name}`)
+                      }}
+                    >
+                      Usuń
+                    </button>
+                  </td>
+                </tr>
               ))
             )}
           </tbody>

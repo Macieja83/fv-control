@@ -356,6 +356,166 @@ export function useInvoiceDashboard() {
     [updateRow, refreshFromApi],
   )
 
+  const bulkMarkPaid = useCallback(
+    async (ids: string[]): Promise<boolean> => {
+      const uniq = [...new Set(ids)]
+      if (uniq.length === 0) return true
+      if (USE_MOCK_INVOICES) {
+        for (const id of uniq) {
+          updateRow(id, (r) =>
+            pushHistory(
+              { ...r, payment_status: 'paid', review_status: 'cleared' },
+              'operator',
+              'Zbiorczo: zapłacona',
+            ),
+          )
+        }
+        return true
+      }
+      const token = getStoredToken()
+      if (!token) return false
+      try {
+        for (const id of uniq) {
+          await patchInvoiceStatus(token, id, 'PAID')
+        }
+        await refreshFromApi()
+        return true
+      } catch (e) {
+        window.alert(e instanceof Error ? e.message : String(e))
+        await refreshFromApi()
+        return false
+      }
+    },
+    [updateRow, refreshFromApi],
+  )
+
+  const bulkMarkUnpaid = useCallback(
+    async (ids: string[]): Promise<boolean> => {
+      const uniq = [...new Set(ids)]
+      if (uniq.length === 0) return true
+      if (USE_MOCK_INVOICES) {
+        for (const id of uniq) {
+          updateRow(id, (r) =>
+            pushHistory({ ...r, payment_status: 'unpaid' }, 'operator', 'Zbiorczo: niezapłacona'),
+          )
+        }
+        return true
+      }
+      const token = getStoredToken()
+      if (!token) return false
+      try {
+        for (const id of uniq) {
+          await patchInvoiceStatus(token, id, 'RECEIVED')
+        }
+        await refreshFromApi()
+        return true
+      } catch (e) {
+        window.alert(e instanceof Error ? e.message : String(e))
+        await refreshFromApi()
+        return false
+      }
+    },
+    [updateRow, refreshFromApi],
+  )
+
+  const bulkMarkNeedsReview = useCallback(
+    async (ids: string[]): Promise<boolean> => {
+      const uniq = [...new Set(ids)]
+      if (uniq.length === 0) return true
+      if (USE_MOCK_INVOICES) {
+        for (const id of uniq) {
+          updateRow(id, (r) =>
+            pushHistory(
+              { ...r, review_status: 'needs_review' },
+              'operator',
+              'Zbiorczo: do sprawdzenia',
+            ),
+          )
+        }
+        return true
+      }
+      const token = getStoredToken()
+      if (!token) return false
+      try {
+        for (const id of uniq) {
+          await patchInvoice(token, id, { reviewStatus: 'NEEDS_REVIEW' })
+        }
+        await refreshFromApi()
+        return true
+      } catch (e) {
+        window.alert(e instanceof Error ? e.message : String(e))
+        await refreshFromApi()
+        return false
+      }
+    },
+    [updateRow, refreshFromApi],
+  )
+
+  const bulkMarkReviewOk = useCallback(
+    async (ids: string[]): Promise<boolean> => {
+      const uniq = [...new Set(ids)]
+      if (uniq.length === 0) return true
+      if (USE_MOCK_INVOICES) {
+        for (const id of uniq) {
+          updateRow(id, (r) =>
+            pushHistory(
+              { ...r, review_status: 'cleared' },
+              'operator',
+              'Zbiorczo: przegląd OK',
+            ),
+          )
+        }
+        return true
+      }
+      const token = getStoredToken()
+      if (!token) return false
+      try {
+        for (const id of uniq) {
+          await patchInvoice(token, id, { reviewStatus: 'NEW' })
+        }
+        await refreshFromApi()
+        return true
+      } catch (e) {
+        window.alert(e instanceof Error ? e.message : String(e))
+        await refreshFromApi()
+        return false
+      }
+    },
+    [updateRow, refreshFromApi],
+  )
+
+  const bulkDeleteInvoices = useCallback(
+    async (ids: string[]): Promise<boolean> => {
+      const uniq = [...new Set(ids)]
+      if (uniq.length === 0) return true
+      if (USE_MOCK_INVOICES) {
+        const idSet = new Set(uniq)
+        setInvoices((prev) => enrichDuplicateMetadata(prev.filter((r) => !idSet.has(r.id))))
+        setSelectedId((cur) => (cur && idSet.has(cur) ? null : cur))
+        return true
+      }
+      for (const id of uniq) {
+        delete categoryOverridesRef.current[id]
+      }
+      const token = getStoredToken()
+      if (!token) return false
+      const idSet = new Set(uniq)
+      try {
+        for (const id of uniq) {
+          await deleteInvoiceRequest(token, id)
+        }
+        setSelectedId((cur) => (cur && idSet.has(cur) ? null : cur))
+        await refreshFromApi()
+        return true
+      } catch (e) {
+        window.alert(e instanceof Error ? e.message : String(e))
+        await refreshFromApi()
+        return false
+      }
+    },
+    [refreshFromApi],
+  )
+
   const confirmDuplicate = useCallback(
     (id: string) => {
       updateRow(id, (r) =>
@@ -509,6 +669,11 @@ export function useInvoiceDashboard() {
     setScope,
     setNeedsReview,
     clearReview,
+    bulkMarkPaid,
+    bulkMarkUnpaid,
+    bulkMarkNeedsReview,
+    bulkMarkReviewOk,
+    bulkDeleteInvoices,
     confirmDuplicate,
     rejectDuplicate,
     setNotes,
