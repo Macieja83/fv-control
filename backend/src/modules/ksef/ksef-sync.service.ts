@@ -38,6 +38,17 @@ export type KsefSyncResult = {
 const KSEF_SYNC_ACTOR_ID = "00000000-0000-0000-0000-000000000000";
 const PAGE_SIZE = 100;
 
+function createInvoiceXmlThrottle(minIntervalMs: number): () => Promise<void> {
+  let lastFetchAt = 0;
+  return async () => {
+    if (minIntervalMs <= 0) return;
+    const now = Date.now();
+    const waitMs = lastFetchAt + minIntervalMs - now;
+    if (waitMs > 0) await new Promise((r) => setTimeout(r, waitMs));
+    lastFetchAt = Date.now();
+  };
+}
+
 export async function runKsefSyncJob(
   prisma: PrismaClient,
   data: KsefSyncJobData,
@@ -77,6 +88,7 @@ export async function runKsefSyncJob(
   let pageOffset = 0;
   let hasMore = true;
   let currentFrom = from;
+  const beforeXmlFetch = createInvoiceXmlThrottle(cfg.KSEF_INVOICE_FETCH_MIN_INTERVAL_MS);
 
   while (hasMore) {
     const page = await client.queryMetadata(currentFrom, to, pageOffset, PAGE_SIZE, "Subject2");
@@ -84,7 +96,7 @@ export async function runKsefSyncJob(
 
     for (const inv of page.invoices) {
       try {
-        const outcome = await processOneInvoice(prisma, client, data.tenantId, inv, force);
+        const outcome = await processOneInvoice(prisma, client, data.tenantId, inv, force, beforeXmlFetch);
         if (outcome === "ingested") result.ingested++;
         else if (outcome === "refetched") result.refetched++;
         else result.skippedDuplicate++;
@@ -129,6 +141,7 @@ async function processOneInvoice(
   tenantId: string,
   meta: KsefInvoiceMetadata,
   force: boolean,
+  beforeXmlFetch: () => Promise<void>,
 ): Promise<ProcessOutcome> {
   const existingDoc = await prisma.document.findFirst({
     where: { tenantId, sourceType: "KSEF", sourceExternalId: meta.ksefNumber },
@@ -140,11 +153,12 @@ async function processOneInvoice(
   });
 
   if ((existingDoc || existingInv) && force) {
-    return refetchAndStoreFile(prisma, client, tenantId, meta, existingDoc?.id);
+    return refetchAndStoreFile(prisma, client, tenantId, meta, existingDoc?.id, beforeXmlFetch);
   }
 
   if (existingDoc || existingInv) return "skipped";
 
+  await beforeXmlFetch();
   const xml = await client.fetchInvoiceXml(meta.ksefNumber);
   const buf = Buffer.from(xml, "utf-8");
 
@@ -180,7 +194,9 @@ async function refetchAndStoreFile(
   tenantId: string,
   meta: KsefInvoiceMetadata,
   existingDocId: string | undefined,
+  beforeXmlFetch: () => Promise<void>,
 ): Promise<ProcessOutcome> {
+  await beforeXmlFetch();
   const xml = await client.fetchInvoiceXml(meta.ksefNumber);
   const buf = Buffer.from(xml, "utf-8");
 
