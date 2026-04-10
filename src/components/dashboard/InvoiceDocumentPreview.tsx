@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { getStoredToken } from '../../auth/session'
+import { KsefInvoicePreview } from './KsefInvoicePreview'
 
 type Props = {
   invoiceId: string
@@ -207,9 +208,7 @@ export function InvoiceDocumentPreview({ invoiceId }: Props) {
         </div>
       </div>
       {xmlPreview && (
-        <pre className="doc-preview__xml" title="Podgląd XML (obcięty przy dużych plikach)">
-          {xmlPreview}
-        </pre>
+        <KsefInvoicePreview xmlText={xmlPreview} onDownload={() => void onDownload()} />
       )}
       {isPdf(mime) && blobUrl && (
         <object

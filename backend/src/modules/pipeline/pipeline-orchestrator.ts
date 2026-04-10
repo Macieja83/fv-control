@@ -167,6 +167,8 @@ export async function runPipelineJob(prisma: PrismaClient, processingJobId: stri
     const issueDate = draft.issueDate
       ? parseInvoiceDate(draft.issueDate)
       : invoice.issueDate;
+    const saleDate = draft.saleDate ? parseInvoiceDate(draft.saleDate) : null;
+    const dueDate = draft.dueDate ? parseInvoiceDate(draft.dueDate) : null;
     const net = new Prisma.Decimal(String(draft.netTotal ?? "0"));
     const vat = new Prisma.Decimal(String(draft.vatTotal ?? "0"));
     const gross = new Prisma.Decimal(String(draft.grossTotal ?? "0"));
@@ -237,6 +239,8 @@ export async function runPipelineJob(prisma: PrismaClient, processingJobId: stri
         data: {
           number: finalNumber,
           issueDate,
+          saleDate,
+          dueDate,
           currency,
           netTotal: net,
           vatTotal: vat,
@@ -244,7 +248,7 @@ export async function runPipelineJob(prisma: PrismaClient, processingJobId: stri
           fingerprint,
           contractorId,
           status: dupFinger ? "PENDING_REVIEW" : "RECEIVED",
-          source: "OCR",
+          source: isKsefXml ? "API" : "OCR",
           ocrConfidence: new Prisma.Decimal(confidence.toFixed(4)),
           intakeSourceType: mapIngestionToIntake(document.sourceType),
           documentKind: classifyDocumentType({

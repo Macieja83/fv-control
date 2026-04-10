@@ -1,11 +1,17 @@
 /**
  * Parse a KSeF FA (Faktura) XML into an ExtractedInvoiceDraft.
  *
- * FA XML schema versions:
- *   - http://crd.gov.pl/wzor/2023/06/29/12648/   (FA v2)
- *   - http://crd.gov.pl/wzor/2024/07/25/13149/   (FA v3)
- *
- * All versions share the same core element names under `<Fa>`.
+ * FA field mapping (all FA schema versions share these element names):
+ *   P_1  = data wystawienia (issue date)
+ *   P_2  = numer faktury (invoice number)
+ *   P_6  = data sprzedaży (sale date)
+ *   P_13_1..P_13_11 = kwoty netto per stawka
+ *   P_14_1..P_14_5  = kwoty VAT per stawka
+ *   P_15 = kwota brutto (gross total)
+ *   Platnosc/TerminPlatnosci/Termin = termin płatności (due date)
+ *   Platnosc/FormaPlatnosci = forma płatności
+ *   Platnosc/RachunekBankowy/NrRB = numer konta
+ *   FaWiersz = pozycje faktury (line items)
  */
 
 import { XMLParser } from "fast-xml-parser";
@@ -47,23 +53,38 @@ function num(v: unknown): string | undefined {
   return Number.isFinite(n) ? n.toFixed(2) : undefined;
 }
 
+function dateStr(v: unknown): string | undefined {
+  const s = str(v);
+  if (!s) return undefined;
+  return s.slice(0, 10);
+}
+
 export function parseKsefXml(xml: string): { draft: ExtractedInvoiceDraft; confidence: number } {
   const doc = parser.parse(xml) as ParsedXml;
 
   const root = dig(doc, "Faktura") ?? dig(doc, "FA") ?? doc;
   const fa = dig(root, "Fa");
   const seller = dig(root, "Podmiot1");
+  const buyer = dig(root, "Podmiot2");
 
-  const invoiceNumber = str(dig(fa, "P_2")) ? str(dig(fa, "P_1")) : str(dig(fa, "P_1"));
-  const issueDate = str(dig(fa, "P_1")) ? str(dig(fa, "P_2")) : undefined;
+  const invoiceNumber = str(dig(fa, "P_2"));
+  const issueDate = dateStr(dig(fa, "P_1"));
+  const saleDate = dateStr(dig(fa, "P_6"));
   const currency = str(dig(fa, "KodWaluty")) ?? "PLN";
 
-  const sellerNip = str(dig(seller, "DaneIdentyfikacyjne", "NIP"))
-    ?? str(dig(seller, "PrefiksPodatnika"))
-    ?? undefined;
-  const sellerName = str(dig(seller, "DaneIdentyfikacyjne", "Nazwa"))
-    ?? str(dig(seller, "DaneIdentyfikacyjne", "ImiePierwsze"))
-    ?? undefined;
+  const dueDate = dateStr(dig(fa, "Platnosc", "TerminPlatnosci", "Termin"));
+  const paymentForm = str(dig(fa, "Platnosc", "FormaPlatnosci"));
+  const bankAccount = str(dig(fa, "Platnosc", "RachunekBankowy", "NrRB"));
+
+  const sellerNip = str(dig(seller, "DaneIdentyfikacyjne", "NIP"));
+  const sellerName = str(dig(seller, "DaneIdentyfikacyjne", "Nazwa"));
+  const sellerAddress = str(dig(seller, "Adres", "AdresL1"));
+  const sellerAddress2 = str(dig(seller, "Adres", "AdresL2"));
+
+  const buyerNip = str(dig(buyer, "DaneIdentyfikacyjne", "NIP"));
+  const buyerName = str(dig(buyer, "DaneIdentyfikacyjne", "Nazwa"));
+  const buyerAddress = str(dig(buyer, "Adres", "AdresL1"));
+  const buyerAddress2 = str(dig(buyer, "Adres", "AdresL2"));
 
   const netTotal = num(dig(fa, "P_13_1")) ?? num(dig(fa, "P_13_2")) ?? num(dig(fa, "P_13_3"));
   const vatTotal = num(dig(fa, "P_14_1")) ?? num(dig(fa, "P_14_2")) ?? num(dig(fa, "P_14_3"));
@@ -77,31 +98,31 @@ export function parseKsefXml(xml: string): { draft: ExtractedInvoiceDraft; confi
   }
 
   const faWiersze = dig(fa, "FaWiersz");
-  const lineItems: ExtractedInvoiceDraft["lineItems"] = [];
+  const lineItems: NonNullable<ExtractedInvoiceDraft["lineItems"]> = [];
 
   if (Array.isArray(faWiersze)) {
     for (const row of faWiersze) {
       const item = Array.isArray(row) ? row[0] : row;
       if (!item || typeof item !== "object") continue;
+      const netValue = num(dig(item, "P_11")) ?? "0";
+      const vatRate = num(dig(item, "P_12")) ?? "23";
       lineItems.push({
         name: str(dig(item, "P_7")) ?? "Pozycja",
         quantity: num(dig(item, "P_8B")) ?? "1",
         netPrice: num(dig(item, "P_9A")) ?? "0",
-        vatRate: num(dig(item, "P_12")) ?? "23",
-        netValue: num(dig(item, "P_11")) ?? "0",
+        vatRate,
+        netValue,
         grossValue: num(dig(item, "P_11A"))
-          ?? (() => {
-            const nv = parseFloat(num(dig(item, "P_11")) ?? "0");
-            const vr = parseFloat(num(dig(item, "P_12")) ?? "23");
-            return (nv * (1 + vr / 100)).toFixed(2);
-          })(),
+          ?? (parseFloat(netValue) * (1 + parseFloat(vatRate) / 100)).toFixed(2),
       });
     }
   }
 
   const draft: ExtractedInvoiceDraft = {
-    number: str(dig(fa, "P_2")) ? invoiceNumber : undefined,
-    issueDate: issueDate?.slice(0, 10),
+    number: invoiceNumber,
+    issueDate,
+    saleDate,
+    dueDate,
     currency,
     netTotal,
     vatTotal,
@@ -109,6 +130,14 @@ export function parseKsefXml(xml: string): { draft: ExtractedInvoiceDraft; confi
     contractorNip: sellerNip,
     contractorName: sellerName,
     lineItems: lineItems.length > 0 ? lineItems : undefined,
+    ksefMeta: {
+      sellerAddress: [sellerAddress, sellerAddress2].filter(Boolean).join(", "),
+      buyerNip,
+      buyerName,
+      buyerAddress: [buyerAddress, buyerAddress2].filter(Boolean).join(", "),
+      paymentForm,
+      bankAccount,
+    },
   };
 
   const confidence = draft.number && draft.grossTotal ? 0.99 : 0.85;

@@ -1,6 +1,8 @@
 export type ExtractedInvoiceDraft = {
   number?: string;
   issueDate?: string;
+  saleDate?: string;
+  dueDate?: string;
   currency?: string;
   netTotal?: string;
   vatTotal?: string;
@@ -16,6 +18,15 @@ export type ExtractedInvoiceDraft = {
     netValue: string;
     grossValue: string;
   }>;
+  /** Extra fields from KSeF XML (seller/buyer addresses, payment info). */
+  ksefMeta?: {
+    sellerAddress?: string;
+    buyerNip?: string;
+    buyerName?: string;
+    buyerAddress?: string;
+    paymentForm?: string;
+    bankAccount?: string;
+  };
 };
 
 export type AiInvoiceAdapter = {
