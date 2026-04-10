@@ -10,19 +10,27 @@
  * Stores the high-water-mark date per tenant for incremental pulls.
  */
 
+import { createHash } from "node:crypto";
 import type { PrismaClient } from "@prisma/client";
 import { KsefClient, type KsefInvoiceMetadata } from "./ksef-client.js";
 import { ingestAttachmentAndEnqueue } from "../ingestion/attachment-intake.service.js";
+import { createObjectStorage } from "../../adapters/storage/create-storage.js";
 import { loadConfig } from "../../config.js";
 
 export type KsefSyncJobData = {
   tenantId: string;
+  /** Override the "from" date instead of using the stored high-water mark. */
+  fromDate?: string;
+  /** Re-download XMLs for invoices that already exist in DB and store in S3. */
+  forceRefetchFiles?: boolean;
 };
 
 export type KsefSyncResult = {
   fetched: number;
   ingested: number;
   skippedDuplicate: number;
+  /** Files re-downloaded and stored for existing invoices (force mode). */
+  refetched: number;
   errors: string[];
   newHwmDate: string | null;
 };
@@ -38,7 +46,7 @@ export async function runKsefSyncJob(
 
   if (cfg.KSEF_ENV === "mock" || !cfg.KSEF_TOKEN || !cfg.KSEF_NIP) {
     console.warn("KSeF sync skipped: KSEF_ENV=mock or missing KSEF_TOKEN/KSEF_NIP.");
-    return { fetched: 0, ingested: 0, skippedDuplicate: 0, errors: [], newHwmDate: null };
+    return { fetched: 0, ingested: 0, skippedDuplicate: 0, refetched: 0, errors: [], newHwmDate: null };
   }
 
   const env = cfg.KSEF_ENV as "production" | "sandbox";
@@ -57,13 +65,15 @@ export async function runKsefSyncJob(
   await client.authenticate();
   console.info("[KSeF sync] Authenticated.");
 
-  const hwm = await getHighWaterMark(prisma, data.tenantId);
-  const from = hwm ?? new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const from = data.fromDate
+    ?? await getHighWaterMark(prisma, data.tenantId)
+    ?? new Date(Date.now() - 30 * 24 * 60_000 * 60).toISOString();
   const to = new Date().toISOString();
+  const force = data.forceRefetchFiles === true;
 
-  console.info(`[KSeF sync] Querying metadata from=${from} to=${to}`);
+  console.info(`[KSeF sync] Querying metadata from=${from} to=${to} force=${force}`);
 
-  const result: KsefSyncResult = { fetched: 0, ingested: 0, skippedDuplicate: 0, errors: [], newHwmDate: null };
+  const result: KsefSyncResult = { fetched: 0, ingested: 0, skippedDuplicate: 0, refetched: 0, errors: [], newHwmDate: null };
   let pageOffset = 0;
   let hasMore = true;
   let currentFrom = from;
@@ -74,8 +84,9 @@ export async function runKsefSyncJob(
 
     for (const inv of page.invoices) {
       try {
-        const ingested = await processOneInvoice(prisma, client, data.tenantId, inv);
-        if (ingested) result.ingested++;
+        const outcome = await processOneInvoice(prisma, client, data.tenantId, inv, force);
+        if (outcome === "ingested") result.ingested++;
+        else if (outcome === "refetched") result.refetched++;
         else result.skippedDuplicate++;
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -105,28 +116,34 @@ export async function runKsefSyncJob(
   }
 
   console.info(
-    `[KSeF sync] Done: fetched=${result.fetched}, ingested=${result.ingested}, dupes=${result.skippedDuplicate}, errors=${result.errors.length}`,
+    `[KSeF sync] Done: fetched=${result.fetched}, ingested=${result.ingested}, refetched=${result.refetched}, dupes=${result.skippedDuplicate}, errors=${result.errors.length}`,
   );
   return result;
 }
+
+type ProcessOutcome = "ingested" | "refetched" | "skipped";
 
 async function processOneInvoice(
   prisma: PrismaClient,
   client: KsefClient,
   tenantId: string,
   meta: KsefInvoiceMetadata,
-): Promise<boolean> {
-  const existing = await prisma.invoice.findFirst({
-    where: { tenantId, ksefNumber: meta.ksefNumber },
-    select: { id: true },
-  });
-  if (existing) return false;
-
+  force: boolean,
+): Promise<ProcessOutcome> {
   const existingDoc = await prisma.document.findFirst({
     where: { tenantId, sourceType: "KSEF", sourceExternalId: meta.ksefNumber },
     select: { id: true },
   });
-  if (existingDoc) return false;
+  const existingInv = await prisma.invoice.findFirst({
+    where: { tenantId, ksefNumber: meta.ksefNumber },
+    select: { id: true },
+  });
+
+  if ((existingDoc || existingInv) && force) {
+    return refetchAndStoreFile(prisma, client, tenantId, meta, existingDoc?.id);
+  }
+
+  if (existingDoc || existingInv) return "skipped";
 
   const xml = await client.fetchInvoiceXml(meta.ksefNumber);
   const buf = Buffer.from(xml, "utf-8");
@@ -147,21 +164,66 @@ async function processOneInvoice(
     sourceExternalId: meta.ksefNumber,
     intakeSourceType: "KSEF_API",
     sourceAccount: `KSeF ${meta.seller.nip}`,
-    metadata: {
-      ksefNumber: meta.ksefNumber,
-      invoiceNumber: meta.invoiceNumber,
-      issueDate: meta.issueDate,
-      sellerNip: meta.seller.nip,
-      sellerName: meta.seller.name,
-      buyerName: meta.buyer?.name ?? null,
-      netAmount: meta.netAmount,
-      grossAmount: meta.grossAmount,
-      vatAmount: meta.vatAmount,
-      currency: meta.currency,
-    },
+    metadata: ksefMetadataPayload(meta),
   });
 
-  return true;
+  return "ingested";
+}
+
+/**
+ * Re-downloads XML from KSeF and stores it in the current storage backend (S3).
+ * Updates the existing Document record with the new storageKey/storageBucket.
+ */
+async function refetchAndStoreFile(
+  prisma: PrismaClient,
+  client: KsefClient,
+  tenantId: string,
+  meta: KsefInvoiceMetadata,
+  existingDocId: string | undefined,
+): Promise<ProcessOutcome> {
+  const xml = await client.fetchInvoiceXml(meta.ksefNumber);
+  const buf = Buffer.from(xml, "utf-8");
+
+  const storage = createObjectStorage();
+  const sha = createHash("sha256").update(buf).digest("hex");
+  const objectKey = `${sha}-${meta.ksefNumber.replace(/[^a-zA-Z0-9._-]/g, "_")}.xml`;
+
+  const put = await storage.putObject({
+    key: objectKey,
+    body: buf,
+    contentType: "application/xml",
+    tenantId,
+  });
+
+  if (existingDocId) {
+    await prisma.document.update({
+      where: { id: existingDocId },
+      data: {
+        storageKey: put.key,
+        storageBucket: put.bucket ?? null,
+        sha256: sha,
+        sizeBytes: buf.length,
+      },
+    });
+    console.info(`[KSeF sync] Re-stored file for doc ${existingDocId} → ${put.bucket ?? "local"}:${put.key}`);
+  }
+
+  return "refetched";
+}
+
+function ksefMetadataPayload(meta: KsefInvoiceMetadata): Record<string, unknown> {
+  return {
+    ksefNumber: meta.ksefNumber,
+    invoiceNumber: meta.invoiceNumber,
+    issueDate: meta.issueDate,
+    sellerNip: meta.seller.nip,
+    sellerName: meta.seller.name,
+    buyerName: meta.buyer?.name ?? null,
+    netAmount: meta.netAmount,
+    grossAmount: meta.grossAmount,
+    vatAmount: meta.vatAmount,
+    currency: meta.currency,
+  };
 }
 
 async function getHighWaterMark(prisma: PrismaClient, tenantId: string): Promise<string | null> {

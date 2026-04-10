@@ -35,11 +35,23 @@ const ksefRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
-  app.post(
+  app.post<{
+    Body: { force?: boolean; fromDate?: string };
+  }>(
     "/connectors/ksef/sync",
     {
       preHandler: [app.authenticate],
-      schema: { tags: ["KSeF"], summary: "Trigger manual KSeF sync" },
+      schema: {
+        tags: ["KSeF"],
+        summary: "Trigger manual KSeF sync",
+        body: {
+          type: "object",
+          properties: {
+            force: { type: "boolean", description: "Re-download XMLs for existing invoices and store in S3" },
+            fromDate: { type: "string", description: "ISO date to sync from (overrides high-water mark)" },
+          },
+        },
+      },
     },
     async (request, reply) => {
       assertCanMutate(request.authUser!.role);
@@ -49,7 +61,12 @@ const ksefRoutes: FastifyPluginAsync = async (app) => {
           error: { message: "KSeF not configured. Set KSEF_ENV, KSEF_TOKEN, and KSEF_NIP." },
         });
       }
-      const result = await enqueueKsefSync({ tenantId: request.authUser!.tenantId });
+      const body = (request.body as { force?: boolean; fromDate?: string }) ?? {};
+      const result = await enqueueKsefSync({
+        tenantId: request.authUser!.tenantId,
+        forceRefetchFiles: body.force === true,
+        fromDate: body.fromDate,
+      });
       return reply.status(202).send({ queued: true, jobId: result.jobId });
     },
   );
