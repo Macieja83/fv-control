@@ -1,7 +1,11 @@
-import { useCallback, useEffect, useState } from 'react'
+import { pdf } from '@react-pdf/renderer'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { getStoredToken } from '../../auth/session'
+import type { InvoiceRecord } from '../../types/invoice'
+import { InvoicePdfDocument, registerInvoicePdfFont } from './invoice-pdf-document'
 
 type Props = {
+  invoice: InvoiceRecord
   invoiceId: string
 }
 
@@ -35,7 +39,6 @@ async function xmlPreviewFromBlob(blob: Blob, mime: string): Promise<string | nu
   return null
 }
 
-/** Często serwer zwraca octet-stream mimo że to PDF. */
 async function effectiveMime(blob: Blob, headerMime: string | null): Promise<string> {
   const m = baseMime(headerMime)
   if (m && m !== 'application/octet-stream') return m
@@ -63,7 +66,12 @@ function parseFileName(contentDisposition: string | null): string | null {
   return null
 }
 
-async function fetchDocument(
+function safePdfBaseName(invoice: InvoiceRecord): string {
+  const raw = invoice.invoice_number || invoice.id.slice(0, 8)
+  return raw.replace(/[^\w.\-]+/g, '_').slice(0, 80) || 'faktura'
+}
+
+async function fetchOriginalDocument(
   invoiceId: string,
   disposition: 'inline' | 'attachment',
 ): Promise<{ blob: Blob; mime: string; fileName: string }> {
@@ -89,7 +97,7 @@ async function fetchDocument(
   }
   if (res.status === 404) {
     throw new Error(
-      'Plik źródłowy nie jest dostępny — dokument mógł zostać usunięty z magazynu plików lub faktura pochodzi z KSeF (tylko dane XML).',
+      'Plik źródłowy nie jest dostępny — dokument mógł zostać usunięty z magazynu plików.',
     )
   }
   if (!res.ok) {
@@ -102,10 +110,16 @@ async function fetchDocument(
   return { blob, mime, fileName }
 }
 
-export function InvoiceDocumentPreview({ invoiceId }: Props) {
+export function InvoiceDocumentPreview({ invoice, invoiceId }: Props) {
   const [reloadNonce, setReloadNonce] = useState(0)
-  const [phase, setPhase] = useState<'loading' | 'error' | 'ready'>('loading')
-  const [message, setMessage] = useState('')
+
+  const [dataPdfUrl, setDataPdfUrl] = useState<string | null>(null)
+  const [dataPdfPhase, setDataPdfPhase] = useState<'loading' | 'ready' | 'error'>('loading')
+  const [dataPdfMessage, setDataPdfMessage] = useState('')
+  const dataPdfBlobRef = useRef<Blob | null>(null)
+
+  const [origPhase, setOrigPhase] = useState<'idle' | 'loading' | 'error' | 'ready'>('idle')
+  const [origMessage, setOrigMessage] = useState('')
   const [blobUrl, setBlobUrl] = useState<string | null>(null)
   const [mime, setMime] = useState('')
   const [fileName, setFileName] = useState('dokument')
@@ -113,12 +127,65 @@ export function InvoiceDocumentPreview({ invoiceId }: Props) {
 
   useEffect(() => {
     let cancelled = false
+    dataPdfBlobRef.current = null
+    setDataPdfPhase('loading')
+    setDataPdfMessage('')
+    setDataPdfUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev)
+      return null
+    })
+
+    ;(async () => {
+      try {
+        registerInvoicePdfFont()
+        const blob = await pdf(<InvoicePdfDocument invoice={invoice} />).toBlob()
+        if (cancelled) return
+        dataPdfBlobRef.current = blob
+        const u = URL.createObjectURL(blob)
+        setDataPdfUrl(u)
+        setDataPdfPhase('ready')
+      } catch (e) {
+        if (cancelled) return
+        setDataPdfPhase('error')
+        setDataPdfMessage(e instanceof Error ? e.message : 'Nie udało się zbudować PDF z danych faktury.')
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [
+    invoice.id,
+    invoice.invoice_number,
+    invoice.supplier_name,
+    invoice.supplier_nip,
+    invoice.restaurant_name,
+    invoice.issue_date,
+    invoice.due_date,
+    invoice.net_amount,
+    invoice.gross_amount,
+    invoice.currency,
+    invoice.ksef_number,
+    invoice.source_type,
+    invoice.source_account,
+    invoice.category,
+  ])
+
+  useEffect(() => {
+    let cancelled = false
     let urlToRevoke: string | null = null
+
+    setOrigPhase('loading')
+    setOrigMessage('')
+    setXmlPreview(null)
+    setBlobUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev)
+      return null
+    })
 
     const run = async () => {
       try {
-        setXmlPreview(null)
-        const { blob, mime: m, fileName: fn } = await fetchDocument(invoiceId, 'inline')
+        const { blob, mime: m, fileName: fn } = await fetchOriginalDocument(invoiceId, 'inline')
         if (cancelled) return
         const xml = await xmlPreviewFromBlob(blob, m)
         if (cancelled) return
@@ -128,11 +195,11 @@ export function InvoiceDocumentPreview({ invoiceId }: Props) {
         setBlobUrl(u)
         setMime(m)
         setFileName(fn)
-        setPhase('ready')
+        setOrigPhase('ready')
       } catch (e) {
         if (cancelled) return
-        setPhase('error')
-        setMessage(e instanceof Error ? e.message : 'Nie udało się wczytać dokumentu.')
+        setOrigPhase('error')
+        setOrigMessage(e instanceof Error ? e.message : 'Nie udało się wczytać pliku źródłowego.')
       }
     }
     void run()
@@ -142,9 +209,20 @@ export function InvoiceDocumentPreview({ invoiceId }: Props) {
     }
   }, [invoiceId, reloadNonce])
 
-  const onDownload = useCallback(async () => {
+  const onDownloadDataPdf = useCallback(() => {
+    const b = dataPdfBlobRef.current
+    if (!b) return
+    const u = URL.createObjectURL(b)
+    const a = document.createElement('a')
+    a.href = u
+    a.download = `FVControl-${safePdfBaseName(invoice)}.pdf`
+    a.click()
+    URL.revokeObjectURL(u)
+  }, [invoice])
+
+  const onDownloadOriginal = useCallback(async () => {
     try {
-      const { blob, fileName: fn } = await fetchDocument(invoiceId, 'attachment')
+      const { blob, fileName: fn } = await fetchOriginalDocument(invoiceId, 'attachment')
       const u = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = u
@@ -156,84 +234,146 @@ export function InvoiceDocumentPreview({ invoiceId }: Props) {
     }
   }, [invoiceId])
 
-  const openInNewTab = useCallback(() => {
+  const openDataPdfTab = useCallback(() => {
+    if (!dataPdfUrl) return
+    window.open(dataPdfUrl, '_blank', 'noopener,noreferrer')
+  }, [dataPdfUrl])
+
+  const openOriginalTab = useCallback(() => {
     if (!blobUrl) return
     window.open(blobUrl, '_blank', 'noopener,noreferrer')
   }, [blobUrl])
 
-  if (phase === 'loading') {
-    return <div className="doc-preview doc-preview--loading">Ładowanie podglądu dokumentu…</div>
-  }
-
-  if (phase === 'error') {
-    return (
-      <div className="doc-preview doc-preview--error">
-        <p role="alert">{message}</p>
-        <p className="doc-preview__hint">
-          Jeśli faktura pochodzi z KSeF, dane zostały już wyodrębnione z pliku XML — podgląd PDF nie jest wymagany.
-        </p>
-        <div className="doc-preview__error-actions">
-          <button
-            type="button"
-            className="btn btn--sm"
-            onClick={() => {
-              setPhase('loading')
-              setReloadNonce((n) => n + 1)
-            }}
-          >
-            Spróbuj ponownie
-          </button>
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div className="doc-preview">
-      <div className="doc-preview__toolbar">
-        <span className="doc-preview__name mono" title={fileName}>
-          {fileName}
-        </span>
-        <div className="doc-preview__actions">
-          {(isPdf(mime) || isImage(mime)) && (
-            <button type="button" className="btn btn--ghost btn--sm" onClick={openInNewTab}>
-              Nowa karta
-            </button>
-          )}
-          <button type="button" className="btn btn--ghost btn--sm" onClick={() => void onDownload()}>
-            Pobierz
-          </button>
+      <section className="doc-preview__block">
+        <div className="doc-preview__toolbar doc-preview__toolbar--sub">
+          <span className="doc-preview__block-title">Faktura — PDF z danych (graficzny)</span>
+          <div className="doc-preview__actions">
+            {dataPdfPhase === 'ready' && (
+              <>
+                <button type="button" className="btn btn--ghost btn--sm" onClick={openDataPdfTab}>
+                  Nowa karta
+                </button>
+                <button type="button" className="btn btn--ghost btn--sm" onClick={onDownloadDataPdf}>
+                  Pobierz PDF
+                </button>
+              </>
+            )}
+          </div>
         </div>
-      </div>
-      {xmlPreview && (
-        <pre className="doc-preview__xml" title="Podgląd XML (obcięty przy dużych plikach)">
-          {xmlPreview}
-        </pre>
-      )}
-      {isPdf(mime) && blobUrl && (
-        <object
-          data={`${blobUrl}#toolbar=1&navpanes=0`}
-          type="application/pdf"
-          className="doc-preview__frame"
-          aria-label="Podgląd PDF faktury"
-        >
-          <p>
-            Przeglądarka nie obsługuje podglądu PDF.{' '}
-            <a href={blobUrl} download={fileName}>Pobierz plik</a>
-          </p>
-        </object>
-      )}
-      {isImage(mime) && blobUrl && (
-        <img className="doc-preview__img" src={blobUrl} alt={`Faktura — ${fileName}`} loading="lazy" />
-      )}
-      {!xmlPreview && !isPdf(mime) && !isImage(mime) && blobUrl && (
-        <div className="doc-preview__fallback">
-          <p>Brak podglądu w oknie dla typu {mime || 'nieznany'}. Możesz pobrać plik.</p>
-          <button type="button" className="btn btn--primary btn--sm" onClick={() => void onDownload()}>
-            Pobierz plik
-          </button>
+        {dataPdfPhase === 'loading' && (
+          <div className="doc-preview__status doc-preview__status--loading">Budowanie podglądu PDF…</div>
+        )}
+        {dataPdfPhase === 'error' && (
+          <div className="doc-preview__status doc-preview__status--error">
+            <p role="alert">{dataPdfMessage}</p>
+          </div>
+        )}
+        {dataPdfPhase === 'ready' && dataPdfUrl && (
+          <object
+            data={`${dataPdfUrl}#toolbar=1&navpanes=0`}
+            type="application/pdf"
+            className="doc-preview__frame"
+            aria-label="Podgląd PDF faktury wygenerowany z danych w systemie"
+          >
+            <p className="doc-preview__nested-fallback">
+              Przeglądarka nie osadza PDF.{' '}
+              <button type="button" className="btn btn--link btn--sm" onClick={onDownloadDataPdf}>
+                Pobierz PDF
+              </button>
+            </p>
+          </object>
+        )}
+      </section>
+
+      <section className="doc-preview__block doc-preview__block--source">
+        <div className="doc-preview__toolbar doc-preview__toolbar--sub">
+          <span className="doc-preview__block-title" title={fileName}>
+            Plik źródłowy
+            {origPhase === 'ready' ? (
+              <span className="doc-preview__file-hint mono"> · {fileName}</span>
+            ) : null}
+          </span>
+          <div className="doc-preview__actions">
+            {origPhase === 'ready' && (
+              <>
+                {(isPdf(mime) || isImage(mime)) && (
+                  <button type="button" className="btn btn--ghost btn--sm" onClick={openOriginalTab}>
+                    Oryginał — nowa karta
+                  </button>
+                )}
+                <button type="button" className="btn btn--ghost btn--sm" onClick={() => void onDownloadOriginal()}>
+                  Pobierz oryginał
+                </button>
+              </>
+            )}
+          </div>
         </div>
-      )}
+
+        {origPhase === 'loading' && (
+          <div className="doc-preview__status doc-preview__status--loading">Ładowanie załącznika…</div>
+        )}
+        {origPhase === 'error' && (
+          <div className="doc-preview__status doc-preview__status--error">
+            <p role="alert">{origMessage}</p>
+            <p className="doc-preview__hint">
+              Nadal możesz korzystać z PDF wygenerowanego z danych powyżej. Jeśli to faktura z KSeF, XML mógł zostać
+              zsynchronizowany — sprawdź ponownie później lub użyj „Pobierz oryginał”, gdy plik będzie dostępny.
+            </p>
+            <div className="doc-preview__error-actions">
+              <button
+                type="button"
+                className="btn btn--sm"
+                onClick={() => {
+                  setOrigPhase('loading')
+                  setReloadNonce((n) => n + 1)
+                }}
+              >
+                Spróbuj ponownie (oryginał)
+              </button>
+            </div>
+          </div>
+        )}
+
+        {origPhase === 'ready' && (
+          <>
+            {xmlPreview && (
+              <details className="doc-preview__xml-wrap">
+                <summary>Surowe XML / tekst źródłowy (opcjonalnie)</summary>
+                <pre className="doc-preview__xml" title="Podgląd XML (obcięty przy dużych plikach)">
+                  {xmlPreview}
+                </pre>
+              </details>
+            )}
+            {isPdf(mime) && blobUrl && (
+              <object
+                data={`${blobUrl}#toolbar=1&navpanes=0`}
+                type="application/pdf"
+                className="doc-preview__frame doc-preview__frame--secondary"
+                aria-label="Oryginalny plik PDF"
+              >
+                <p className="doc-preview__nested-fallback">
+                  <button type="button" className="btn btn--link btn--sm" onClick={() => void onDownloadOriginal()}>
+                    Pobierz oryginalny PDF
+                  </button>
+                </p>
+              </object>
+            )}
+            {isImage(mime) && blobUrl && (
+              <img className="doc-preview__img" src={blobUrl} alt={`Załącznik — ${fileName}`} loading="lazy" />
+            )}
+            {!xmlPreview && !isPdf(mime) && !isImage(mime) && blobUrl && (
+              <div className="doc-preview__fallback">
+                <p>Brak podglądu graficznego dla typu {mime || 'nieznany'}. Możesz pobrać oryginał.</p>
+                <button type="button" className="btn btn--primary btn--sm" onClick={() => void onDownloadOriginal()}>
+                  Pobierz plik
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </section>
     </div>
   )
 }

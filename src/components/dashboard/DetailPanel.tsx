@@ -108,7 +108,7 @@ export function DetailPanel({
             <div className="modal-grid__left">
               <section className="detail-section">
                 <h3>Podgląd dokumentu</h3>
-                <InvoiceDocumentPreview key={row.id} invoiceId={row.id} />
+                <InvoiceDocumentPreview key={row.id} invoice={row} invoiceId={row.id} />
               </section>
             </div>
 
