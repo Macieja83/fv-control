@@ -29,17 +29,6 @@ type KsefInvoiceData = {
   invoiceType: string
 }
 
-function dig(obj: unknown, ...keys: string[]): unknown {
-  let cur = obj
-  for (const k of keys) {
-    if (cur == null || typeof cur !== 'object') return undefined
-    const rec = cur as Record<string, unknown>
-    cur = rec[k]
-    if (Array.isArray(cur) && cur.length === 1) cur = cur[0]
-  }
-  return cur
-}
-
 function s(v: unknown): string {
   if (v == null) return ''
   return String(v).trim()
