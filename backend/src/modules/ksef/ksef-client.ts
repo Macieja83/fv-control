@@ -15,7 +15,6 @@
  */
 
 import {
-  createPublicKey,
   publicEncrypt,
   pbkdf2Sync,
   createDecipheriv,
@@ -171,6 +170,20 @@ function parsePbes2Asn1(buf: Buffer): {
   return { salt, iterations, iv, ciphertext };
 }
 
+/**
+ * KSeF env values may be PEM blocks or a single base64 line. Returns inner base64 (no whitespace).
+ */
+export function normalizeKsefPemOrBareBase64(raw: string): string {
+  const t = raw.trim();
+  if (t.includes("BEGIN")) {
+    return t
+      .replace(/-----BEGIN [^-]+-----/g, "")
+      .replace(/-----END [^-]+-----/g, "")
+      .replace(/\s/g, "");
+  }
+  return t.replace(/\s/g, "");
+}
+
 // ─── Client ───
 
 type AuthMode =
@@ -198,7 +211,7 @@ export class KsefClient {
     password: string,
     nip: string,
   ): KsefClient {
-    const rawToken = decryptKsefTokenPkcs5(encryptedTokenBase64, password);
+    const rawToken = decryptKsefTokenPkcs5(normalizeKsefPemOrBareBase64(encryptedTokenBase64), password);
     console.info(`[KSeF] Token decrypted OK (${rawToken.length} chars).`);
     return new KsefClient(env, nip, { kind: "token", ksefToken: rawToken });
   }
@@ -208,14 +221,15 @@ export class KsefClient {
    */
   static fromEncryptedCertificate(
     env: "production" | "sandbox",
-    encryptedKeyBase64: string,
+    encryptedKeyPemOrBase64: string,
     password: string,
-    certBase64: string,
+    certPemOrBase64: string,
     nip: string,
   ): KsefClient {
-    const privateKeyDer = decryptKsefPkcs5Raw(encryptedKeyBase64, password);
+    const keyB64 = normalizeKsefPemOrBareBase64(encryptedKeyPemOrBase64);
+    const privateKeyDer = decryptKsefPkcs5Raw(keyB64, password);
     console.info(`[KSeF] Private key decrypted OK (${privateKeyDer.length} bytes).`);
-    const certDer = Buffer.from(certBase64, "base64");
+    const certDer = Buffer.from(normalizeKsefPemOrBareBase64(certPemOrBase64), "base64");
     return new KsefClient(env, nip, { kind: "certificate", privateKeyDer, certDer });
   }
 
