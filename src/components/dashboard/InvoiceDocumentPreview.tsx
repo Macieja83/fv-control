@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import { getStoredToken } from '../../auth/session'
+import { KsefInvoicePreview } from './KsefInvoicePreview'
 
 type Props = {
   invoiceId: string
+  /** Z bazy — dokładniejszy niż numer z nazwy pliku XML. */
+  ksefNumber?: string | null
 }
 
 function baseMime(ct: string | null): string {
@@ -22,15 +25,14 @@ function isXmlMime(mime: string): boolean {
   return m === 'application/xml' || m === 'text/xml' || m.endsWith('+xml')
 }
 
-async function xmlPreviewFromBlob(blob: Blob, mime: string): Promise<string | null> {
+/** Pełny tekst XML — wymagany do parsowania w KsefInvoicePreview (bez obcinania). */
+async function fullXmlFromBlob(blob: Blob, mime: string): Promise<string | null> {
   if (isXmlMime(mime)) {
-    const t = await blob.text()
-    return t.length > 12_000 ? `${t.slice(0, 12_000)}\n\n… (obcięto)` : t
+    return blob.text()
   }
   const head = (await blob.slice(0, 256).text()).trimStart()
   if (head.startsWith('<?xml') || (head.startsWith('<') && /<[A-Za-z_]/.test(head))) {
-    const t = await blob.text()
-    return t.length > 12_000 ? `${t.slice(0, 12_000)}\n\n… (obcięto)` : t
+    return blob.text()
   }
   return null
 }
@@ -102,7 +104,7 @@ async function fetchDocument(
   return { blob, mime, fileName }
 }
 
-export function InvoiceDocumentPreview({ invoiceId }: Props) {
+export function InvoiceDocumentPreview({ invoiceId, ksefNumber }: Props) {
   const [reloadNonce, setReloadNonce] = useState(0)
   const [phase, setPhase] = useState<'loading' | 'error' | 'ready'>('loading')
   const [message, setMessage] = useState('')
@@ -120,7 +122,7 @@ export function InvoiceDocumentPreview({ invoiceId }: Props) {
         setXmlPreview(null)
         const { blob, mime: m, fileName: fn } = await fetchDocument(invoiceId, 'inline')
         if (cancelled) return
-        const xml = await xmlPreviewFromBlob(blob, m)
+        const xml = await fullXmlFromBlob(blob, m)
         if (cancelled) return
         setXmlPreview(xml)
         const u = URL.createObjectURL(blob)
@@ -206,9 +208,11 @@ export function InvoiceDocumentPreview({ invoiceId }: Props) {
         </div>
       </div>
       {xmlPreview && (
-        <pre className="doc-preview__xml" title="Podgląd XML (obcięty przy dużych plikach)">
-          {xmlPreview}
-        </pre>
+        <KsefInvoicePreview
+          xmlText={xmlPreview}
+          ksefNumber={ksefNumber?.trim() || fileName.replace(/\.xml$/i, '')}
+          onDownload={() => void onDownload()}
+        />
       )}
       {isPdf(mime) && blobUrl && (
         <object
