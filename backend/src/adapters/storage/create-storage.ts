@@ -34,7 +34,17 @@ export function createObjectStorage(): ObjectStorageAdapter {
       if (params.bucket) {
         return s3Fallback.getObjectStream(params);
       }
-      return local.getObjectStream(params);
+      try {
+        return await local.getObjectStream(params);
+      } catch {
+        // Local file missing — try S3 with key adapted from local format.
+        // Local keys look like "objects/<tenantId>/hash-file" while S3
+        // stores them as "<tenantId>/hash-file".
+        const s3Key = params.key.startsWith("objects/")
+          ? params.key.slice("objects/".length)
+          : params.key;
+        return s3Fallback.getObjectStream({ key: s3Key, bucket: params.bucket });
+      }
     },
     getPublicUrl: local.getPublicUrl,
   };

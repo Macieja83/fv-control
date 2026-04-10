@@ -89,7 +89,7 @@ async function fetchDocument(
   }
   if (res.status === 404) {
     throw new Error(
-      'Brak dokumentu w API (faktura bez pliku lub identyfikator spoza bazy — widok demo używa mock ID zamiast UUID).',
+      'Plik źródłowy nie jest dostępny — dokument mógł zostać usunięty z magazynu plików lub faktura pochodzi z KSeF (tylko dane XML).',
     )
   }
   if (!res.ok) {
@@ -170,8 +170,7 @@ export function InvoiceDocumentPreview({ invoiceId }: Props) {
       <div className="doc-preview doc-preview--error">
         <p role="alert">{message}</p>
         <p className="doc-preview__hint">
-          W produkcji lista faktur powinna pochodzić z API (UUID) — wtedy podgląd wczyta PDF lub zdjęcie z magazynu
-          plików.
+          Jeśli faktura pochodzi z KSeF, dane zostały już wyodrębnione z pliku XML — podgląd PDF nie jest wymagany.
         </p>
         <div className="doc-preview__error-actions">
           <button
