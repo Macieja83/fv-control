@@ -53,8 +53,9 @@ function attachAuthMiddleware(
 ) {
   middlewares.use(async (req, res, next) => {
     const url = (req.url ?? '').split('?')[0]
+    const normUrl = url.replace('/api/v1/', '/api/')
 
-    if (url === '/api/auth/login' && req.method === 'POST') {
+    if ((normUrl === '/api/auth/login') && req.method === 'POST') {
       try {
         if (!opts.loginPassword) {
           sendJson(res, 503, {
@@ -97,7 +98,7 @@ function attachAuthMiddleware(
       return
     }
 
-    if (url === '/api/auth/logout' && req.method === 'POST') {
+    if (normUrl === '/api/auth/logout' && req.method === 'POST') {
       try {
         const raw = await readBody(req as IncomingMessage)
         const body = JSON.parse(raw || '{}') as { accessToken?: string }
@@ -116,7 +117,7 @@ function attachAuthMiddleware(
       return
     }
 
-    if (url === '/api/auth/session' && req.method === 'GET') {
+    if ((normUrl === '/api/auth/session' || normUrl === '/api/auth/me') && req.method === 'GET') {
       const auth = req.headers.authorization
       const token = auth?.startsWith('Bearer ') ? auth.slice(7) : ''
       if (!token) {

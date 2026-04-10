@@ -69,24 +69,25 @@ export interface InvoiceFilters {
   restaurant: string
 }
 
+function pad2(n: number): string {
+  return n < 10 ? `0${n}` : `${n}`
+}
+
+function localYmd(d: Date): string {
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
+}
+
 function currentMonthRange(): { dateFrom: string; dateTo: string } {
   const now = new Date()
-  const y = now.getFullYear()
-  const m = now.getMonth()
-  const first = new Date(y, m, 1)
-  const last = new Date(y, m + 1, 0)
-  return {
-    dateFrom: first.toISOString().slice(0, 10),
-    dateTo: last.toISOString().slice(0, 10),
-  }
+  return monthRange(now.getFullYear(), now.getMonth())
 }
 
 export function monthRange(year: number, month: number): { dateFrom: string; dateTo: string } {
   const first = new Date(year, month, 1)
   const last = new Date(year, month + 1, 0)
   return {
-    dateFrom: first.toISOString().slice(0, 10),
-    dateTo: last.toISOString().slice(0, 10),
+    dateFrom: localYmd(first),
+    dateTo: localYmd(last),
   }
 }
 

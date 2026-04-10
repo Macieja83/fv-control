@@ -113,9 +113,9 @@ export function useInvoiceDashboard() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const categoryOverridesRef = useRef<Record<string, string | null>>({})
 
-  /** Lista przy aktywnej sesji i tak jest z API (nawet przy VITE_USE_MOCK_INVOICES=1) — wtedy traktujemy UI jak API (OCR, usuwanie z bazy). */
-  const dataSource: InvoiceDataSource =
-    USE_MOCK_INVOICES && !getStoredToken() ? 'mock' : 'api'
+  const [dataSource, setDataSource] = useState<InvoiceDataSource>(
+    USE_MOCK_INVOICES ? 'mock' : 'api',
+  )
 
   const refreshFromApi = useCallback(async () => {
     const token = getStoredToken()
@@ -123,6 +123,7 @@ export function useInvoiceDashboard() {
       if (USE_MOCK_INVOICES) {
         setListError(null)
         setInvoices(enrichDuplicateMetadata(seedInvoices()))
+        setDataSource('mock')
       } else {
         setListError('Brak sesji.')
         setInvoices([])
@@ -130,7 +131,6 @@ export function useInvoiceDashboard() {
       setListLoading(false)
       return
     }
-    // Z sesją zawsze pobierz z API — nawet gdy VITE_USE_MOCK_INVOICES=1 (inaczej upload trafia na backend, a lista zostaje na mocku).
     setListLoading(true)
     setListError(null)
     try {
@@ -138,9 +138,16 @@ export function useInvoiceDashboard() {
       const mapped = res.data.map(mapApiInvoiceRowToRecord)
       const merged = mergeCategoryOverrides(mapped, categoryOverridesRef.current)
       setInvoices(enrichDuplicateMetadata(merged))
-    } catch (e) {
-      setListError(e instanceof Error ? e.message : 'Błąd ładowania listy')
-      setInvoices([])
+      setDataSource('api')
+    } catch {
+      if (USE_MOCK_INVOICES) {
+        setListError(null)
+        setInvoices(enrichDuplicateMetadata(seedInvoices()))
+        setDataSource('mock')
+      } else {
+        setListError('Nie udało się pobrać faktur z API.')
+        setInvoices([])
+      }
     } finally {
       setListLoading(false)
     }
