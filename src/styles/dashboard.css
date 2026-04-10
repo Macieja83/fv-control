@@ -236,6 +236,85 @@ html[data-theme='dark'] {
 .filter-bar__chevron { transition: transform var(--transition); flex-shrink: 0; }
 .filter-bar__chevron--open { transform: rotate(180deg); }
 
+/* ─── Date section (always visible) ─── */
+
+.filter-bar__date-section {
+  padding: 0.5rem 0.6rem;
+  border-top: 1px solid var(--border-light);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: flex-end;
+}
+@media (min-width: 641px) { .filter-bar__date-section { padding: 0.5rem 0.75rem; } }
+
+.filter-bar__month-picker { flex: 1; min-width: 0; }
+
+.month-picker__years {
+  display: flex;
+  gap: 0.25rem;
+  margin-bottom: 0.35rem;
+}
+
+.month-picker__year-btn {
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 0.15rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  background: var(--surface-1);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.month-picker__year-btn--active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.month-picker__months {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem;
+}
+
+.month-picker__btn {
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 500;
+  padding: 0.2rem 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  background: var(--surface-1);
+  color: var(--text);
+  cursor: pointer;
+  transition: all var(--transition);
+  min-width: 2.2rem;
+  text-align: center;
+}
+.month-picker__btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.month-picker__btn--active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.month-picker__btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.month-picker__btn--all {
+  margin-left: 0.3rem;
+  font-style: italic;
+}
+
+.filter-bar__date-inputs {
+  display: flex;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
 .filter-bar__body {
   padding: 0.5rem 0.5rem 0.65rem;
   border-top: 1px solid var(--border-light);
@@ -436,6 +515,9 @@ html[data-theme='dark'] .badge--dup-hard { color: #c4b5fd; }
 html[data-theme='dark'] .btn--danger-outline { color: #f87171; }
 .btn--danger-solid { background: #dc2626; border-color: #dc2626; color: #fff; }
 .btn--danger-solid:hover { filter: brightness(1.08); }
+.btn--warning { background: #f59e0b; border-color: #f59e0b; color: #fff; display: inline-flex; align-items: center; gap: 0.35rem; grid-column: 1 / -1; }
+.btn--warning:hover { filter: brightness(1.08); }
+.btn--warning:disabled { opacity: 0.55; cursor: not-allowed; }
 .btn--link { border: none; background: transparent; color: var(--accent); text-align: left; text-decoration: underline; padding-left: 0; }
 
 .btn-icon-del {
@@ -545,6 +627,7 @@ html[data-theme='dark'] .btn-icon-del { color: #f87171; }
 
 .detail-panel__title { margin: 0; font-size: 1rem; font-weight: 700; color: var(--text-heading); }
 .detail-panel__id { margin: 0.25rem 0 0; font-size: 0.68rem; color: var(--text-muted); }
+.detail-panel__id--secondary { opacity: 0.9; }
 
 .action-grid--modal {
   display: grid;

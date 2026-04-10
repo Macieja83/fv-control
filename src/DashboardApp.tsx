@@ -46,6 +46,7 @@ export default function DashboardApp() {
     dataSource,
     categoryLocalOnly,
     refreshFromApi,
+    retryInvoiceExtraction,
   } = useInvoiceDashboard()
 
   const linkedRow = useMemo(() => {
@@ -118,6 +119,7 @@ export default function DashboardApp() {
         onNotes={(id, notes) => void setNotes(id, notes)}
         onNeedsReview={(id) => void setNeedsReview(id)}
         onClearReview={(id) => void clearReview(id)}
+        onRetryExtraction={(id) => void retryInvoiceExtraction(id)}
         onDeleteInvoice={(id) => void deleteInvoice(id)}
       />
     </div>

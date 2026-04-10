@@ -23,6 +23,7 @@ export function mapApiInvoiceRowToRecord(row: ApiInvoiceListRow): InvoiceRecord 
   const net = Number.parseFloat(row.netTotal)
   const gross = Number.parseFloat(row.grossTotal)
   const dup = row.duplicateScore != null ? Number.parseFloat(row.duplicateScore) : 0
+  const dupOf = row.duplicateCanonicalId?.trim() || null
 
   const needsReviewByWorkflow =
     row.status === 'INGESTING' ||
@@ -32,6 +33,7 @@ export function mapApiInvoiceRowToRecord(row: ApiInvoiceListRow): InvoiceRecord 
 
   return {
     id: row.id,
+    primary_document_id: row.primaryDoc?.id ?? null,
     invoice_status: row.status,
     source_type: mapIntakeToSource(row.intakeSourceType),
     source_account: row.sourceAccount?.trim() || '—',
@@ -49,8 +51,10 @@ export function mapApiInvoiceRowToRecord(row: ApiInvoiceListRow): InvoiceRecord 
     document_scope: row.legalChannel === 'EXCLUDED' ? 'private' : 'business',
     review_status: needsReviewByWorkflow ? 'needs_review' : 'cleared',
     duplicate_score: Number.isFinite(dup) ? dup : 0,
-    duplicate_of_id: null,
-    duplicate_reason: null,
+    duplicate_of_id: dupOf,
+    duplicate_reason: dupOf
+      ? 'Powiązany duplikat wykryty przy imporcie (NIP / kwota / data lub plik).'
+      : null,
     duplicate_resolution: 'none',
     ksef_number: row.ksefNumber?.trim() || null,
     message_id: row.sourceExternalId?.trim() || null,

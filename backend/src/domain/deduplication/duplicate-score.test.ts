@@ -31,4 +31,38 @@ describe("scoreInvoiceDuplicatePair", () => {
     expect(r.reasonCodes.length).toBeGreaterThan(0);
     expect(r.confidence).toBeGreaterThan(0.5);
   });
+
+  it("same NIP + same gross + same issue day passes threshold even when numbers differ (KSeF vs OCR)", () => {
+    const r = scoreInvoiceDuplicatePair({
+      fileHashEqual: false,
+      fingerprintEqual: false,
+      numberA: "FV/2026/ORLEN/123",
+      numberB: "ING-OCR-GARBAGE",
+      grossA: "99.98",
+      grossB: "99.98",
+      nipA: "5260000000",
+      nipB: "5260000000",
+      issueDateA: "2026-04-06",
+      issueDateB: "2026-04-06",
+    });
+    expect(r.reasonCodes).toContain("NIP_AMOUNT_SAME_DAY");
+    expect(r.confidence).toBeGreaterThanOrEqual(0.72);
+  });
+
+  it("same gross + same issue day without matching NIP still passes threshold (OCR missed NIP)", () => {
+    const r = scoreInvoiceDuplicatePair({
+      fileHashEqual: false,
+      fingerprintEqual: false,
+      numberA: "FV/A",
+      numberB: "FV/B",
+      grossA: "99.98",
+      grossB: "99.98",
+      nipA: null,
+      nipB: "5260000000",
+      issueDateA: "2026-04-06",
+      issueDateB: "2026-04-06",
+    });
+    expect(r.reasonCodes).toContain("AMOUNT_SAME_ISSUE_DAY");
+    expect(r.confidence).toBeGreaterThanOrEqual(0.72);
+  });
 });

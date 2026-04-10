@@ -27,6 +27,8 @@ type Props = {
   onNotes: (id: string, notes: string) => void
   onNeedsReview: (id: string) => void
   onClearReview: (id: string) => void
+  /** Ponowna kolejka OCR (tylko tryb API). */
+  onRetryExtraction?: (id: string) => void | Promise<void>
   onDeleteInvoice: (id: string) => void
 }
 
@@ -47,9 +49,11 @@ export function DetailPanel({
   onNotes,
   onNeedsReview,
   onClearReview,
+  onRetryExtraction,
   onDeleteInvoice,
 }: Props) {
   const [draftNotes, setDraftNotes] = useState('')
+  const [ocrBusy, setOcrBusy] = useState(false)
   const overlayRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -89,7 +93,10 @@ export function DetailPanel({
         <div className="modal-header">
           <div>
             <h2 className="detail-panel__title">Szczegóły faktury</h2>
-            <p className="detail-panel__id mono">{row.id}</p>
+            <p className="detail-panel__id mono">Faktura: {row.id}</p>
+            {row.primary_document_id ? (
+              <p className="detail-panel__id mono detail-panel__id--secondary">Dokument: {row.primary_document_id}</p>
+            ) : null}
           </div>
           <button type="button" className="modal-close" onClick={onClose} aria-label="Zamknij">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
@@ -211,6 +218,30 @@ export function DetailPanel({
                     <p className="detail-hint">
                       Ten rekord jest powiązany jako duplikat — możesz go usunąć i zostawić pierwotny wpis, albo użyć „Usuń duplikaty" nad tabelą.
                     </p>
+                  )}
+
+                  {onRetryExtraction && (
+                    <button
+                      type="button"
+                      className="btn btn--warning"
+                      disabled={ocrBusy || row.invoice_status === 'INGESTING'}
+                      onClick={async () => {
+                        setOcrBusy(true)
+                        try {
+                          await onRetryExtraction(row.id)
+                        } finally {
+                          setOcrBusy(false)
+                        }
+                      }}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                      {' '}
+                      {ocrBusy
+                        ? 'Kolejkowanie…'
+                        : row.invoice_status === 'INGESTING'
+                          ? 'OCR w toku…'
+                          : 'Ponów OCR / ekstrakcję'}
+                    </button>
                   )}
                 </div>
               </section>

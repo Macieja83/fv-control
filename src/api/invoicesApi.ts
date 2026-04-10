@@ -19,11 +19,13 @@ export type ApiInvoiceListRow = {
   reviewStatus: string
   ksefNumber: string | null
   duplicateScore: string | null
+  /** Faktura „oryginał”, jeśli ten wpis jest kandydatem na duplikat (z tabeli invoice_duplicates). */
+  duplicateCanonicalId: string | null
   createdAt: string
   updatedAt: string
   contractor: { id: string; name: string; nip: string | null } | null
   tenant: { name: string }
-  primaryDoc: { sha256: string } | null
+  primaryDoc: { id: string; sha256: string } | null
   _count: { items: number; files: number }
 }
 
@@ -94,4 +96,26 @@ export async function deleteInvoiceRequest(token: string, invoiceId: string): Pr
     headers: { Authorization: `Bearer ${token}` },
   })
   if (!res.ok) throw new Error(await readErrorMessage(res))
+}
+
+export type RetryExtractionResponse = {
+  invoiceId: string
+  documentId: string
+  processingJobId: string
+}
+
+export async function postRetryInvoiceExtraction(
+  token: string,
+  invoiceOrDocumentId: string,
+): Promise<RetryExtractionResponse> {
+  const res = await fetch(
+    `${API}/invoices/${encodeURIComponent(invoiceOrDocumentId)}/retry-extraction`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    },
+  )
+  if (res.status === 401) throw new Error('Sesja wygasła — zaloguj się ponownie.')
+  if (!res.ok) throw new Error(await readErrorMessage(res))
+  return (await res.json()) as RetryExtractionResponse
 }

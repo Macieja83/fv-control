@@ -22,9 +22,9 @@ export function enrichDuplicateMetadata(
   }
 
   return rows.map((r) => {
-    let duplicate_score = 0
-    let duplicate_of_id: string | null = null
-    let duplicate_reason: string | null = null
+    let duplicate_score = r.duplicate_score ?? 0
+    let duplicate_of_id: string | null = r.duplicate_of_id ?? null
+    let duplicate_reason: string | null = r.duplicate_reason ?? null
 
     if (r.ksef_number) {
       const group = byKsef.get(r.ksef_number.trim().toUpperCase()) ?? []
@@ -46,8 +46,12 @@ export function enrichDuplicateMetadata(
         )
         const first = sorted[0]
         duplicate_score = Math.max(duplicate_score, 0.85)
-        duplicate_reason = `Powtarzający się zestaw: NIP + numer faktury + kwota brutto (${group.length} wpisów).`
-        if (first.id !== r.id) duplicate_of_id = first.id
+        duplicate_reason =
+          duplicate_reason ??
+          `Powtarzający się zestaw: NIP + numer faktury + kwota brutto (${group.length} wpisów).`
+        if (first.id !== r.id) {
+          duplicate_of_id = duplicate_of_id ?? first.id
+        }
       }
     }
 
@@ -68,8 +72,9 @@ export function enrichDuplicateMetadata(
   })
 }
 
+/** Zgodnie z progiem tworzenia `invoice_duplicates` w pipeline (≥ 0.72). */
 export function isDuplicateFlagged(r: InvoiceRecord): boolean {
   if (r.duplicate_resolution === 'confirmed') return true
   if (r.duplicate_resolution === 'rejected') return false
-  return r.duplicate_score >= 0.85
+  return r.duplicate_score >= 0.72
 }

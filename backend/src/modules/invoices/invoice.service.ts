@@ -50,21 +50,31 @@ export async function listInvoices(prisma: PrismaClient, tenantId: string, q: In
       include: {
         contractor: { select: { id: true, name: true, nip: true } },
         tenant: { select: { name: true } },
-        primaryDoc: { select: { sha256: true } },
+        primaryDoc: { select: { id: true, sha256: true } },
+        duplicatesAsA: {
+          where: { resolution: "OPEN" },
+          orderBy: { confidence: "desc" },
+          take: 1,
+          select: { canonicalInvoiceId: true },
+        },
         _count: { select: { items: true, files: true } },
       },
     }),
   ]);
 
   return {
-    data: rows.map((r) => ({
-      ...r,
-      netTotal: r.netTotal.toString(),
-      vatTotal: r.vatTotal.toString(),
-      grossTotal: r.grossTotal.toString(),
-      duplicateScore: r.duplicateScore?.toString() ?? null,
-      ocrConfidence: r.ocrConfidence?.toString() ?? null,
-    })),
+    data: rows.map((r) => {
+      const { duplicatesAsA, ...rest } = r;
+      return {
+        ...rest,
+        netTotal: r.netTotal.toString(),
+        vatTotal: r.vatTotal.toString(),
+        grossTotal: r.grossTotal.toString(),
+        duplicateScore: r.duplicateScore?.toString() ?? null,
+        ocrConfidence: r.ocrConfidence?.toString() ?? null,
+        duplicateCanonicalId: duplicatesAsA[0]?.canonicalInvoiceId ?? null,
+      };
+    }),
     meta: { total, page: q.page, limit: q.limit, totalPages: Math.ceil(total / q.limit) },
   };
 }

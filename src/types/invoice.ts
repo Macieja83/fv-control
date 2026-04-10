@@ -23,6 +23,8 @@ export interface AuditEntry {
 
 export interface InvoiceRecord {
   id: string
+  /** UUID dokumentu głównego w API (różny od `id` faktury). */
+  primary_document_id?: string | null
   /** Status z API (`Invoice.status`), np. INGESTING podczas OCR. */
   invoice_status?: string
   source_type: SourceType
@@ -67,10 +69,30 @@ export interface InvoiceFilters {
   restaurant: string
 }
 
+function currentMonthRange(): { dateFrom: string; dateTo: string } {
+  const now = new Date()
+  const y = now.getFullYear()
+  const m = now.getMonth()
+  const first = new Date(y, m, 1)
+  const last = new Date(y, m + 1, 0)
+  return {
+    dateFrom: first.toISOString().slice(0, 10),
+    dateTo: last.toISOString().slice(0, 10),
+  }
+}
+
+export function monthRange(year: number, month: number): { dateFrom: string; dateTo: string } {
+  const first = new Date(year, month, 1)
+  const last = new Date(year, month + 1, 0)
+  return {
+    dateFrom: first.toISOString().slice(0, 10),
+    dateTo: last.toISOString().slice(0, 10),
+  }
+}
+
 export const EMPTY_FILTERS: InvoiceFilters = {
   search: '',
-  dateFrom: '',
-  dateTo: '',
+  ...currentMonthRange(),
   supplier: '',
   source: '',
   reviewStatus: '',

@@ -237,13 +237,29 @@ export async function runPipelineJob(prisma: PrismaClient, processingJobId: stri
     });
     if (!refreshed) throw new Error("Invoice missing after update");
 
+    const refreshedNip = (refreshed.contractor?.nip ?? "").replace(/\D/g, "");
+    const peerOr: Prisma.InvoiceWhereInput[] = [
+      { issueDate: refreshed.issueDate },
+      { grossTotal: refreshed.grossTotal },
+    ];
+    if (refreshed.contractorId) {
+      peerOr.push({ contractorId: refreshed.contractorId });
+    }
+    if (refreshedNip.length === 10) {
+      peerOr.push({
+        contractor: { is: { nip: refreshedNip, deletedAt: null } },
+      });
+    }
+
     const peers = await prisma.invoice.findMany({
       where: {
         tenantId: jobRow.tenantId,
         NOT: { id: refreshed.id },
         status: { notIn: ["REJECTED", "DRAFT"] },
+        OR: peerOr,
       },
-      take: 80,
+      take: 500,
+      orderBy: { createdAt: "desc" },
       include: { contractor: true, files: true },
     });
 
@@ -261,6 +277,8 @@ export async function runPipelineJob(prisma: PrismaClient, processingJobId: stri
         grossB: p.grossTotal.toString(),
         nipA: refreshed.contractor?.nip ?? null,
         nipB: p.contractor?.nip ?? null,
+        issueDateA: refreshed.issueDate,
+        issueDateB: p.issueDate,
       });
       if (score.confidence >= 0.72) {
         const existing = await prisma.invoiceDuplicate.findFirst({

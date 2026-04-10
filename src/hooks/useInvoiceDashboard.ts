@@ -4,6 +4,7 @@ import {
   fetchInvoicesList,
   patchInvoice,
   patchInvoiceStatus,
+  postRetryInvoiceExtraction,
 } from '../api/invoicesApi'
 import type { InvoiceFilters, InvoiceRecord } from '../types/invoice'
 import { EMPTY_FILTERS } from '../types/invoice'
@@ -63,6 +64,7 @@ function matchesFilters(row: InvoiceRecord, f: InvoiceFilters): boolean {
       row.invoice_number,
       row.supplier_nip,
       row.ksef_number ?? '',
+      row.primary_document_id ?? '',
       row.notes,
     ]
       .join(' ')
@@ -111,7 +113,9 @@ export function useInvoiceDashboard() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const categoryOverridesRef = useRef<Record<string, string | null>>({})
 
-  const dataSource: InvoiceDataSource = USE_MOCK_INVOICES ? 'mock' : 'api'
+  /** Lista przy aktywnej sesji i tak jest z API (nawet przy VITE_USE_MOCK_INVOICES=1) — wtedy traktujemy UI jak API (OCR, usuwanie z bazy). */
+  const dataSource: InvoiceDataSource =
+    USE_MOCK_INVOICES && !getStoredToken() ? 'mock' : 'api'
 
   const refreshFromApi = useCallback(async () => {
     const token = getStoredToken()
@@ -426,6 +430,24 @@ export function useInvoiceDashboard() {
     [refreshFromApi],
   )
 
+  const retryInvoiceExtraction = useCallback(
+    async (id: string) => {
+      if (USE_MOCK_INVOICES) {
+        window.alert('W trybie demo nie ma ponownej ekstrakcji OCR.')
+        return
+      }
+      const token = getStoredToken()
+      if (!token) return
+      try {
+        await postRetryInvoiceExtraction(token, id)
+        await refreshFromApi()
+      } catch (e) {
+        window.alert(e instanceof Error ? e.message : String(e))
+      }
+    },
+    [refreshFromApi],
+  )
+
   const deleteFollowerDuplicates = useCallback(async () => {
     if (USE_MOCK_INVOICES) {
       setSelectedId(null)
@@ -491,5 +513,6 @@ export function useInvoiceDashboard() {
     /** true = kategoria nie trafia do API, tylko pamięć podręczna w tej sesji */
     categoryLocalOnly: !USE_MOCK_INVOICES,
     refreshFromApi,
+    retryInvoiceExtraction,
   }
 }

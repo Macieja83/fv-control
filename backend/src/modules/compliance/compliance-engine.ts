@@ -106,6 +106,12 @@ export function detectDuplicate(fingerprint: string | null, duplicateConfidence:
   duplicateHash: string | null;
   duplicateScore: number | null;
 } {
+  if (duplicateConfidence != null && Number.isFinite(duplicateConfidence) && duplicateConfidence > 0) {
+    return {
+      duplicateHash: fingerprint,
+      duplicateScore: duplicateConfidence,
+    };
+  }
   if (!fingerprint) return { duplicateHash: null, duplicateScore: null };
   return {
     duplicateHash: fingerprint,

@@ -22,6 +22,7 @@ import {
 import { intakeInvoice } from "../modules/invoices/invoice-intake.service.js";
 import * as invoiceService from "../modules/invoices/invoice.service.js";
 import { openInvoicePrimaryDocumentStream } from "../modules/invoices/invoice-primary-document.service.js";
+import { retryInvoiceExtraction } from "../modules/pipeline/retry-invoice-extraction.service.js";
 
 const invoicesRoutes: FastifyPluginAsync = async (app) => {
   app.get(
@@ -63,6 +64,27 @@ const invoicesRoutes: FastifyPluginAsync = async (app) => {
       const body = parseOrThrow(invoiceIntakeSchema, request.body);
       const row = await intakeInvoice(app.prisma, request.authUser!.tenantId, request.authUser!.id, body);
       return reply.status(201).send(row);
+    },
+  );
+
+  app.post(
+    "/invoices/:id/retry-extraction",
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        tags: ["Invoices"],
+        summary: "Re-queue OCR / AI extraction for invoice (by invoice id or primary document id)",
+      },
+    },
+    async (request, reply) => {
+      assertCanMutate(request.authUser!.role);
+      const { id } = parseOrThrow(invoiceIdParamSchema, request.params, "Invalid id");
+      const result = await retryInvoiceExtraction(
+        app.prisma,
+        request.authUser!.tenantId,
+        id,
+      );
+      return reply.status(202).send(result);
     },
   );
 

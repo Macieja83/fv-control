@@ -5,7 +5,9 @@ export type DuplicateReasonCode =
   | "EXACT_FINGERPRINT"
   | "FUZZY_NUMBER"
   | "AMOUNT_NEAR"
-  | "SAME_NIP";
+  | "SAME_NIP"
+  | "NIP_AMOUNT_SAME_DAY"
+  | "AMOUNT_SAME_ISSUE_DAY";
 
 export type DuplicateScoreResult = {
   confidence: number;
@@ -22,6 +24,24 @@ function amountsClose(a: string, b: string): boolean {
   return Math.abs(x - y) / max <= AMOUNT_TOLERANCE_RATIO;
 }
 
+/** YYYY-MM-DD for same-calendar-day duplicate hints (KSeF vs zdjęcie / OCR). */
+function normalizeIssueYmd(value: Date | string | null | undefined): string | null {
+  if (value == null) return null;
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return null;
+    return value.toISOString().slice(0, 10);
+  }
+  if (typeof value === "string") {
+    if (value.length >= 10 && value[4] === "-" && value[7] === "-") {
+      return value.slice(0, 10);
+    }
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return null;
+    return d.toISOString().slice(0, 10);
+  }
+  return null;
+}
+
 export function scoreInvoiceDuplicatePair(input: {
   fileHashEqual: boolean;
   fingerprintEqual: boolean;
@@ -31,6 +51,9 @@ export function scoreInvoiceDuplicatePair(input: {
   grossB: string;
   nipA: string | null;
   nipB: string | null;
+  /** Data wystawienia (np. z faktury) — wzmacnia wykrywanie gdy numery FV różnią się przez OCR. */
+  issueDateA?: Date | string | null;
+  issueDateB?: Date | string | null;
 }): DuplicateScoreResult {
   const reasonCodes: DuplicateReasonCode[] = [];
   let confidence = 0;
@@ -63,6 +86,29 @@ export function scoreInvoiceDuplicatePair(input: {
   if (amountsClose(input.grossA, input.grossB)) {
     reasonCodes.push("AMOUNT_NEAR");
     confidence = Math.max(confidence, 0.45);
+  }
+
+  const ymdA = normalizeIssueYmd(input.issueDateA);
+  const ymdB = normalizeIssueYmd(input.issueDateB);
+  const sameIssueDay = Boolean(ymdA && ymdB && ymdA === ymdB);
+
+  if (
+    nipA.length === 10 &&
+    nipA === nipB &&
+    amountsClose(input.grossA, input.grossB) &&
+    sameIssueDay
+  ) {
+    reasonCodes.push("NIP_AMOUNT_SAME_DAY");
+    confidence = Math.max(confidence, 0.88);
+  }
+
+  if (
+    amountsClose(input.grossA, input.grossB) &&
+    sameIssueDay &&
+    !(nipA.length === 10 && nipA === nipB)
+  ) {
+    reasonCodes.push("AMOUNT_SAME_ISSUE_DAY");
+    confidence = Math.max(confidence, 0.76);
   }
 
   confidence = Math.min(1, confidence);
