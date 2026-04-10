@@ -15,7 +15,6 @@
  */
 
 import {
-  createPublicKey,
   publicEncrypt,
   pbkdf2Sync,
   createDecipheriv,
