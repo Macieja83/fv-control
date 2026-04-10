@@ -82,7 +82,7 @@ function currentMonthRange(): { dateFrom: string; dateTo: string } {
   return monthRange(now.getFullYear(), now.getMonth())
 }
 
-export function monthRange(year: number, month: number): { dateFrom: string; dateTo: string } {
+function monthRange(year: number, month: number): { dateFrom: string; dateTo: string } {
   const first = new Date(year, month, 1)
   const last = new Date(year, month + 1, 0)
   return {

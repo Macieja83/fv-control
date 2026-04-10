@@ -1,6 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import type { InvoiceFilters } from '../../types/invoice'
-import { monthRange } from '../../types/invoice'
 
 type Props = {
   filters: InvoiceFilters
@@ -9,11 +8,6 @@ type Props = {
   restaurants: string[]
   categories: readonly string[]
 }
-
-const MONTH_LABELS = [
-  'Sty', 'Lut', 'Mar', 'Kwi', 'Maj', 'Cze',
-  'Lip', 'Sie', 'Wrz', 'Paź', 'Lis', 'Gru',
-] as const
 
 function activeFilterCount(f: InvoiceFilters): number {
   let n = 0
@@ -28,46 +22,12 @@ function activeFilterCount(f: InvoiceFilters): number {
   return n
 }
 
-function selectedMonthIndex(dateFrom: string, dateTo: string): { year: number; month: number } | null {
-  if (!dateFrom || !dateTo) return null
-  const from = new Date(dateFrom + 'T00:00:00')
-  if (from.getDate() !== 1) return null
-  const y = from.getFullYear()
-  const m = from.getMonth()
-  const expectedLast = new Date(y, m + 1, 0)
-  if (dateTo !== expectedLast.toISOString().slice(0, 10)) return null
-  return { year: y, month: m }
-}
-
 export function FilterBar({ filters, onChange, suppliers, restaurants, categories }: Props) {
   const [open, setOpen] = useState(false)
   const count = activeFilterCount(filters)
 
   const patch = (partial: Partial<InvoiceFilters>) =>
     onChange({ ...filters, ...partial })
-
-  const now = new Date()
-  const currentYear = now.getFullYear()
-  const currentMonth = now.getMonth()
-
-  const sel = selectedMonthIndex(filters.dateFrom, filters.dateTo)
-
-  const years = useMemo(() => {
-    const ys = [currentYear]
-    if (currentYear - 1 >= 2024) ys.unshift(currentYear - 1)
-    return ys
-  }, [currentYear])
-
-  const [displayYear, setDisplayYear] = useState(currentYear)
-
-  const pickMonth = (year: number, month: number) => {
-    const range = monthRange(year, month)
-    patch(range)
-  }
-
-  const pickAllDates = () => {
-    patch({ dateFrom: '', dateTo: '' })
-  }
 
   return (
     <div className={`filter-bar ${open ? 'filter-bar--open' : ''}`}>
@@ -91,46 +51,7 @@ export function FilterBar({ filters, onChange, suppliers, restaurants, categorie
         </button>
       </div>
 
-      {/* Date row — always visible */}
       <div className="filter-bar__date-section">
-        <div className="filter-bar__month-picker">
-          <div className="month-picker__years">
-            {years.map((y) => (
-              <button
-                key={y}
-                type="button"
-                className={`month-picker__year-btn ${displayYear === y ? 'month-picker__year-btn--active' : ''}`}
-                onClick={() => setDisplayYear(y)}
-              >
-                {y}
-              </button>
-            ))}
-          </div>
-          <div className="month-picker__months">
-            {MONTH_LABELS.map((label, i) => {
-              const isFuture = displayYear === currentYear && i > currentMonth
-              const isSelected = sel?.year === displayYear && sel?.month === i
-              return (
-                <button
-                  key={i}
-                  type="button"
-                  disabled={isFuture}
-                  className={`month-picker__btn ${isSelected ? 'month-picker__btn--active' : ''}`}
-                  onClick={() => pickMonth(displayYear, i)}
-                >
-                  {label}
-                </button>
-              )
-            })}
-            <button
-              type="button"
-              className={`month-picker__btn month-picker__btn--all ${!filters.dateFrom && !filters.dateTo ? 'month-picker__btn--active' : ''}`}
-              onClick={pickAllDates}
-            >
-              Wszystko
-            </button>
-          </div>
-        </div>
         <div className="filter-bar__date-inputs">
           <label className="field field--narrow">
             <span className="field__label">Od</span>
