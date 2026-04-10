@@ -208,7 +208,11 @@ export function InvoiceDocumentPreview({ invoiceId }: Props) {
         </div>
       </div>
       {xmlPreview && (
-        <KsefInvoicePreview xmlText={xmlPreview} onDownload={() => void onDownload()} />
+        <KsefInvoicePreview
+          xmlText={xmlPreview}
+          ksefNumber={fileName.replace(/\.xml$/i, '')}
+          onDownload={() => void onDownload()}
+        />
       )}
       {isPdf(mime) && blobUrl && (
         <object
