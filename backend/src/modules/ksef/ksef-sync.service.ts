@@ -30,6 +30,31 @@ export type KsefSyncResult = {
 const KSEF_SYNC_ACTOR_ID = "00000000-0000-0000-0000-000000000000";
 const PAGE_SIZE = 100;
 
+/** KSeF allows 16 requests/minute. We stay safely under with 14 req / 60 s. */
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX_REQUESTS = 14;
+
+class RateLimiter {
+  private timestamps: number[] = [];
+
+  async throttle(): Promise<void> {
+    const now = Date.now();
+    this.timestamps = this.timestamps.filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
+    if (this.timestamps.length >= RATE_LIMIT_MAX_REQUESTS) {
+      const oldest = this.timestamps[0]!;
+      const waitMs = RATE_LIMIT_WINDOW_MS - (now - oldest) + 500;
+      console.info(`[KSeF sync] Rate limit reached, waiting ${Math.ceil(waitMs / 1000)}s…`);
+      await sleep(waitMs);
+      this.timestamps = this.timestamps.filter((t) => Date.now() - t < RATE_LIMIT_WINDOW_MS);
+    }
+    this.timestamps.push(Date.now());
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
 export async function runKsefSyncJob(
   prisma: PrismaClient,
   data: KsefSyncJobData,
@@ -64,17 +89,19 @@ export async function runKsefSyncJob(
   console.info(`[KSeF sync] Querying metadata from=${from} to=${to}`);
 
   const result: KsefSyncResult = { fetched: 0, ingested: 0, skippedDuplicate: 0, errors: [], newHwmDate: null };
+  const limiter = new RateLimiter();
   let pageOffset = 0;
   let hasMore = true;
   let currentFrom = from;
 
   while (hasMore) {
+    await limiter.throttle();
     const page = await client.queryMetadata(currentFrom, to, pageOffset, PAGE_SIZE, "Subject2");
     result.fetched += page.invoices.length;
 
     for (const inv of page.invoices) {
       try {
-        const ingested = await processOneInvoice(prisma, client, data.tenantId, inv);
+        const ingested = await processOneInvoice(prisma, client, data.tenantId, inv, limiter);
         if (ingested) result.ingested++;
         else result.skippedDuplicate++;
       } catch (err) {
@@ -115,6 +142,7 @@ async function processOneInvoice(
   client: KsefClient,
   tenantId: string,
   meta: KsefInvoiceMetadata,
+  limiter: RateLimiter,
 ): Promise<boolean> {
   const existing = await prisma.invoice.findFirst({
     where: { tenantId, ksefNumber: meta.ksefNumber },
@@ -128,6 +156,7 @@ async function processOneInvoice(
   });
   if (existingDoc) return false;
 
+  await limiter.throttle();
   const xml = await client.fetchInvoiceXml(meta.ksefNumber);
   const buf = Buffer.from(xml, "utf-8");
 
