@@ -6,6 +6,7 @@ import type { ExtractedInvoiceDraft } from "../../adapters/ai/ai-invoice.adapter
 import { createMockAiAdapter } from "../../adapters/ai/ai-invoice.adapter.js";
 import { createOpenAiAdapter } from "../../adapters/ai/openai-invoice.adapter.js";
 import { createObjectStorage } from "../../adapters/storage/create-storage.js";
+import { parseKsefXml, draftFromKsefMetadata } from "../ksef/ksef-xml-parser.js";
 import { buildInvoiceFingerprint } from "../../domain/deduplication/invoice-fingerprint.js";
 import { scoreInvoiceDuplicatePair } from "../../domain/deduplication/duplicate-score.js";
 import { loadConfig } from "../../config.js";
@@ -111,20 +112,44 @@ export async function runPipelineJob(prisma: PrismaClient, processingJobId: stri
       );
     }
 
-    const { draft: extractedDraft, confidence } = await ai.extractInvoiceData({
-      mimeType: document.mimeType,
-      sha256: document.sha256,
-      storageKey: document.storageKey,
-      buffer: documentBuffer,
-    });
+    const isKsefXml = document.sourceType === "KSEF" && document.mimeType === "application/xml";
+    let extractedDraft: ExtractedInvoiceDraft;
+    let confidence: number;
+    let extractionProvider: string;
+    let extractionModel: string;
+
+    if (isKsefXml) {
+      try {
+        const xmlStr = documentBuffer.toString("utf-8");
+        ({ draft: extractedDraft, confidence } = parseKsefXml(xmlStr));
+        extractionProvider = "ksef-xml";
+        extractionModel = "xml-parser-v1";
+      } catch (xmlErr) {
+        console.warn("[pipeline] KSeF XML parse failed, falling back to metadata:", xmlErr instanceof Error ? xmlErr.message : xmlErr);
+        const meta = (document.metadata ?? {}) as Record<string, unknown>;
+        ({ draft: extractedDraft, confidence } = draftFromKsefMetadata(meta));
+        extractionProvider = "ksef-metadata";
+        extractionModel = "metadata-v1";
+      }
+    } else {
+      ({ draft: extractedDraft, confidence } = await ai.extractInvoiceData({
+        mimeType: document.mimeType,
+        sha256: document.sha256,
+        storageKey: document.storageKey,
+        buffer: documentBuffer,
+      }));
+      extractionProvider = cfg.OPENAI_API_KEY ? "openai" : "mock";
+      extractionModel = cfg.OPENAI_API_KEY ? cfg.OPENAI_MODEL : (cfg.FEATURE_AI_EXTRACTION_MOCK ? "mock-v1" : "disabled");
+    }
+
     workingDraft = extractedDraft;
     await prisma.extractionRun.create({
       data: {
         tenantId: jobRow.tenantId,
         documentId: document.id,
         invoiceId: invoice.id,
-        provider: cfg.OPENAI_API_KEY ? "openai" : "mock",
-        model: cfg.OPENAI_API_KEY ? cfg.OPENAI_MODEL : (cfg.FEATURE_AI_EXTRACTION_MOCK ? "mock-v1" : "disabled"),
+        provider: extractionProvider,
+        model: extractionModel,
         rawJson: extractedDraft as object,
         confidence: new Prisma.Decimal(confidence.toFixed(4)),
       },
