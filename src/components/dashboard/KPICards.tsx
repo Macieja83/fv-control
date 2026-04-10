@@ -24,7 +24,10 @@ export function KPICards({
     { key: 'noCat' as const, label: 'Bez kategorii', value: noCat, hint: 'Wymaga kategorii kosztu' },
   ]
   return (
-    <section className="kpi-grid" aria-label="Wskaźniki">
+    <section
+      className="kpi-grid"
+      aria-label="Wskaźniki według filtrów (m.in. zakres dat Od–Do)"
+    >
       {cards.map((c) => (
         <button
           key={c.key}

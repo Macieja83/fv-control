@@ -184,17 +184,19 @@ export function useInvoiceDashboard() {
     return list
   }, [invoices, filters, quickFilter])
 
+  /** Wskaźniki jak lista: ten sam zestaw co po filtrach paska (m.in. zakres dat Od–Do), bez szybkiego filtra z kafelków. */
   const kpi = useMemo(() => {
-    const all = invoices.length
-    const unpaidBiz = invoices.filter(
+    const base = invoices.filter((r) => matchesFilters(r, filters))
+    const all = base.length
+    const unpaidBiz = base.filter(
       (r) => r.payment_status === 'unpaid' && r.document_scope === 'business',
     ).length
-    const paid = invoices.filter((r) => r.payment_status === 'paid').length
-    const dups = invoices.filter((r) => isDuplicateFlagged(r)).length
-    const review = invoices.filter((r) => r.review_status === 'needs_review').length
-    const noCat = invoices.filter((r) => !r.category).length
+    const paid = base.filter((r) => r.payment_status === 'paid').length
+    const dups = base.filter((r) => isDuplicateFlagged(r)).length
+    const review = base.filter((r) => r.review_status === 'needs_review').length
+    const noCat = base.filter((r) => !r.category).length
     return { all, unpaidBiz, paid, dups, review, noCat }
-  }, [invoices])
+  }, [invoices, filters])
 
   const suppliers = useMemo(
     () => [...new Set(invoices.map((r) => r.supplier_name))].sort(),
