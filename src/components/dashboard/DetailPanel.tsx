@@ -87,6 +87,13 @@ export function DetailPanel({
 
   if (!row) return null
 
+  const ksefEligible =
+    row.ledger_kind === 'sale' && row.ksef_required === true && row.legal_channel === 'KSEF'
+  const ksefWorkflowBusy =
+    row.ksef_status === 'SENT' ||
+    row.ksef_status === 'RECEIVED' ||
+    row.ksef_status === 'PENDING'
+
   const handleOverlayClick = (e: React.MouseEvent) => {
     if (e.target === overlayRef.current) onClose()
   }
@@ -163,20 +170,39 @@ export function DetailPanel({
               {row.ledger_kind === 'sale' && onSendToKsef && (
                 <section className="detail-section">
                   <h3>KSeF — wystawienie</h3>
-                  <p className="workspace-panel__muted" style={{ marginBottom: 10 }}>
-                    Faktura sprzedaży w kanale KSeF: po wysłaniu status zmieni się na „oczekuje” lub „wysłano” zgodnie z
-                    odpowiedzią systemu. Pełna wysyłka MF: na backendzie ustaw zmienne KSeF (token, NIP) oraz
-                    KSEF_ISSUANCE_MODE=live.
-                  </p>
+                  <dl className="detail-dl" style={{ marginBottom: 10 }}>
+                    <dt>Status KSeF</dt>
+                    <dd className="mono">{row.ksef_status ?? '—'}</dd>
+                    <dt>Wymagane / kanał</dt>
+                    <dd>
+                      {row.ksef_required ? 'tak' : 'nie'} · {row.legal_channel ?? '—'}
+                    </dd>
+                  </dl>
+                  {!ksefEligible && (
+                    <p className="workspace-panel__muted" style={{ marginBottom: 10 }}>
+                      Wysyłka do KSeF jest dostępna tylko dla faktur sprzedaży oznaczonych jako wymagane w KSeF i z
+                      kanałem prawnym „KSEF” (reguły zgodności po zapisie faktury).
+                    </p>
+                  )}
+                  {ksefEligible && (
+                    <p className="workspace-panel__muted" style={{ marginBottom: 10 }}>
+                      Wysyła strukturalną FA do API KSeF. Na serwerze ustaw m.in. <span className="mono">KSEF_TOKEN</span>
+                      , <span className="mono">KSEF_NIP</span>, <span className="mono">KSEF_ENV</span> (sandbox lub
+                      production) oraz <span className="mono">KSEF_ISSUANCE_MODE=live</span> — w przeciwnym razie
+                      zapisany zostanie tylko stub (status PENDING bez wywołania MF).
+                    </p>
+                  )}
                   <button
                     type="button"
                     className="btn btn--primary"
-                    disabled={
-                      ksefBusy ||
-                      row.ksef_status === 'SENT' ||
-                      row.ksef_status === 'RECEIVED' ||
-                      row.ksef_status === 'PENDING'
+                    title={
+                      !ksefEligible
+                        ? 'Faktura nie kwalifikuje się do wysyłki KSeF.'
+                        : ksefWorkflowBusy
+                          ? 'Sesja zakończona lub w toku — sprawdź status powyżej.'
+                          : undefined
                     }
+                    disabled={ksefBusy || !ksefEligible || ksefWorkflowBusy}
                     onClick={async () => {
                       setKsefBusy(true)
                       try {

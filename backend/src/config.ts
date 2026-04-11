@@ -72,6 +72,15 @@ const envSchema = z.object({
   KSEF_ISSUANCE_MODE: z.enum(["stub", "live"]).default("stub"),
   RESTA_API_BASE_URL: z.string().optional(),
 
+  /**
+   * GUS BIR 1.1 — wyszukiwarka REGON po NIP (integracja „Wystaw fakturę”).
+   * Produkcja: https://wyszukiwarkaregon.stat.gov.pl/wsBIR/UslugaBIRzewnPubl.svc + klucz z api.stat.gov.pl
+   */
+  GUS_BIR_SERVICE_URL: z.preprocess((v) => (v === "" || v === undefined ? undefined : v), z.string().url().optional()),
+  GUS_BIR_API_KEY: z.preprocess((v) => (v === "" || v === undefined ? undefined : v), z.string().optional()),
+  /** Środowisko testowe GUS (klucz domyślny z dokumentacji, jeśli GUS_BIR_API_KEY puste). */
+  GUS_BIR_USE_TEST: z.coerce.boolean().default(false),
+
   PIPELINE_MAX_ATTEMPTS: z.coerce.number().int().positive().default(8),
   IDEMPOTENCY_TTL_HOURS: z.coerce.number().int().positive().default(24),
 

@@ -196,7 +196,7 @@ export default function DashboardApp() {
       <SalesInvoiceDialog
         open={salesDialogOpen}
         onClose={() => setSalesDialogOpen(false)}
-        onSubmit={(body) => createSalesInvoice(body)}
+        onSubmit={(body, opts) => createSalesInvoice(body, opts)}
       />
     </div>
   )

@@ -129,10 +129,12 @@ export async function postSendInvoiceToKsef(token: string, invoiceId: string): P
   return (await res.json()) as unknown
 }
 
+export type ApiInvoiceCreateResponse = { id: string } & Record<string, unknown>
+
 export async function postCreateInvoice(
   token: string,
   body: Record<string, unknown>,
-): Promise<unknown> {
+): Promise<ApiInvoiceCreateResponse> {
   const res = await fetch(`${API}/invoices`, {
     method: 'POST',
     headers: {
@@ -143,7 +145,9 @@ export async function postCreateInvoice(
   })
   if (res.status === 401) throw new Error('Sesja wygasła — zaloguj się ponownie.')
   if (!res.ok) throw new Error(await readErrorMessage(res))
-  return (await res.json()) as unknown
+  const data = (await res.json()) as ApiInvoiceCreateResponse
+  if (typeof data.id !== 'string') throw new Error('API: brak id utworzonej faktury.')
+  return data
 }
 
 export async function postRetryInvoiceExtraction(

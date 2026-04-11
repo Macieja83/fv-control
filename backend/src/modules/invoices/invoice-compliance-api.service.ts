@@ -73,4 +73,4 @@ export async function validateInvoiceCompliance(prisma: PrismaClient, tenantId: 
   return serializeInvoiceDetail(full);
 }
 
-export { submitInvoiceToKsef as sendInvoiceToKsefStub } from "./ksef-issuance.service.js";
+export { submitInvoiceToKsef as sendInvoiceToKsef } from "./ksef-issuance.service.js";

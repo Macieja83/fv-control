@@ -16,7 +16,7 @@ import {
 import { exportAccountingBatch } from "../modules/accounting/accounting-export.service.js";
 import {
   classifyInvoice,
-  sendInvoiceToKsefStub,
+  sendInvoiceToKsef,
   validateInvoiceCompliance,
 } from "../modules/invoices/invoice-compliance-api.service.js";
 import { intakeInvoice } from "../modules/invoices/invoice-intake.service.js";
@@ -175,7 +175,7 @@ const invoicesRoutes: FastifyPluginAsync = async (app) => {
     async (request) => {
       assertCanMutate(request.authUser!.role);
       const { id } = request.params as { id: string };
-      return sendInvoiceToKsefStub(app.prisma, request.authUser!.tenantId, id);
+      return sendInvoiceToKsef(app.prisma, request.authUser!.tenantId, id);
     },
   );
 

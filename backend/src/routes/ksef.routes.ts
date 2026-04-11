@@ -23,10 +23,16 @@ const ksefRoutes: FastifyPluginAsync = async (app) => {
       const ksefInvoiceCount = await app.prisma.invoice.count({
         where: { tenantId, intakeSourceType: "KSEF_API" },
       });
+      const credentialsOk = Boolean(cfg.KSEF_TOKEN && cfg.KSEF_NIP);
+      const issuanceLiveReady =
+        cfg.KSEF_ISSUANCE_MODE === "live" && cfg.KSEF_ENV !== "mock" && credentialsOk;
       return {
         environment: cfg.KSEF_ENV,
-        configured: !!(cfg.KSEF_TOKEN && cfg.KSEF_NIP),
+        configured: credentialsOk,
         nip: cfg.KSEF_NIP ?? null,
+        issuanceMode: cfg.KSEF_ISSUANCE_MODE,
+        /** `true` gdy `POST /invoices/:id/send-to-ksef` wyśle FA do API MF (nie tylko stub w bazie). */
+        issuanceLiveReady,
         autoSyncIntervalMs: cfg.KSEF_AUTO_SYNC_INTERVAL_MS,
         lastSyncHwmDate: hwmDate,
         lastSyncAt: source?.updatedAt ?? null,

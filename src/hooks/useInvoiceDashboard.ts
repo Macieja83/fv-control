@@ -694,10 +694,20 @@ export function useInvoiceDashboard() {
   )
 
   const createSalesInvoice = useCallback(
-    async (body: Record<string, unknown>) => {
+    async (body: Record<string, unknown>, opts?: { sendToKsef?: boolean }) => {
       const token = getStoredToken()
       if (!token) throw new Error('Brak sesji.')
-      await postCreateInvoice(token, body)
+      const created = await postCreateInvoice(token, body)
+      if (opts?.sendToKsef) {
+        try {
+          await postSendInvoiceToKsef(token, created.id)
+        } catch (e) {
+          const m = e instanceof Error ? e.message : String(e)
+          window.alert(
+            `Faktura została zapisana, ale wysyłka do KSeF się nie powiodła:\n\n${m}\n\nMożesz ponowić wysyłkę z panelu szczegółów faktury (przycisk „Wyślij do KSeF”).`,
+          )
+        }
+      }
       await refreshFromApi()
     },
     [refreshFromApi],
