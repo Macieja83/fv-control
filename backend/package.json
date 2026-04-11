@@ -20,7 +20,8 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
-    "prisma:seed": "tsx prisma/seed.ts"
+    "prisma:seed": "tsx prisma/seed.ts",
+    "verify:openai": "node scripts/verify-openai-connection.mjs"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
