@@ -11,7 +11,9 @@ import { KPICards } from './components/dashboard/KPICards'
 import { FilterBar } from './components/dashboard/FilterBar'
 import { InvoiceTable } from './components/dashboard/InvoiceTable'
 import { DetailPanel } from './components/dashboard/DetailPanel'
+import { InvoiceLedgerTabs } from './components/dashboard/InvoiceLedgerTabs'
 import { InvoiceUpload } from './components/dashboard/InvoiceUpload'
+import { SalesInvoiceDialog } from './components/dashboard/SalesInvoiceDialog'
 import { useInvoiceDashboard } from './hooks/useInvoiceDashboard'
 import './styles/dashboard.css'
 
@@ -19,6 +21,7 @@ export default function DashboardApp() {
   const { logout, user } = useAuth()
   const [nav, setNav] = useState<AppNavKey>('invoices')
   const [activityOpen, setActivityOpen] = useState(false)
+  const [salesDialogOpen, setSalesDialogOpen] = useState(false)
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     if (typeof document === 'undefined') return 'light'
     return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'
@@ -29,6 +32,8 @@ export default function DashboardApp() {
     filters,
     setFilters,
     pickKpi,
+    invoiceLedger,
+    setInvoiceLedger,
     kpi,
     suppliers,
     restaurants,
@@ -60,6 +65,8 @@ export default function DashboardApp() {
     categoryLocalOnly,
     refreshFromApi,
     retryInvoiceExtraction,
+    sendInvoiceToKsef,
+    createSalesInvoice,
   } = useInvoiceDashboard()
 
   useEffect(() => {
@@ -97,6 +104,7 @@ export default function DashboardApp() {
       />
       {nav === 'invoices' && (
         <main className="main-content">
+          <InvoiceLedgerTabs value={invoiceLedger} onChange={setInvoiceLedger} />
           <KPICards
             all={kpi.all}
             unpaidBiz={kpi.unpaidBiz}
@@ -107,7 +115,15 @@ export default function DashboardApp() {
             unknownVendor={kpi.unknownVendor}
             onPickFilter={pickKpi}
           />
-          <InvoiceUpload onUploaded={() => void refreshFromApi()} />
+          {invoiceLedger === 'purchase' && <InvoiceUpload onUploaded={() => void refreshFromApi()} />}
+          {invoiceLedger === 'sale' && (
+            <div className="upload-bar" style={{ marginBottom: '0.5rem' }}>
+              <button type="button" className="upload-bar__btn upload-bar__btn--camera" onClick={() => setSalesDialogOpen(true)}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+                <span>Nowa faktura sprzedaży</span>
+              </button>
+            </div>
+          )}
           <FilterBar
             filters={filters}
             onChange={setFilters}
@@ -173,9 +189,15 @@ export default function DashboardApp() {
           onClearReview={(id) => void clearReview(id)}
           onRetryExtraction={(id) => void retryInvoiceExtraction(id)}
           onDeleteInvoice={(id) => void deleteInvoice(id)}
+          onSendToKsef={(id) => void sendInvoiceToKsef(id)}
         />
       )}
       <ActivityDrawer open={activityOpen} onClose={() => setActivityOpen(false)} />
+      <SalesInvoiceDialog
+        open={salesDialogOpen}
+        onClose={() => setSalesDialogOpen(false)}
+        onSubmit={(body) => createSalesInvoice(body)}
+      />
     </div>
   )
 }

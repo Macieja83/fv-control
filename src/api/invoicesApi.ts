@@ -28,6 +28,9 @@ export type ApiInvoiceListRow = {
   primaryDoc: { id: string; sha256: string } | null
   _count: { items: number; files: number }
   documentKind?: string
+  ledgerKind?: string
+  ksefStatus?: string
+  ksefRequired?: boolean
   needsContractorVerification?: boolean
   extractedVendorNip?: string | null
 }
@@ -54,6 +57,7 @@ export async function fetchInvoicesList(
     page?: number
     documentKind?: string
     legalChannel?: string
+    ledgerKind?: 'PURCHASE' | 'SALE'
   },
 ): Promise<InvoicesListResponse> {
   const limit = opts?.limit ?? 100
@@ -61,6 +65,7 @@ export async function fetchInvoicesList(
   const q = new URLSearchParams({ limit: String(limit), page: String(page) })
   if (opts?.documentKind) q.set('documentKind', opts.documentKind)
   if (opts?.legalChannel) q.set('legalChannel', opts.legalChannel)
+  if (opts?.ledgerKind) q.set('ledgerKind', opts.ledgerKind)
   const res = await fetch(`${API}/invoices?${q}`, {
     headers: { Authorization: `Bearer ${token}` },
   })
@@ -112,6 +117,33 @@ export type RetryExtractionResponse = {
   invoiceId: string
   documentId: string
   processingJobId: string
+}
+
+export async function postSendInvoiceToKsef(token: string, invoiceId: string): Promise<unknown> {
+  const res = await fetch(`${API}/invoices/${encodeURIComponent(invoiceId)}/send-to-ksef`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (res.status === 401) throw new Error('Sesja wygasła — zaloguj się ponownie.')
+  if (!res.ok) throw new Error(await readErrorMessage(res))
+  return (await res.json()) as unknown
+}
+
+export async function postCreateInvoice(
+  token: string,
+  body: Record<string, unknown>,
+): Promise<unknown> {
+  const res = await fetch(`${API}/invoices`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  })
+  if (res.status === 401) throw new Error('Sesja wygasła — zaloguj się ponownie.')
+  if (!res.ok) throw new Error(await readErrorMessage(res))
+  return (await res.json()) as unknown
 }
 
 export async function postRetryInvoiceExtraction(

@@ -13,6 +13,9 @@ export type DocumentScope = 'business' | 'private'
 
 export type CurrencyCode = 'PLN' | 'EUR' | 'USD'
 
+/** Koszt (zakup) vs sprzedaż wystawiana przez firmę — zgodnie z API `ledgerKind`. */
+export type InvoiceLedgerKind = 'purchase' | 'sale'
+
 export interface AuditEntry {
   id: string
   at: string
@@ -59,6 +62,10 @@ export interface InvoiceRecord {
   extracted_vendor_nip?: string | null
   document_kind?: string
   legal_channel?: string
+  ledger_kind?: InvoiceLedgerKind
+  /** Z API: TO_ISSUE, PENDING, SENT, RECEIVED, … */
+  ksef_status?: string
+  ksef_required?: boolean
 }
 
 export interface InvoiceFilters {

@@ -18,6 +18,7 @@ export async function listInvoices(prisma: PrismaClient, tenantId: string, q: In
   const skip = (q.page - 1) * q.limit;
   const where: Prisma.InvoiceWhereInput = {
     tenantId,
+    ...(q.ledgerKind ? { ledgerKind: q.ledgerKind } : {}),
     ...(q.status ? { status: q.status } : {}),
     ...(q.ksefStatus ? { ksefStatus: q.ksefStatus } : {}),
     ...(q.intakeSourceType ? { intakeSourceType: q.intakeSourceType } : {}),
@@ -133,6 +134,7 @@ export async function createInvoice(
     const created = await tx.invoice.create({
       data: {
         tenantId,
+        ledgerKind: input.ledgerKind ?? "PURCHASE",
         contractorId: input.contractorId,
         number: input.number,
         issueDate: parseInvoiceDate(
@@ -176,7 +178,11 @@ export async function createInvoice(
     prisma,
     tenantId,
     inv.id,
-    { intakeSourceType: "UPLOAD", documentKind: "INVOICE" },
+    {
+      intakeSourceType: "UPLOAD",
+      documentKind: "INVOICE",
+      isOwnSales: (input.ledgerKind ?? "PURCHASE") === "SALE",
+    },
     { enqueueIngested: false },
   );
 

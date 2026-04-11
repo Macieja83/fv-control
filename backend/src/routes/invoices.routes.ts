@@ -167,7 +167,10 @@ const invoicesRoutes: FastifyPluginAsync = async (app) => {
     "/invoices/:id/send-to-ksef",
     {
       preHandler: [app.authenticate, app.checkIdempotency],
-      schema: { tags: ["Invoices"], summary: "Submit to KSeF (stub — connector TBD)" },
+      schema: {
+        tags: ["Invoices"],
+        summary: "Submit sales invoice to KSeF (stub or live — see KSEF_ISSUANCE_MODE)",
+      },
     },
     async (request) => {
       assertCanMutate(request.authUser!.role);

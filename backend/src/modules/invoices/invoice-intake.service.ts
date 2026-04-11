@@ -52,6 +52,7 @@ export async function intakeInvoice(
     const created = await tx.invoice.create({
       data: {
         tenantId,
+        ledgerKind: input.ledgerKind ?? "PURCHASE",
         contractorId: input.contractorId,
         number: input.number,
         issueDate: parseInvoiceDate(String(input.issueDate)),
@@ -111,7 +112,7 @@ export async function intakeInvoice(
     {
       intakeSourceType: input.intakeSourceType,
       documentKind: docKind,
-      isOwnSales: input.isOwnSales ?? false,
+      isOwnSales: input.isOwnSales ?? (input.ledgerKind ?? "PURCHASE") === "SALE",
       hasStructuredKsefPayload: input.hasStructuredKsefPayload ?? false,
       ocrConfidence: input.ocrConfidence ?? null,
     },

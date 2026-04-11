@@ -67,5 +67,8 @@ export function mapApiInvoiceRowToRecord(row: ApiInvoiceListRow): InvoiceRecord 
     extracted_vendor_nip: row.extractedVendorNip ?? null,
     document_kind: row.documentKind ?? 'OTHER',
     legal_channel: row.legalChannel ?? 'UNKNOWN',
+    ledger_kind: row.ledgerKind === 'SALE' ? 'sale' : 'purchase',
+    ksef_status: row.ksefStatus ?? undefined,
+    ksef_required: row.ksefRequired === true,
   }
 }

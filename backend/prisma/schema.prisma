@@ -103,6 +103,12 @@ enum InvoiceIntakeSourceType {
   CASH_REGISTER
 }
 
+/// Koszt (zakup) vs sprzedaż wystawiana przez tenant — wpływa na reguły KSeF (własna sprzedaż → TO_ISSUE).
+enum InvoiceLedgerKind {
+  PURCHASE
+  SALE
+}
+
 enum InvoiceDocumentKind {
   INVOICE
   CORRECTIVE_INVOICE
@@ -444,6 +450,7 @@ model Invoice {
   updatedById      String?       @db.Uuid
 
   /// Compliance / KSeF filter layer (see docs/compliance-rules.md)
+  ledgerKind        InvoiceLedgerKind       @default(PURCHASE) @map("ledger_kind")
   intakeSourceType  InvoiceIntakeSourceType @default(UPLOAD) @map("intake_source_type")
   sourceAccount     String?                 @map("source_account")
   documentKind      InvoiceDocumentKind     @default(OTHER) @map("document_kind")
@@ -478,6 +485,7 @@ model Invoice {
   @@index([tenantId, status])
   @@index([tenantId, fingerprint])
   @@index([tenantId, intakeSourceType])
+  @@index([tenantId, ledgerKind])
   @@index([tenantId, ksefStatus])
   @@index([tenantId, reviewStatus])
   @@index([tenantId])

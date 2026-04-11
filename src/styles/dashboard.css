@@ -1295,6 +1295,16 @@ html[data-theme='dark'] .upload-bar__status--error { color: #f87171; }
   color: var(--text-muted);
 }
 
+.doc-tabs__hint {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.invoice-ledger-tabs {
+  margin-bottom: 0.75rem;
+}
+
 .integration-card {
   margin-top: 1rem;
   padding: 1.1rem 1.15rem;

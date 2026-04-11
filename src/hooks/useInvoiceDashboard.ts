@@ -4,7 +4,9 @@ import {
   fetchInvoicesList,
   patchInvoice,
   patchInvoiceStatus,
+  postCreateInvoice,
   postRetryInvoiceExtraction,
+  postSendInvoiceToKsef,
 } from '../api/invoicesApi'
 import type { InvoiceFilters, InvoiceRecord } from '../types/invoice'
 import { EMPTY_FILTERS } from '../types/invoice'
@@ -112,6 +114,7 @@ export function useInvoiceDashboard() {
   const [listError, setListError] = useState<string | null>(null)
   const [filters, setFilters] = useState<InvoiceFilters>(EMPTY_FILTERS)
   const [quickFilter, setQuickFilter] = useState<QuickFilter>(null)
+  const [invoiceLedger, setInvoiceLedger] = useState<'purchase' | 'sale'>('purchase')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const categoryOverridesRef = useRef<Record<string, string | null>>({})
 
@@ -136,7 +139,10 @@ export function useInvoiceDashboard() {
     setListLoading(true)
     setListError(null)
     try {
-      const res = await fetchInvoicesList(token, { limit: 100 })
+      const res = await fetchInvoicesList(token, {
+        limit: 100,
+        ledgerKind: invoiceLedger === 'sale' ? 'SALE' : 'PURCHASE',
+      })
       const mapped = res.data.map(mapApiInvoiceRowToRecord)
       const merged = mergeCategoryOverrides(mapped, categoryOverridesRef.current)
       setInvoices(enrichDuplicateMetadata(merged))
@@ -153,11 +159,15 @@ export function useInvoiceDashboard() {
     } finally {
       setListLoading(false)
     }
-  }, [])
+  }, [invoiceLedger])
 
   useEffect(() => {
     void refreshFromApi()
   }, [refreshFromApi])
+
+  useEffect(() => {
+    setSelectedId(null)
+  }, [invoiceLedger])
 
   /** Dopóki któraś faktura jest w INGESTING, odświeżaj listę (worker kończy OCR w tle). */
   useEffect(() => {
@@ -168,8 +178,16 @@ export function useInvoiceDashboard() {
     return () => window.clearInterval(id)
   }, [invoices, refreshFromApi])
 
+  const ledgerScoped = useMemo(() => {
+    if (USE_MOCK_INVOICES) {
+      if (invoiceLedger === 'sale') return invoices.filter((r) => r.ledger_kind === 'sale')
+      return invoices.filter((r) => r.ledger_kind !== 'sale')
+    }
+    return invoices
+  }, [invoices, invoiceLedger])
+
   const filtered = useMemo(() => {
-    let list = invoices.filter((r) => matchesFilters(r, filters))
+    let list = ledgerScoped.filter((r) => matchesFilters(r, filters))
     if (quickFilter === 'unpaid') {
       list = list.filter(
         (r) => r.payment_status === 'unpaid' && r.document_scope === 'business',
@@ -186,11 +204,11 @@ export function useInvoiceDashboard() {
       list = list.filter((r) => r.needs_contractor_verification === true)
     }
     return list
-  }, [invoices, filters, quickFilter])
+  }, [ledgerScoped, filters, quickFilter])
 
   /** Wskaźniki jak lista: ten sam zestaw co po filtrach paska (m.in. zakres dat Od–Do), bez szybkiego filtra z kafelków. */
   const kpi = useMemo(() => {
-    const base = invoices.filter((r) => matchesFilters(r, filters))
+    const base = ledgerScoped.filter((r) => matchesFilters(r, filters))
     const all = base.length
     const unpaidBiz = base.filter(
       (r) => r.payment_status === 'unpaid' && r.document_scope === 'business',
@@ -201,20 +219,20 @@ export function useInvoiceDashboard() {
     const noCat = base.filter((r) => !r.category).length
     const unknownVendor = base.filter((r) => r.needs_contractor_verification === true).length
     return { all, unpaidBiz, paid, dups, review, noCat, unknownVendor }
-  }, [invoices, filters])
+  }, [ledgerScoped, filters])
 
   const suppliers = useMemo(
-    () => [...new Set(invoices.map((r) => r.supplier_name))].sort(),
-    [invoices],
+    () => [...new Set(ledgerScoped.map((r) => r.supplier_name))].sort(),
+    [ledgerScoped],
   )
   const restaurants = useMemo(
-    () => [...new Set(invoices.map((r) => r.restaurant_name))].sort(),
-    [invoices],
+    () => [...new Set(ledgerScoped.map((r) => r.restaurant_name))].sort(),
+    [ledgerScoped],
   )
 
   const selected = useMemo(
-    () => invoices.find((r) => r.id === selectedId) ?? null,
-    [invoices, selectedId],
+    () => ledgerScoped.find((r) => r.id === selectedId) ?? null,
+    [ledgerScoped, selectedId],
   )
 
   const updateRow = useCallback((id: string, fn: (r: InvoiceRecord) => InvoiceRecord) => {
@@ -657,12 +675,42 @@ export function useInvoiceDashboard() {
     [invoices],
   )
 
+  const sendInvoiceToKsef = useCallback(
+    async (id: string) => {
+      if (USE_MOCK_INVOICES) {
+        window.alert('Tryb mock: wysyłka do KSeF jest wyłączona.')
+        return
+      }
+      const token = getStoredToken()
+      if (!token) return
+      try {
+        await postSendInvoiceToKsef(token, id)
+        await refreshFromApi()
+      } catch (e) {
+        window.alert(e instanceof Error ? e.message : String(e))
+      }
+    },
+    [refreshFromApi],
+  )
+
+  const createSalesInvoice = useCallback(
+    async (body: Record<string, unknown>) => {
+      const token = getStoredToken()
+      if (!token) throw new Error('Brak sesji.')
+      await postCreateInvoice(token, body)
+      await refreshFromApi()
+    },
+    [refreshFromApi],
+  )
+
   return {
     invoices,
     filtered,
     filters,
     setFilters,
     quickFilter,
+    invoiceLedger,
+    setInvoiceLedger,
     pickKpi,
     selectedId,
     setSelectedId,
@@ -696,5 +744,7 @@ export function useInvoiceDashboard() {
     categoryLocalOnly: !USE_MOCK_INVOICES,
     refreshFromApi,
     retryInvoiceExtraction,
+    sendInvoiceToKsef,
+    createSalesInvoice,
   }
 }

@@ -30,6 +30,8 @@ type Props = {
   /** Ponowna kolejka OCR (tylko tryb API). */
   onRetryExtraction?: (id: string) => void | Promise<void>
   onDeleteInvoice: (id: string) => void
+  /** Wysyłka do KSeF (faktury sprzedaży). */
+  onSendToKsef?: (id: string) => void | Promise<void>
 }
 
 export function DetailPanel({
@@ -51,9 +53,11 @@ export function DetailPanel({
   onClearReview,
   onRetryExtraction,
   onDeleteInvoice,
+  onSendToKsef,
 }: Props) {
   const [draftNotes, setDraftNotes] = useState('')
   const [ocrBusy, setOcrBusy] = useState(false)
+  const [ksefBusy, setKsefBusy] = useState(false)
   const overlayRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -116,14 +120,18 @@ export function DetailPanel({
               <section className="detail-section">
                 <h3>Dane faktury</h3>
                 <dl className="detail-dl">
-                  <dt>Dostawca</dt>
+                  <dt>{row.ledger_kind === 'sale' ? 'Nabywca' : 'Dostawca'}</dt>
                   <dd>{row.supplier_name}</dd>
                   <dt>NIP</dt>
                   <dd className="mono">{row.supplier_nip}</dd>
                   <dt>Numer faktury</dt>
                   <dd className="mono">{row.invoice_number}</dd>
-                  <dt>KSeF</dt>
+                  <dt>Rejestr</dt>
+                  <dd>{row.ledger_kind === 'sale' ? 'Sprzedaż (nasza faktura)' : 'Koszt (zakup)'}</dd>
+                  <dt>KSeF — numer</dt>
                   <dd className="mono">{row.ksef_number ?? '—'}</dd>
+                  <dt>KSeF — workflow</dt>
+                  <dd className="mono">{row.ksef_status ?? '—'}</dd>
                   <dt>Daty</dt>
                   <dd>wystawienie {row.issue_date} · płatność do {row.due_date}</dd>
                   <dt>Kwota netto</dt>
@@ -144,13 +152,44 @@ export function DetailPanel({
                     {row.duplicate_reason && <p className="detail-reason">{row.duplicate_reason}</p>}
                   </dd>
                 </dl>
-                {row.needs_contractor_verification && (
+                {row.needs_contractor_verification && row.ledger_kind !== 'sale' && (
                   <div className="detail-alert" role="status">
                     Brak dopasowanego kontrahenta w bazie — sprawdź, czy to faktycznie koszt firmy. Dodaj dostawcę w
                     sekcji <strong>Kontrahenci</strong> (NIP: {row.extracted_vendor_nip || row.supplier_nip || '—'}).
                   </div>
                 )}
               </section>
+
+              {row.ledger_kind === 'sale' && onSendToKsef && (
+                <section className="detail-section">
+                  <h3>KSeF — wystawienie</h3>
+                  <p className="workspace-panel__muted" style={{ marginBottom: 10 }}>
+                    Faktura sprzedaży w kanale KSeF: po wysłaniu status zmieni się na „oczekuje” lub „wysłano” zgodnie z
+                    odpowiedzią systemu. Pełna wysyłka MF: na backendzie ustaw zmienne KSeF (token, NIP) oraz
+                    KSEF_ISSUANCE_MODE=live.
+                  </p>
+                  <button
+                    type="button"
+                    className="btn btn--primary"
+                    disabled={
+                      ksefBusy ||
+                      row.ksef_status === 'SENT' ||
+                      row.ksef_status === 'RECEIVED' ||
+                      row.ksef_status === 'PENDING'
+                    }
+                    onClick={async () => {
+                      setKsefBusy(true)
+                      try {
+                        await onSendToKsef(row.id)
+                      } finally {
+                        setKsefBusy(false)
+                      }
+                    }}
+                  >
+                    {ksefBusy ? 'Wysyłanie…' : 'Wyślij do KSeF'}
+                  </button>
+                </section>
+              )}
 
               <section className="detail-section">
                 <h3>Źródło wpływu</h3>

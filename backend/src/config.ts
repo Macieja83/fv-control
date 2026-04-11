@@ -65,6 +65,11 @@ const envSchema = z.object({
   KSEF_AUTO_SYNC_INTERVAL_MS: z.coerce.number().int().min(0).default(0),
   /** Min delay (ms) between KSeF GET invoice XML calls (MF limit ~16/min). 0 = no delay. */
   KSEF_INVOICE_FETCH_MIN_INTERVAL_MS: z.coerce.number().int().min(0).default(4_000),
+  /**
+   * Wysyłka faktur sprzedaży do KSeF: `stub` — tylko zapis PENDING w bazie;
+   * `live` — próba wywołania API (wymaga KSEF_ENV≠mock, tokenów i poprawnego XML wg MF).
+   */
+  KSEF_ISSUANCE_MODE: z.enum(["stub", "live"]).default("stub"),
   RESTA_API_BASE_URL: z.string().optional(),
 
   PIPELINE_MAX_ATTEMPTS: z.coerce.number().int().positive().default(8),

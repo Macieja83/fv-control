@@ -1,6 +1,7 @@
 import {
   InvoiceDocumentKind,
   InvoiceIntakeSourceType,
+  InvoiceLedgerKind,
   InvoiceReviewStatus,
   InvoiceSource,
   InvoiceStatus,
@@ -28,6 +29,7 @@ export const invoiceItemInputSchema = z.object({
 
 export const invoiceCreateSchema = z
   .object({
+    ledgerKind: z.nativeEnum(InvoiceLedgerKind).optional(),
     contractorId: z.string().uuid(),
     number: z.string().min(1).max(100),
     issueDate: z.string().datetime({ offset: true }).or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)),
@@ -98,6 +100,7 @@ export const invoiceItemUpdateSchema = invoiceItemInputSchema.partial();
 
 export const invoiceListQuerySchema = z
   .object({
+    ledgerKind: z.nativeEnum(InvoiceLedgerKind).optional(),
     status: z.nativeEnum(InvoiceStatus).optional(),
     ksefStatus: z.nativeEnum(KsefWorkflowStatus).optional(),
     intakeSourceType: z.nativeEnum(InvoiceIntakeSourceType).optional(),
@@ -119,6 +122,7 @@ export const invoiceListQuerySchema = z
 
 export const invoiceIntakeSchema = z
   .object({
+    ledgerKind: z.nativeEnum(InvoiceLedgerKind).optional(),
     contractorId: z.string().uuid(),
     number: z.string().min(1).max(100),
     issueDate: z.string().datetime({ offset: true }).or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)),

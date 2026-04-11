@@ -47,12 +47,14 @@ export async function refreshInvoiceCompliance(
     : null;
   const hasXml = Boolean(mime && mime.includes("xml"));
 
+  const isOwnSales = overrides.isOwnSales ?? inv.ledgerKind === "SALE";
+
   const input = {
     intakeSourceType: overrides.intakeSourceType ?? inv.intakeSourceType,
     documentKind: overrides.documentKind ?? inv.documentKind,
     currency: inv.currency,
     grossTotal: Number(inv.grossTotal.toString()),
-    isOwnSales: overrides.isOwnSales ?? false,
+    isOwnSales,
     hasStructuredKsefPayload: overrides.hasStructuredKsefPayload ?? hasXml,
     ocrConfidence:
       overrides.ocrConfidence ??

@@ -326,6 +326,49 @@ export class KsefClient {
     return res.text();
   }
 
+  /**
+   * Sesja interaktywna (online) — inicjalizacja przed wysłaniem FA.
+   * Kształt body zależy od wersji OpenAPI MF; domyślnie `formCode` FA(3).
+   */
+  async openOnlineSessionForm(body: Record<string, unknown>): Promise<unknown> {
+    const res = await this.authedFetch("/sessions/online", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw await this.apiError(res, "open online session");
+    return res.json() as Promise<unknown>;
+  }
+
+  /** Wysłanie faktury w ramach sesji online (payload zależny od wersji API). */
+  async postOnlineInvoice(sessionReferenceNumber: string, body: Record<string, unknown>): Promise<unknown> {
+    const res = await this.authedFetch(
+      `/sessions/online/${encodeURIComponent(sessionReferenceNumber)}/invoices`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      },
+    );
+    if (!res.ok) throw await this.apiError(res, "post online invoice");
+    return res.json() as Promise<unknown>;
+  }
+
+  async closeOnlineSession(sessionReferenceNumber: string): Promise<unknown> {
+    const res = await this.authedFetch(
+      `/sessions/online/${encodeURIComponent(sessionReferenceNumber)}/close`,
+      { method: "POST" },
+    );
+    if (!res.ok) throw await this.apiError(res, "close online session");
+    const text = await res.text();
+    if (!text) return {};
+    try {
+      return JSON.parse(text) as unknown;
+    } catch {
+      return { raw: text };
+    }
+  }
+
   // ─── Auth internals ───
 
   private async getChallenge(): Promise<{ challenge: string; timestampMs: number }> {
