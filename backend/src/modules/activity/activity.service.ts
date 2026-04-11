@@ -5,7 +5,13 @@ function titleForAction(action: string): string {
     case "PIPELINE_COMPLETED":
       return "Faktura przetworzona";
     case "INVOICE_INTAKE":
-      return "Nowa faktura w inbox";
+      return "Nowa faktura (upload)";
+    case "AGREEMENT_UPLOADED":
+      return "Dodano umowę (plik)";
+    case "AGREEMENT_EXTRACTED":
+      return "Odczytano dane z umowy";
+    case "AGREEMENT_EXTRACT_FAILED":
+      return "Błąd odczytu umowy";
     case "PORTAL_INTEGRATIONS_UPDATED":
       return "Zaktualizowano integracje";
     case "TENANT_PROFILE_UPDATED":

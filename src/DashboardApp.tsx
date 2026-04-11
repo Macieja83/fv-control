@@ -17,7 +17,7 @@ import './styles/dashboard.css'
 
 export default function DashboardApp() {
   const { logout, user } = useAuth()
-  const [nav, setNav] = useState<AppNavKey>('inbox')
+  const [nav, setNav] = useState<AppNavKey>('invoices')
   const [activityOpen, setActivityOpen] = useState(false)
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     if (typeof document === 'undefined') return 'light'
@@ -63,7 +63,7 @@ export default function DashboardApp() {
   } = useInvoiceDashboard()
 
   useEffect(() => {
-    if (nav !== 'inbox') setSelectedId(null)
+    if (nav !== 'invoices') setSelectedId(null)
   }, [nav, setSelectedId])
 
   const linkedRow = useMemo(() => {
@@ -95,7 +95,7 @@ export default function DashboardApp() {
         nav={nav}
         onNavChange={setNav}
       />
-      {nav === 'inbox' && (
+      {nav === 'invoices' && (
         <main className="main-content">
           <KPICards
             all={kpi.all}
@@ -134,7 +134,7 @@ export default function DashboardApp() {
       )}
       {nav === 'documents' && (
         <main className="main-content main-content--padded">
-          <DocumentsPanel rows={invoices} />
+          <DocumentsPanel />
         </main>
       )}
       {nav === 'payments' && (
@@ -152,7 +152,7 @@ export default function DashboardApp() {
           <SettingsPanel />
         </main>
       )}
-      {nav === 'inbox' && (
+      {nav === 'invoices' && (
         <DetailPanel
           key={selected?.id ?? 'none'}
           row={selected}

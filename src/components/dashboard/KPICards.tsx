@@ -18,7 +18,7 @@ export function KPICards({
   onPickFilter: (key: 'all' | 'unpaid' | 'paid' | 'dups' | 'review' | 'noCat' | 'unknownVendor') => void
 }) {
   const cards = [
-    { key: 'all' as const, label: 'Wszystkie faktury', value: all, hint: 'Pełny inbox' },
+    { key: 'all' as const, label: 'Wszystkie faktury', value: all, hint: 'Pełna lista' },
     { key: 'unpaid' as const, label: 'Do opłacenia', value: unpaidBiz, hint: 'Firmowe, niezapłacone' },
     { key: 'paid' as const, label: 'Zapłacone', value: paid, hint: 'Potwierdzona płatność' },
     { key: 'dups' as const, label: 'Duplikaty', value: dups, hint: 'Score ≥ 85% lub potwierdzone' },

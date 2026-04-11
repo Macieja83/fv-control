@@ -31,7 +31,7 @@ export function Topbar({
           </span>
           <div>
             <h1 className="topbar__title">FV Control</h1>
-            <p className="topbar__subtitle">Invoice inbox</p>
+            <p className="topbar__subtitle">Faktury i umowy</p>
           </div>
         </div>
 

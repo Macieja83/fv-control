@@ -216,6 +216,12 @@ enum AuditEntityType {
   SETTINGS
 }
 
+enum AgreementStatus {
+  PROCESSING
+  READY
+  FAILED
+}
+
 // --- Core tenant / RBAC ---
 
 model Tenant {
@@ -246,6 +252,7 @@ model Tenant {
   complianceEvents       InvoiceComplianceEvent[]
   accountingExports      AccountingExport[]
   sourceMessages         SourceMessage[]
+  agreements             Agreement[]
 }
 
 model Permission {
@@ -304,6 +311,7 @@ model User {
 
   refreshTokens   RefreshToken[]
   invoicesCreated Invoice[]       @relation("InvoiceCreatedBy")
+  agreementsCreated Agreement[]   @relation("AgreementCreatedBy")
   invoiceEvents   InvoiceEvent[]
   roleLinks       UserRoleLink[]
   auditLogs       AuditLog[]      @relation("AuditActor")
@@ -338,7 +346,8 @@ model Contractor {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
-  invoices Invoice[]
+  invoices   Invoice[]
+  agreements Agreement[]
 
   @@unique([tenantId, nip])
   @@index([tenantId, nip])
@@ -369,11 +378,39 @@ model Document {
   extractionRuns ExtractionRun[]
   processingJobs ProcessingJob[]
   sourceAttachments SourceAttachment[]
+  agreement         Agreement?
 
   @@unique([tenantId, sourceType, sourceExternalId])
   @@index([tenantId, sha256])
   @@index([tenantId])
   @@map("documents")
+}
+
+model Agreement {
+  id                String            @id @default(uuid()) @db.Uuid
+  tenantId          String            @db.Uuid
+  tenant            Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contractorId      String?           @db.Uuid
+  contractor        Contractor?       @relation(fields: [contractorId], references: [id], onDelete: SetNull)
+  primaryDocId      String            @unique @db.Uuid
+  primaryDoc        Document          @relation(fields: [primaryDocId], references: [id], onDelete: Cascade)
+  title             String
+  subject           String?
+  counterpartyName  String?
+  counterpartyNip   String?
+  signedAt          DateTime?         @db.Date
+  validUntil        DateTime?         @db.Date
+  status            AgreementStatus   @default(PROCESSING)
+  notes             String?
+  normalizedPayload Json?             @db.JsonB
+  createdById       String            @db.Uuid
+  createdBy         User              @relation("AgreementCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  @@index([tenantId, status])
+  @@index([tenantId, createdAt])
+  @@map("agreements")
 }
 
 model Invoice {

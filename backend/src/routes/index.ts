@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import adminSettingsRoutes from "./admin-settings.routes.js";
 import adminWebhooksRoutes from "./admin-webhooks.routes.js";
 import activityRoutes from "./activity.routes.js";
+import agreementsRoutes from "./agreements.routes.js";
 import authRoutes from "./auth.routes.js";
 import connectorsRoutes from "./connectors.routes.js";
 import contractorsRoutes from "./contractors.routes.js";
@@ -25,6 +26,7 @@ export async function registerApiRoutes(app: FastifyInstance): Promise<void> {
   await app.register(authRoutes);
   await app.register(tenantRoutes);
   await app.register(activityRoutes);
+  await app.register(agreementsRoutes);
   await app.register(dashboardRoutes);
   await app.register(documentsRoutes);
   await app.register(duplicatesRoutes);

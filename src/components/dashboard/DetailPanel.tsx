@@ -213,12 +213,12 @@ export function DetailPanel({
                     type="button"
                     className="btn btn--danger-solid"
                     onClick={() => {
-                      if (window.confirm(`Usunąć ten wpis z inboxu?\n${row.invoice_number} · ${row.supplier_name}`)) {
+                      if (window.confirm(`Usunąć tę fakturę z listy?\n${row.invoice_number} · ${row.supplier_name}`)) {
                         onDeleteInvoice(row.id)
                       }
                     }}
                   >
-                    Usuń fakturę z inboxu
+                    Usuń fakturę z listy
                   </button>
                   {row.duplicate_of_id && (
                     <p className="detail-hint">

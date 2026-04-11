@@ -127,7 +127,7 @@ export function InvoiceTable({
       dataSource === 'api'
         ? 'Tej operacji nie cofniesz — faktura zostanie usunięta z bazy.'
         : 'Tej operacji nie cofniesz w MVP (mock).'
-    if (!window.confirm(`Usunąć wpis z inboxu?\n\n${label}\n\n${irreversible}`)) {
+    if (!window.confirm(`Usunąć fakturę z listy?\n\n${label}\n\n${irreversible}`)) {
       return
     }
     onDelete(id)
@@ -142,7 +142,7 @@ export function InvoiceTable({
         : 'Tej operacji nie cofniesz w MVP (mock).'
     if (
       !window.confirm(
-        `Usunąć z inboxu ${n} ${n === 1 ? 'zaznaczony rekord' : 'zaznaczonych rekordów'}?\n\n${irreversible}`,
+        `Usunąć z listy ${n} ${n === 1 ? 'zaznaczony rekord' : 'zaznaczonych rekordów'}?\n\n${irreversible}`,
       )
     ) {
       return

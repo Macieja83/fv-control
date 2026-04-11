@@ -1,7 +1,7 @@
 /** Źródło wpływu — Discord w MVP jako typ + filtr (integracja później). */
 export type SourceType = 'email' | 'ksef' | 'discord'
 
-/** Status operacyjny w inboxie (nie mylić z płatnością). */
+/** Status operacyjny na liście faktur (nie mylić z płatnością). */
 export type InvoiceReviewStatus = 'cleared' | 'needs_review'
 
 /** Potwierdzenie duplikatu przez operatora. */

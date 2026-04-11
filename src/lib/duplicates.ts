@@ -31,7 +31,7 @@ export function enrichDuplicateMetadata(
       if (group.length > 1) {
         const first = group[0]
         duplicate_score = 1
-        duplicate_reason = `Ten sam numer KSeF (${r.ksef_number}) co inny rekord w inboxie.`
+        duplicate_reason = `Ten sam numer KSeF (${r.ksef_number}) co inny rekord na liście faktur.`
         if (first.id !== r.id) duplicate_of_id = first.id
       }
     }
