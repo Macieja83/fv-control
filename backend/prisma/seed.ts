@@ -40,7 +40,7 @@ async function main() {
 
   /** Drugi użytkownik dev — typowy adres z frontowego .env (FV_RESTA_LOGIN_EMAIL). */
   const demoEmail = "kontakt@tuttopizza.pl";
-  const demoHash = await argon2.hash("Aleksander11!!", { type: argon2.argon2id });
+  const demoHash = await argon2.hash("Admin123!", { type: argon2.argon2id });
   await prisma.user.upsert({
     where: { email: demoEmail },
     update: { passwordHash: demoHash, tenantId: tenant.id, role: "ADMIN", isActive: true },
@@ -391,7 +391,7 @@ async function main() {
   });
 
   console.log(
-    "Seed OK: Resta Demo — admin@fvresta.local / Admin123!  lub  kontakt@tuttopizza.pl / Aleksander11!!",
+    "Seed OK: Resta Demo — admin@fvresta.local / Admin123!  oraz  kontakt@tuttopizza.pl / Admin123!",
   );
 }
 

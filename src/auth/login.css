@@ -142,21 +142,3 @@ html[data-theme='dark'] .login-error {
   opacity: 0.65;
   cursor: not-allowed;
 }
-
-.login-hint {
-  margin: 1.25rem 0 0;
-  font-size: 0.72rem;
-  line-height: 1.45;
-  color: var(--text-muted, #6b7285);
-}
-
-.login-hint code {
-  font-size: 0.68rem;
-  padding: 0.1rem 0.25rem;
-  border-radius: 4px;
-  background: var(--surface-2, #eef0f4);
-}
-
-html[data-theme='dark'] .login-hint code {
-  background: var(--surface-2, #1c2230);
-}
