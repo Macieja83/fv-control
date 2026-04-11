@@ -27,6 +27,9 @@ export type ApiInvoiceListRow = {
   tenant: { name: string }
   primaryDoc: { id: string; sha256: string } | null
   _count: { items: number; files: number }
+  documentKind?: string
+  needsContractorVerification?: boolean
+  extractedVendorNip?: string | null
 }
 
 export type InvoicesListResponse = {
@@ -46,11 +49,18 @@ async function readErrorMessage(res: Response): Promise<string> {
 
 export async function fetchInvoicesList(
   token: string,
-  opts?: { limit?: number; page?: number },
+  opts?: {
+    limit?: number
+    page?: number
+    documentKind?: string
+    legalChannel?: string
+  },
 ): Promise<InvoicesListResponse> {
   const limit = opts?.limit ?? 100
   const page = opts?.page ?? 1
   const q = new URLSearchParams({ limit: String(limit), page: String(page) })
+  if (opts?.documentKind) q.set('documentKind', opts.documentKind)
+  if (opts?.legalChannel) q.set('legalChannel', opts.legalChannel)
   const res = await fetch(`${API}/invoices?${q}`, {
     headers: { Authorization: `Bearer ${token}` },
   })

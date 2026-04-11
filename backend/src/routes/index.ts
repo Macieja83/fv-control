@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import adminSettingsRoutes from "./admin-settings.routes.js";
 import adminWebhooksRoutes from "./admin-webhooks.routes.js";
+import activityRoutes from "./activity.routes.js";
 import authRoutes from "./auth.routes.js";
 import connectorsRoutes from "./connectors.routes.js";
 import contractorsRoutes from "./contractors.routes.js";
@@ -16,11 +17,14 @@ import integrationsRoutes from "./integrations.routes.js";
 import webhooksRoutes from "./webhooks.routes.js";
 import workflowsRoutes from "./workflows.routes.js";
 import ksefRoutes from "./ksef.routes.js";
+import tenantRoutes from "./tenant.routes.js";
 import zenboxRoutes from "./zenbox.routes.js";
 
 export async function registerApiRoutes(app: FastifyInstance): Promise<void> {
   await app.register(healthRoutes);
   await app.register(authRoutes);
+  await app.register(tenantRoutes);
+  await app.register(activityRoutes);
   await app.register(dashboardRoutes);
   await app.register(documentsRoutes);
   await app.register(duplicatesRoutes);

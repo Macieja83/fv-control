@@ -130,6 +130,20 @@ export async function ingestAttachmentAndEnqueue(
     },
   });
 
+  await prisma.auditLog.create({
+    data: {
+      tenantId: params.tenantId,
+      actorId: params.actorUserId,
+      action: "INVOICE_INTAKE",
+      entityType: "INVOICE",
+      entityId: invoice.id,
+      metadata: {
+        filename: params.filename,
+        sourceAccount: params.sourceAccount ?? null,
+      } as object,
+    },
+  });
+
   const processingJob = await prisma.processingJob.create({
     data: {
       tenantId: params.tenantId,

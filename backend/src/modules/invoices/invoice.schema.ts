@@ -101,6 +101,8 @@ export const invoiceListQuerySchema = z
     status: z.nativeEnum(InvoiceStatus).optional(),
     ksefStatus: z.nativeEnum(KsefWorkflowStatus).optional(),
     intakeSourceType: z.nativeEnum(InvoiceIntakeSourceType).optional(),
+    documentKind: z.nativeEnum(InvoiceDocumentKind).optional(),
+    legalChannel: z.nativeEnum(LegalChannel).optional(),
     reviewStatus: z.nativeEnum(InvoiceReviewStatus).optional(),
     contractorId: z.string().uuid().optional(),
     dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),

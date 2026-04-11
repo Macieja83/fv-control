@@ -7,6 +7,7 @@ import {
   ReviewBadge,
   ScopeBadge,
   SourceBadge,
+  UnknownVendorBadge,
 } from './Badges'
 
 function formatMoney(amount: number, currency: InvoiceRecord['currency']) {
@@ -353,7 +354,8 @@ export function InvoiceTable({
                     {row.restaurant_name}
                   </td>
                   <td className="td-clip cell-strong" title={row.supplier_name}>
-                    {row.supplier_name}
+                    <span className="cell-supplier-line">{row.supplier_name}</span>
+                    <UnknownVendorBadge row={row} />
                   </td>
                   <td className="td-clip mono hide-mobile" title={row.supplier_nip}>
                     {row.supplier_nip}

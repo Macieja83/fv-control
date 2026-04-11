@@ -221,5 +221,13 @@ const baseRows: InvoiceRecord[] = [
 ]
 
 export function seedInvoices(): InvoiceRecord[] {
-  return enrichDuplicateMetadata(structuredClone(baseRows))
+  const rows = structuredClone(baseRows).map((r) => ({
+    ...r,
+    invoice_status: r.invoice_status ?? 'PARSED',
+    needs_contractor_verification: r.id === 'inv-004',
+    extracted_vendor_nip: r.id === 'inv-004' ? r.supplier_nip.replace(/\s/g, '') : null,
+    document_kind: 'INVOICE',
+    legal_channel: 'KSEF',
+  }))
+  return enrichDuplicateMetadata(rows)
 }

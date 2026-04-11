@@ -5,6 +5,7 @@ export function KPICards({
   dups,
   review,
   noCat,
+  unknownVendor,
   onPickFilter,
 }: {
   all: number
@@ -13,7 +14,8 @@ export function KPICards({
   dups: number
   review: number
   noCat: number
-  onPickFilter: (key: 'all' | 'unpaid' | 'paid' | 'dups' | 'review' | 'noCat') => void
+  unknownVendor: number
+  onPickFilter: (key: 'all' | 'unpaid' | 'paid' | 'dups' | 'review' | 'noCat' | 'unknownVendor') => void
 }) {
   const cards = [
     { key: 'all' as const, label: 'Wszystkie faktury', value: all, hint: 'Pełny inbox' },
@@ -22,6 +24,12 @@ export function KPICards({
     { key: 'dups' as const, label: 'Duplikaty', value: dups, hint: 'Score ≥ 85% lub potwierdzone' },
     { key: 'review' as const, label: 'Do sprawdzenia', value: review, hint: 'Status przeglądu' },
     { key: 'noCat' as const, label: 'Bez kategorii', value: noCat, hint: 'Wymaga kategorii kosztu' },
+    {
+      key: 'unknownVendor' as const,
+      label: 'Nowy dostawca',
+      value: unknownVendor,
+      hint: 'Brak kontrahenta w bazie',
+    },
   ]
   return (
     <section

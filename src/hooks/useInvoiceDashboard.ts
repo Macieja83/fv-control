@@ -63,6 +63,7 @@ function matchesFilters(row: InvoiceRecord, f: InvoiceFilters): boolean {
       row.supplier_name,
       row.invoice_number,
       row.supplier_nip,
+      row.extracted_vendor_nip ?? '',
       row.ksef_number ?? '',
       row.primary_document_id ?? '',
       row.notes,
@@ -99,6 +100,7 @@ export type QuickFilter =
   | 'dups'
   | 'review'
   | 'noCat'
+  | 'unknownVendor'
 
 export type InvoiceDataSource = 'mock' | 'api'
 
@@ -180,6 +182,8 @@ export function useInvoiceDashboard() {
       list = list.filter((r) => r.review_status === 'needs_review')
     } else if (quickFilter === 'noCat') {
       list = list.filter((r) => !r.category)
+    } else if (quickFilter === 'unknownVendor') {
+      list = list.filter((r) => r.needs_contractor_verification === true)
     }
     return list
   }, [invoices, filters, quickFilter])
@@ -195,7 +199,8 @@ export function useInvoiceDashboard() {
     const dups = base.filter((r) => isDuplicateFlagged(r)).length
     const review = base.filter((r) => r.review_status === 'needs_review').length
     const noCat = base.filter((r) => !r.category).length
-    return { all, unpaidBiz, paid, dups, review, noCat }
+    const unknownVendor = base.filter((r) => r.needs_contractor_verification === true).length
+    return { all, unpaidBiz, paid, dups, review, noCat, unknownVendor }
   }, [invoices, filters])
 
   const suppliers = useMemo(
@@ -640,9 +645,12 @@ export function useInvoiceDashboard() {
     }
   }, [invoices, refreshFromApi])
 
-  const pickKpi = useCallback((key: 'all' | 'unpaid' | 'paid' | 'dups' | 'review' | 'noCat') => {
-    setQuickFilter(key === 'all' ? null : key)
-  }, [])
+  const pickKpi = useCallback(
+    (key: 'all' | 'unpaid' | 'paid' | 'dups' | 'review' | 'noCat' | 'unknownVendor') => {
+      setQuickFilter(key === 'all' ? null : key)
+    },
+    [],
+  )
 
   const followerDuplicateCount = useMemo(
     () => invoices.filter((r) => r.duplicate_of_id !== null).length,

@@ -54,6 +54,11 @@ export interface InvoiceRecord {
   history: AuditEntry[]
   created_at: string
   updated_at: string
+  /** Brak dopasowanego kontrahenta — sprawdź, czy to faktycznie koszt firmy. */
+  needs_contractor_verification?: boolean
+  extracted_vendor_nip?: string | null
+  document_kind?: string
+  legal_channel?: string
 }
 
 export interface InvoiceFilters {

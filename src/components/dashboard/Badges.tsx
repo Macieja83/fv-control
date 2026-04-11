@@ -34,6 +34,16 @@ export function SourceBadge({ type }: { type: SourceType }) {
   return <span className="badge badge--source">{sourceLabel[type]}</span>
 }
 
+export function UnknownVendorBadge({ row }: { row: InvoiceRecord }) {
+  if (!row.needs_contractor_verification) return null
+  const nip = row.extracted_vendor_nip || row.supplier_nip || '—'
+  return (
+    <span className="badge badge--vendor-unknown" title="Dostawca nie jest na liście kontrahentów — zweryfikuj fakturę kosztową.">
+      Nowy NIP: {nip}
+    </span>
+  )
+}
+
 export function ReviewBadge({ row }: { row: InvoiceRecord }) {
   if (row.invoice_status === 'INGESTING') {
     return <span className="badge badge--review">OCR / kolejka…</span>

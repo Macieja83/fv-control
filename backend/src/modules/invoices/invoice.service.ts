@@ -10,6 +10,7 @@ import type {
   InvoiceListQuery,
   InvoiceUpdateInput,
 } from "./invoice.schema.js";
+import { extractVendorNipFromNormalizedPayload } from "./invoice-vendor-nip.js";
 import { serializeInvoiceDetail } from "./invoice-serialize.js";
 import { itemRowFromInput, sumTotalsFromItems } from "./invoice-totals.js";
 
@@ -20,6 +21,8 @@ export async function listInvoices(prisma: PrismaClient, tenantId: string, q: In
     ...(q.status ? { status: q.status } : {}),
     ...(q.ksefStatus ? { ksefStatus: q.ksefStatus } : {}),
     ...(q.intakeSourceType ? { intakeSourceType: q.intakeSourceType } : {}),
+    ...(q.documentKind ? { documentKind: q.documentKind } : {}),
+    ...(q.legalChannel ? { legalChannel: q.legalChannel } : {}),
     ...(q.reviewStatus ? { reviewStatus: q.reviewStatus } : {}),
     ...(q.contractorId ? { contractorId: q.contractorId } : {}),
     ...(q.dateFrom || q.dateTo
@@ -64,7 +67,15 @@ export async function listInvoices(prisma: PrismaClient, tenantId: string, q: In
 
   return {
     data: rows.map((r) => {
-      const { duplicatesAsA, ...rest } = r;
+      const {
+        duplicatesAsA,
+        normalizedPayload,
+        rawPayload: _rp,
+        complianceFlags: _cf,
+        ...rest
+      } = r;
+      const extractedVendorNip = extractVendorNipFromNormalizedPayload(normalizedPayload);
+      const needsContractorVerification = r.contractorId === null && r.status !== "INGESTING";
       return {
         ...rest,
         netTotal: r.netTotal.toString(),
@@ -73,6 +84,8 @@ export async function listInvoices(prisma: PrismaClient, tenantId: string, q: In
         duplicateScore: r.duplicateScore?.toString() ?? null,
         ocrConfidence: r.ocrConfidence?.toString() ?? null,
         duplicateCanonicalId: duplicatesAsA[0]?.canonicalInvoiceId ?? null,
+        extractedVendorNip,
+        needsContractorVerification,
       };
     }),
     meta: { total, page: q.page, limit: q.limit, totalPages: Math.ceil(total / q.limit) },

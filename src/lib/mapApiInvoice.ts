@@ -63,5 +63,9 @@ export function mapApiInvoiceRowToRecord(row: ApiInvoiceListRow): InvoiceRecord 
     history: [],
     created_at: row.createdAt,
     updated_at: row.updatedAt,
+    needs_contractor_verification: row.needsContractorVerification ?? false,
+    extracted_vendor_nip: row.extractedVendorNip ?? null,
+    document_kind: row.documentKind ?? 'OTHER',
+    legal_channel: row.legalChannel ?? 'UNKNOWN',
   }
 }

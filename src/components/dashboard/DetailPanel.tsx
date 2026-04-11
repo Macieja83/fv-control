@@ -144,6 +144,12 @@ export function DetailPanel({
                     {row.duplicate_reason && <p className="detail-reason">{row.duplicate_reason}</p>}
                   </dd>
                 </dl>
+                {row.needs_contractor_verification && (
+                  <div className="detail-alert" role="status">
+                    Brak dopasowanego kontrahenta w bazie — sprawdź, czy to faktycznie koszt firmy. Dodaj dostawcę w
+                    sekcji <strong>Kontrahenci</strong> (NIP: {row.extracted_vendor_nip || row.supplier_nip || '—'}).
+                  </div>
+                )}
               </section>
 
               <section className="detail-section">
