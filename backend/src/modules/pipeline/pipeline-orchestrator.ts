@@ -61,10 +61,15 @@ export async function runPipelineJob(prisma: PrismaClient, processingJobId: stri
   const cfg = loadConfig();
   const ai = cfg.OPENAI_API_KEY
     ? createOpenAiAdapter(cfg.OPENAI_API_KEY, cfg.OPENAI_MODEL)
-    : createMockAiAdapter(true);
+    : createMockAiAdapter(cfg.FEATURE_AI_EXTRACTION_MOCK);
+  if (!cfg.OPENAI_API_KEY && cfg.FEATURE_AI_EXTRACTION_MOCK) {
+    console.warn(
+      "[pipeline] OPENAI_API_KEY is unset — ekstrakcja używa stałych danych MOCK (numer MOCK/…, kwoty 100/23/123 PLN). Na produkcji ustaw OPENAI_API_KEY, żeby OCR czytał prawdziwą fakturę.",
+    );
+  }
   if (!cfg.OPENAI_API_KEY && !cfg.FEATURE_AI_EXTRACTION_MOCK) {
     console.warn(
-      "[pipeline] OPENAI_API_KEY is unset; using mock OCR. Set OPENAI_API_KEY for real extraction or FEATURE_AI_EXTRACTION_MOCK=true to silence this.",
+      "[pipeline] OPENAI_API_KEY is unset and FEATURE_AI_EXTRACTION_MOCK=false — ekstrakcja zwróci pusty wynik (OCR się nie powiedzie). Ustaw OPENAI_API_KEY albo tymczasowo FEATURE_AI_EXTRACTION_MOCK=true tylko na dev.",
     );
   }
 
@@ -132,7 +137,9 @@ export async function runPipelineJob(prisma: PrismaClient, processingJobId: stri
     await recordAttempt(prisma, processingJobId, attemptNo, "EXTRACT", "extracted");
 
     if (!workingDraft.number || typeof workingDraft.number !== "string") {
-      throw new Error("VALIDATION: missing invoice number from extraction");
+      throw new Error(
+        "VALIDATION: missing invoice number from extraction — brak OPENAI_API_KEY (wymagany do prawdziwego OCR) lub wyłączony mock (FEATURE_AI_EXTRACTION_MOCK=false).",
+      );
     }
     await recordAttempt(prisma, processingJobId, attemptNo, "VALIDATE", "valid");
 
