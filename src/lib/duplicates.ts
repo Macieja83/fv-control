@@ -9,6 +9,8 @@ export function enrichDuplicateMetadata(
 ): InvoiceRecord[] {
   const byKsef = new Map<string, InvoiceRecord[]>()
   const byTriple = new Map<string, InvoiceRecord[]>()
+  /** Ten sam NIP (10 cyfr) + data wystawienia + brutto — łapie np. KSeF vs e-mail z innym numerem w polu. */
+  const byNipDayGross = new Map<string, InvoiceRecord[]>()
 
   for (const r of rows) {
     if (r.ksef_number) {
@@ -19,6 +21,12 @@ export function enrichDuplicateMetadata(
     const tripleKey = `${r.supplier_nip.replace(/\s/g, '')}|${r.invoice_number.trim().toUpperCase()}|${r.gross_amount.toFixed(2)}`
     if (!byTriple.has(tripleKey)) byTriple.set(tripleKey, [])
     byTriple.get(tripleKey)!.push(r)
+    const nip10 = (r.supplier_nip || r.extracted_vendor_nip || '').replace(/\D/g, '').slice(0, 10)
+    if (nip10.length === 10) {
+      const dayGross = `${nip10}|${r.issue_date}|${r.gross_amount.toFixed(2)}`
+      if (!byNipDayGross.has(dayGross)) byNipDayGross.set(dayGross, [])
+      byNipDayGross.get(dayGross)!.push(r)
+    }
   }
 
   return rows.map((r) => {
@@ -67,6 +75,33 @@ export function enrichDuplicateMetadata(
           (duplicate_canonical_number
             ? `Duplikat faktury nr „${duplicate_canonical_number}” (NIP + numer + kwota brutto).`
             : `Powtarzający się zestaw: NIP + numer faktury + kwota brutto (${group.length} wpisów).`)
+      }
+    }
+
+    if (duplicate_score < 0.72) {
+      const nip10 = (r.supplier_nip || r.extracted_vendor_nip || '').replace(/\D/g, '').slice(0, 10)
+      if (nip10.length === 10) {
+        const dayGross = `${nip10}|${r.issue_date}|${r.gross_amount.toFixed(2)}`
+        const group = byNipDayGross.get(dayGross) ?? []
+        if (group.length > 1) {
+          const ksefFirst = (x: InvoiceRecord) => (x.source_type === 'ksef' ? 0 : 1)
+          const sorted = [...group].sort((a, b) => {
+            const ch = ksefFirst(a) - ksefFirst(b)
+            if (ch !== 0) return ch
+            return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+          })
+          const first = sorted[0]
+          duplicate_score = Math.max(duplicate_score, 0.76)
+          if (first.id !== r.id) {
+            duplicate_of_id = duplicate_of_id ?? first.id
+            duplicate_canonical_number = duplicate_canonical_number ?? first.invoice_number
+          }
+          duplicate_reason =
+            duplicate_reason ??
+            (duplicate_canonical_number
+              ? `Podejrzenie duplikatu względem „${duplicate_canonical_number}” (ten sam NIP, data i kwota brutto).`
+              : `Ten sam NIP, data wystawienia i kwota brutto (${group.length} wpisy).`)
+        }
       }
     }
 

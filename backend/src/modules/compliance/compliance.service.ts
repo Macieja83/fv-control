@@ -36,11 +36,22 @@ export async function refreshInvoiceCompliance(
   });
   if (!inv) return;
 
-  const dup = await prisma.invoiceDuplicate.findFirst({
-    where: { tenantId, candidateInvoiceId: invoiceId },
-    orderBy: { confidence: "desc" },
-  });
-  const duplicateConfidence = dup ? Number(dup.confidence) : null;
+  const [dupAsCandidate, dupAsCanonical] = await Promise.all([
+    prisma.invoiceDuplicate.findFirst({
+      where: { tenantId, candidateInvoiceId: invoiceId, resolution: "OPEN" },
+      orderBy: { confidence: "desc" },
+      select: { confidence: true },
+    }),
+    prisma.invoiceDuplicate.findFirst({
+      where: { tenantId, canonicalInvoiceId: invoiceId, resolution: "OPEN" },
+      orderBy: { confidence: "desc" },
+      select: { confidence: true },
+    }),
+  ]);
+  const cCand = dupAsCandidate != null ? Number(dupAsCandidate.confidence) : 0;
+  const cCanon = dupAsCanonical != null ? Number(dupAsCanonical.confidence) : 0;
+  const duplicateConfidence =
+    dupAsCandidate != null || dupAsCanonical != null ? Math.max(cCand, cCanon) : null;
 
   const mime = inv.primaryDocId
     ? (await prisma.document.findUnique({ where: { id: inv.primaryDocId }, select: { mimeType: true } }))?.mimeType
@@ -110,7 +121,12 @@ export async function refreshInvoiceCompliance(
     });
   }
 
-  if (opts.enqueueDuplicate && duplicateConfidence != null && duplicateConfidence >= 0.72) {
+  if (
+    opts.enqueueDuplicate &&
+    duplicateConfidence != null &&
+    duplicateConfidence >= 0.72 &&
+    dupAsCandidate != null
+  ) {
     await enqueueTenantWebhook(prisma, tenantId, "invoice.duplicate.detected", {
       invoiceId,
       confidence: duplicateConfidence,

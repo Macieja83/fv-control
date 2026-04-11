@@ -271,6 +271,8 @@ export async function runPipelineJob(prisma: PrismaClient, processingJobId: stri
       include: { contractor: true, files: true },
     });
 
+    const canonicalsToRefreshCompliance = new Set<string>();
+
     for (const p of peers) {
       const fileHashEqual =
         refreshed.files[0]?.sha256 &&
@@ -297,6 +299,7 @@ export async function runPipelineJob(prisma: PrismaClient, processingJobId: stri
           },
           { id: p.id, intakeSourceType: p.intakeSourceType, createdAt: p.createdAt },
         );
+        canonicalsToRefreshCompliance.add(canonicalId);
         const inverted = await prisma.invoiceDuplicate.findFirst({
           where: {
             tenantId: jobRow.tenantId,
@@ -328,6 +331,22 @@ export async function runPipelineJob(prisma: PrismaClient, processingJobId: stri
         }
       }
     }
+
+    for (const cid of canonicalsToRefreshCompliance) {
+      if (cid === refreshed.id) continue;
+      await refreshInvoiceCompliance(
+        prisma,
+        jobRow.tenantId,
+        cid,
+        {},
+        {
+          eventType: "COMPLIANCE_VALIDATED",
+          enqueueDuplicate: false,
+          enqueueClassified: false,
+        },
+      );
+    }
+
     await recordAttempt(prisma, processingJobId, attemptNo, "CLASSIFY", "dedup pairs evaluated");
 
     await refreshInvoiceCompliance(

@@ -21,7 +21,7 @@ export function KPICards({
     { key: 'all' as const, label: 'Wszystkie faktury', value: all, hint: 'Pełna lista' },
     { key: 'unpaid' as const, label: 'Do opłacenia', value: unpaidBiz, hint: 'Firmowe, niezapłacone' },
     { key: 'paid' as const, label: 'Zapłacone', value: paid, hint: 'Potwierdzona płatność' },
-    { key: 'dups' as const, label: 'Duplikaty', value: dups, hint: 'Score ≥ 85% lub potwierdzone' },
+    { key: 'dups' as const, label: 'Duplikaty', value: dups, hint: 'Score ≥ 72% lub potwierdzone' },
     { key: 'review' as const, label: 'Do sprawdzenia', value: review, hint: 'Status przeglądu' },
     { key: 'noCat' as const, label: 'Bez kategorii', value: noCat, hint: 'Wymaga kategorii kosztu' },
     {

@@ -21,7 +21,8 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:seed": "tsx prisma/seed.ts",
-    "verify:openai": "node scripts/verify-openai-connection.mjs"
+    "verify:openai": "node scripts/verify-openai-connection.mjs",
+    "refresh:dup-compliance": "tsx scripts/refresh-open-duplicate-compliance.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
