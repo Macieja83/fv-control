@@ -51,6 +51,10 @@ backend/
 
 Docker Compose runs migrations for **api** and **worker** startup commands (see `docker-compose.yml`).
 
+## Frontend (nginx static root)
+
+Jeśli produkcyjny UI jest pod **nginx** z `root` innym niż katalog `dist/` z buildu (np. **fv.resta.biz** → `/var/www/fv-control`), po `npm run build` w korzeniu repozytorium uruchom **`./scripts/deploy-fv-www.sh`** (zob. [deploy-systemd-api-and-worker.md](./docs/deploy-systemd-api-and-worker.md)).
+
 ## Smoke tests after deploy
 
 ```bash

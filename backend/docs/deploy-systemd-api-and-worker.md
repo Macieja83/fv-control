@@ -120,4 +120,19 @@ Jeśli Postgres z Compose ma port na hoście, często używa się `127.0.0.1:543
 
 Skrypt diagnostyczny (VPS): `backend/scripts/diagnose-vps-mail-pipeline.sh`.
 
+## Frontend pod **fv.resta.biz** (nginx — `/var/www/fv-control`)
+
+Domena **fv.resta.biz** w nginx ma zwykle `root /var/www/fv-control` — **nie** czyta plików z `~/fv-control/dist`.  
+Po **`git pull`** i buildzie frontu w katalogu głównym repozytorium:
+
+```bash
+cd ~/fv-control
+npm ci
+npm run build
+chmod +x ./scripts/deploy-fv-www.sh   # raz, jeśli brak bitu wykonywania
+./scripts/deploy-fv-www.sh
+```
+
+Domyślny cel to `/var/www/fv-control`. Inny katalog: `FV_WWW_ROOT=/ścieżka/do/www ./scripts/deploy-fv-www.sh`.
+
 Powiązane: [runbooks.md](./runbooks.md) (Redis, worker).
