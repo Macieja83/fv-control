@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from './auth/AuthContext'
 import { ActivityDrawer } from './components/app/ActivityDrawer'
-import { AppSidebar, type AppNavKey } from './components/app/AppSidebar'
+import type { AppNavKey } from './components/app/appNav'
 import { ContractorsPanel } from './components/app/ContractorsPanel'
 import { DocumentsPanel } from './components/app/DocumentsPanel'
 import { PaymentsPanel } from './components/app/PaymentsPanel'
@@ -85,76 +85,73 @@ export default function DashboardApp() {
           {listError}
         </div>
       )}
-      <div className="app-layout">
-        <AppSidebar active={nav} onSelect={setNav} />
-        <div className="app-layout__main">
-          <Topbar
-            theme={theme}
-            onThemeChange={setThemeAndDom}
-            userEmail={user?.email}
-            onLogout={() => void logout()}
-            onOpenActivity={() => setActivityOpen(true)}
-            activityUnread={activityBadge}
+      <Topbar
+        theme={theme}
+        onThemeChange={setThemeAndDom}
+        userEmail={user?.email}
+        onLogout={() => void logout()}
+        onOpenActivity={() => setActivityOpen(true)}
+        activityUnread={activityBadge}
+        nav={nav}
+        onNavChange={setNav}
+      />
+      {nav === 'inbox' && (
+        <main className="main-content">
+          <KPICards
+            all={kpi.all}
+            unpaidBiz={kpi.unpaidBiz}
+            paid={kpi.paid}
+            dups={kpi.dups}
+            review={kpi.review}
+            noCat={kpi.noCat}
+            unknownVendor={kpi.unknownVendor}
+            onPickFilter={pickKpi}
           />
-          {nav === 'inbox' && (
-            <main className="main-content">
-              <KPICards
-                all={kpi.all}
-                unpaidBiz={kpi.unpaidBiz}
-                paid={kpi.paid}
-                dups={kpi.dups}
-                review={kpi.review}
-                noCat={kpi.noCat}
-                unknownVendor={kpi.unknownVendor}
-                onPickFilter={pickKpi}
-              />
-              <InvoiceUpload onUploaded={() => void refreshFromApi()} />
-              <FilterBar
-                filters={filters}
-                onChange={setFilters}
-                suppliers={suppliers}
-                restaurants={restaurants}
-                categories={categories}
-              />
-              <InvoiceTable
-                rows={filtered}
-                selectedId={selected?.id ?? null}
-                onSelect={(id) => setSelectedId(id)}
-                onDelete={(id) => void deleteInvoice(id)}
-                followerDuplicateCount={followerDuplicateCount}
-                onDeleteFollowerDuplicates={() => void deleteFollowerDuplicates()}
-                loading={listLoading}
-                dataSource={dataSource}
-                onBulkMarkPaid={(ids) => bulkMarkPaid(ids)}
-                onBulkMarkUnpaid={(ids) => bulkMarkUnpaid(ids)}
-                onBulkMarkNeedsReview={(ids) => bulkMarkNeedsReview(ids)}
-                onBulkMarkReviewOk={(ids) => bulkMarkReviewOk(ids)}
-                onBulkDelete={(ids) => bulkDeleteInvoices(ids)}
-              />
-            </main>
-          )}
-          {nav === 'documents' && (
-            <main className="main-content main-content--padded">
-              <DocumentsPanel rows={invoices} />
-            </main>
-          )}
-          {nav === 'payments' && (
-            <main className="main-content main-content--padded">
-              <PaymentsPanel />
-            </main>
-          )}
-          {nav === 'contractors' && (
-            <main className="main-content main-content--padded">
-              <ContractorsPanel />
-            </main>
-          )}
-          {nav === 'settings' && (
-            <main className="main-content main-content--padded">
-              <SettingsPanel />
-            </main>
-          )}
-        </div>
-      </div>
+          <InvoiceUpload onUploaded={() => void refreshFromApi()} />
+          <FilterBar
+            filters={filters}
+            onChange={setFilters}
+            suppliers={suppliers}
+            restaurants={restaurants}
+            categories={categories}
+          />
+          <InvoiceTable
+            rows={filtered}
+            selectedId={selected?.id ?? null}
+            onSelect={(id) => setSelectedId(id)}
+            onDelete={(id) => void deleteInvoice(id)}
+            followerDuplicateCount={followerDuplicateCount}
+            onDeleteFollowerDuplicates={() => void deleteFollowerDuplicates()}
+            loading={listLoading}
+            dataSource={dataSource}
+            onBulkMarkPaid={(ids) => bulkMarkPaid(ids)}
+            onBulkMarkUnpaid={(ids) => bulkMarkUnpaid(ids)}
+            onBulkMarkNeedsReview={(ids) => bulkMarkNeedsReview(ids)}
+            onBulkMarkReviewOk={(ids) => bulkMarkReviewOk(ids)}
+            onBulkDelete={(ids) => bulkDeleteInvoices(ids)}
+          />
+        </main>
+      )}
+      {nav === 'documents' && (
+        <main className="main-content main-content--padded">
+          <DocumentsPanel rows={invoices} />
+        </main>
+      )}
+      {nav === 'payments' && (
+        <main className="main-content main-content--padded">
+          <PaymentsPanel />
+        </main>
+      )}
+      {nav === 'contractors' && (
+        <main className="main-content main-content--padded">
+          <ContractorsPanel />
+        </main>
+      )}
+      {nav === 'settings' && (
+        <main className="main-content main-content--padded">
+          <SettingsPanel />
+        </main>
+      )}
       {nav === 'inbox' && (
         <DetailPanel
           key={selected?.id ?? 'none'}
