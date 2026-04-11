@@ -353,7 +353,7 @@ export function DetailPanel({
                     </p>
                   )}
 
-                  {onRetryExtraction && row.source_type !== 'ksef' && (
+                  {onRetryExtraction && (
                     <button
                       type="button"
                       className="btn btn--warning"

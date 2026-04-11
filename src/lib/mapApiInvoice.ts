@@ -60,7 +60,10 @@ export function mapApiInvoiceRowToRecord(row: ApiInvoiceListRow): InvoiceRecord 
         : 'Powiązany duplikat wykryty przy imporcie (NIP / kwota / data lub plik).'
       : null,
     duplicate_resolution: 'none',
-    ksef_number: row.ksefNumber?.trim() || null,
+    ksef_number:
+      row.ksefNumber?.trim() ||
+      (row.intakeSourceType === 'KSEF_API' ? row.sourceExternalId?.trim() || null : null) ||
+      null,
     message_id: row.sourceExternalId?.trim() || null,
     attachment_hash: row.primaryDoc?.sha256 ?? null,
     notes: row.notes ?? '',

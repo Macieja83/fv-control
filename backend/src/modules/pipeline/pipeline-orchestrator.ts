@@ -12,6 +12,7 @@ import { loadConfig } from "../../config.js";
 import { pipelineJobsTotal } from "../../lib/metrics.js";
 import { classifyDocumentType } from "../compliance/compliance-engine.js";
 import { refreshInvoiceCompliance } from "../compliance/compliance.service.js";
+import { tryExtractDraftFromKsefFaXml } from "../ksef/ksef-fa-xml-extract.js";
 import { parseInvoiceDate } from "../invoices/invoice-dates.js";
 
 async function streamToBuffer(stream: Readable): Promise<Buffer> {
@@ -116,12 +117,27 @@ export async function runPipelineJob(prisma: PrismaClient, processingJobId: stri
       );
     }
 
-    const { draft: extractedDraft, confidence } = await ai.extractInvoiceData({
-      mimeType: document.mimeType,
-      sha256: document.sha256,
-      storageKey: document.storageKey,
-      buffer: documentBuffer,
-    });
+    const intakeKind = mapIngestionToIntake(document.sourceType);
+    const fromKsefSource = intakeKind === "KSEF_API" || document.sourceType === "KSEF";
+    const xmlExtract = tryExtractDraftFromKsefFaXml(documentBuffer, document.mimeType ?? "");
+
+    let extractedDraft: ExtractedInvoiceDraft;
+    let confidence: number;
+    if (fromKsefSource && xmlExtract?.draft?.number) {
+      extractedDraft = xmlExtract.draft;
+      confidence = xmlExtract.confidence;
+      console.info(`[pipeline] KSeF FA XML structural extract for invoice ${invoice.id}`);
+    } else {
+      const aiResult = await ai.extractInvoiceData({
+        mimeType: document.mimeType,
+        sha256: document.sha256,
+        storageKey: document.storageKey,
+        buffer: documentBuffer,
+      });
+      extractedDraft = aiResult.draft;
+      confidence = aiResult.confidence;
+    }
+
     workingDraft = extractedDraft;
     await prisma.extractionRun.create({
       data: {
@@ -234,6 +250,9 @@ export async function runPipelineJob(prisma: PrismaClient, processingJobId: stri
             filename: document.storageKey,
           }),
           normalizedPayload: draft as object,
+          ...(document.sourceType === "KSEF" && document.sourceExternalId?.trim()
+            ? { ksefNumber: document.sourceExternalId.trim() }
+            : {}),
         },
       });
     });

@@ -40,12 +40,6 @@ export async function retryInvoiceExtraction(
     );
   }
 
-  if (invoice.intakeSourceType === "KSEF_API") {
-    throw AppError.validation(
-      "Faktury pobrane z KSeF mają dane ze strukturalnego XML — ponowna ekstrakcja OCR nie jest dostępna.",
-    );
-  }
-
   const inflight = await prisma.processingJob.findFirst({
     where: {
       tenantId,
