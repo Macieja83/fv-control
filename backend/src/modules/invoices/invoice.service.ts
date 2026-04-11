@@ -59,7 +59,10 @@ export async function listInvoices(prisma: PrismaClient, tenantId: string, q: In
           where: { resolution: "OPEN" },
           orderBy: { confidence: "desc" },
           take: 1,
-          select: { canonicalInvoiceId: true },
+          select: {
+            canonicalInvoiceId: true,
+            canonical: { select: { number: true } },
+          },
         },
         _count: { select: { items: true, files: true } },
       },
@@ -85,6 +88,7 @@ export async function listInvoices(prisma: PrismaClient, tenantId: string, q: In
         duplicateScore: r.duplicateScore?.toString() ?? null,
         ocrConfidence: r.ocrConfidence?.toString() ?? null,
         duplicateCanonicalId: duplicatesAsA[0]?.canonicalInvoiceId ?? null,
+        duplicateCanonicalNumber: duplicatesAsA[0]?.canonical?.number ?? null,
         extractedVendorNip,
         needsContractorVerification,
       };

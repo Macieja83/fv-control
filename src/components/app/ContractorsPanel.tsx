@@ -82,7 +82,7 @@ export function ContractorsPanel() {
         <div>
           <h2 className="workspace-panel__title">Kontrahenci</h2>
           <p className="workspace-panel__lead">
-            Lista zaufanych dostawców. Gdy wpłynie faktura kosztowa bez dopasowanego kontrahenta, zobaczysz
+            Lista zaufanych kontrahentów. Gdy wpłynie faktura kosztowa bez dopasowanego kontrahenta, zobaczysz
             ostrzeżenie w tabeli faktur — dodaj tutaj NIP, aby kolejne faktury były rozpoznawane.
           </p>
         </div>

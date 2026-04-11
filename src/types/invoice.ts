@@ -48,6 +48,8 @@ export interface InvoiceRecord {
   review_status: InvoiceReviewStatus
   duplicate_score: number
   duplicate_of_id: string | null
+  /** Numer faktury oryginału, gdy `duplicate_of_id` wskazuje canonical. */
+  duplicate_canonical_number?: string | null
   duplicate_reason: string | null
   duplicate_resolution: DuplicateResolution
   ksef_number: string | null

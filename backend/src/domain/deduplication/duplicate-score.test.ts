@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { scoreInvoiceDuplicatePair } from "./duplicate-score.js";
+import { orientInvoiceDuplicateRoles, scoreInvoiceDuplicatePair } from "./duplicate-score.js";
 
 describe("scoreInvoiceDuplicatePair", () => {
   it("flags exact fingerprint", () => {
@@ -64,5 +64,23 @@ describe("scoreInvoiceDuplicatePair", () => {
     });
     expect(r.reasonCodes).toContain("AMOUNT_SAME_ISSUE_DAY");
     expect(r.confidence).toBeGreaterThanOrEqual(0.72);
+  });
+});
+
+describe("orientInvoiceDuplicateRoles", () => {
+  const t0 = new Date("2026-04-01T10:00:00Z");
+  const t1 = new Date("2026-04-02T10:00:00Z");
+
+  it("prefers KSEF_API as canonical over EMAIL", () => {
+    const ksef = { id: "a", intakeSourceType: "KSEF_API", createdAt: t1 };
+    const mail = { id: "b", intakeSourceType: "EMAIL", createdAt: t0 };
+    expect(orientInvoiceDuplicateRoles(ksef, mail)).toEqual({ canonicalId: "a", candidateId: "b" });
+    expect(orientInvoiceDuplicateRoles(mail, ksef)).toEqual({ canonicalId: "a", candidateId: "b" });
+  });
+
+  it("when both non-KSEF, older createdAt is canonical", () => {
+    const older = { id: "x", intakeSourceType: "EMAIL", createdAt: t0 };
+    const newer = { id: "y", intakeSourceType: "UPLOAD", createdAt: t1 };
+    expect(orientInvoiceDuplicateRoles(newer, older)).toEqual({ canonicalId: "x", candidateId: "y" });
   });
 });

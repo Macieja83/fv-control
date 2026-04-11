@@ -21,6 +21,8 @@ export type ApiInvoiceListRow = {
   duplicateScore: string | null
   /** Faktura „oryginał”, jeśli ten wpis jest kandydatem na duplikat (z tabeli invoice_duplicates). */
   duplicateCanonicalId: string | null
+  /** Numer faktury oryginału (canonical), gdy ten wiersz jest duplikatem. */
+  duplicateCanonicalNumber?: string | null
   createdAt: string
   updatedAt: string
   contractor: { id: string; name: string; nip: string | null } | null
@@ -164,4 +166,24 @@ export async function postRetryInvoiceExtraction(
   if (res.status === 401) throw new Error('Sesja wygasła — zaloguj się ponownie.')
   if (!res.ok) throw new Error(await readErrorMessage(res))
   return (await res.json()) as RetryExtractionResponse
+}
+
+export type AdoptVendorResponse = { contractorId: string; created: boolean }
+
+export async function postAdoptInvoiceVendor(
+  token: string,
+  invoiceId: string,
+  body?: { nip?: string; name?: string },
+): Promise<AdoptVendorResponse> {
+  const res = await fetch(`${API}/invoices/${encodeURIComponent(invoiceId)}/adopt-vendor`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body ?? {}),
+  })
+  if (res.status === 401) throw new Error('Sesja wygasła — zaloguj się ponownie.')
+  if (!res.ok) throw new Error(await readErrorMessage(res))
+  return (await res.json()) as AdoptVendorResponse
 }

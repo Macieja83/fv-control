@@ -7,7 +7,7 @@ import { createMockAiAdapter } from "../../adapters/ai/ai-invoice.adapter.js";
 import { createOpenAiAdapter } from "../../adapters/ai/openai-invoice.adapter.js";
 import { createObjectStorage } from "../../adapters/storage/create-storage.js";
 import { buildInvoiceFingerprint } from "../../domain/deduplication/invoice-fingerprint.js";
-import { scoreInvoiceDuplicatePair } from "../../domain/deduplication/duplicate-score.js";
+import { orientInvoiceDuplicateRoles, scoreInvoiceDuplicatePair } from "../../domain/deduplication/duplicate-score.js";
 import { loadConfig } from "../../config.js";
 import { pipelineJobsTotal } from "../../lib/metrics.js";
 import { classifyDocumentType } from "../compliance/compliance-engine.js";
@@ -233,6 +233,7 @@ export async function runPipelineJob(prisma: PrismaClient, processingJobId: stri
             intakeSourceType: mapIngestionToIntake(document.sourceType),
             filename: document.storageKey,
           }),
+          normalizedPayload: draft as object,
         },
       });
     });
@@ -288,19 +289,38 @@ export async function runPipelineJob(prisma: PrismaClient, processingJobId: stri
         issueDateB: p.issueDate,
       });
       if (score.confidence >= 0.72) {
+        const { canonicalId, candidateId } = orientInvoiceDuplicateRoles(
+          {
+            id: refreshed.id,
+            intakeSourceType: refreshed.intakeSourceType,
+            createdAt: refreshed.createdAt,
+          },
+          { id: p.id, intakeSourceType: p.intakeSourceType, createdAt: p.createdAt },
+        );
+        const inverted = await prisma.invoiceDuplicate.findFirst({
+          where: {
+            tenantId: jobRow.tenantId,
+            candidateInvoiceId: canonicalId,
+            canonicalInvoiceId: candidateId,
+            resolution: "OPEN",
+          },
+        });
+        if (inverted) {
+          await prisma.invoiceDuplicate.delete({ where: { id: inverted.id } });
+        }
         const existing = await prisma.invoiceDuplicate.findFirst({
           where: {
             tenantId: jobRow.tenantId,
-            candidateInvoiceId: refreshed.id,
-            canonicalInvoiceId: p.id,
+            candidateInvoiceId: candidateId,
+            canonicalInvoiceId: canonicalId,
           },
         });
         if (!existing) {
           await prisma.invoiceDuplicate.create({
             data: {
               tenantId: jobRow.tenantId,
-              candidateInvoiceId: refreshed.id,
-              canonicalInvoiceId: p.id,
+              candidateInvoiceId: candidateId,
+              canonicalInvoiceId: canonicalId,
               confidence: new Prisma.Decimal(Math.min(1, score.confidence).toFixed(4)),
               reasonCodes: score.reasonCodes,
             },

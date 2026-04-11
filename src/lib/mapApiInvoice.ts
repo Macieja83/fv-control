@@ -24,6 +24,7 @@ export function mapApiInvoiceRowToRecord(row: ApiInvoiceListRow): InvoiceRecord 
   const gross = Number.parseFloat(row.grossTotal)
   const dup = row.duplicateScore != null ? Number.parseFloat(row.duplicateScore) : 0
   const dupOf = row.duplicateCanonicalId?.trim() || null
+  const dupNo = row.duplicateCanonicalNumber?.trim() || null
 
   const needsReviewByWorkflow =
     row.status === 'INGESTING' ||
@@ -52,8 +53,11 @@ export function mapApiInvoiceRowToRecord(row: ApiInvoiceListRow): InvoiceRecord 
     review_status: needsReviewByWorkflow ? 'needs_review' : 'cleared',
     duplicate_score: Number.isFinite(dup) ? dup : 0,
     duplicate_of_id: dupOf,
+    duplicate_canonical_number: dupNo,
     duplicate_reason: dupOf
-      ? 'Powiązany duplikat wykryty przy imporcie (NIP / kwota / data lub plik).'
+      ? dupNo
+        ? `Duplikat faktury nr „${dupNo}” (oryginał w systemie — zwykle KSeF lub pierwszy import).`
+        : 'Powiązany duplikat wykryty przy imporcie (NIP / kwota / data lub plik).'
       : null,
     duplicate_resolution: 'none',
     ksef_number: row.ksefNumber?.trim() || null,

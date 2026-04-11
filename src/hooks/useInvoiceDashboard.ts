@@ -4,6 +4,7 @@ import {
   fetchInvoicesList,
   patchInvoice,
   patchInvoiceStatus,
+  postAdoptInvoiceVendor,
   postCreateInvoice,
   postRetryInvoiceExtraction,
   postSendInvoiceToKsef,
@@ -622,6 +623,24 @@ export function useInvoiceDashboard() {
     [refreshFromApi],
   )
 
+  const adoptInvoiceVendor = useCallback(
+    async (id: string, body?: { nip?: string; name?: string }) => {
+      if (USE_MOCK_INVOICES) {
+        window.alert('W trybie demo nie ma zapisu kontrahenta przez API.')
+        return
+      }
+      const token = getStoredToken()
+      if (!token) return
+      try {
+        await postAdoptInvoiceVendor(token, id, body)
+        await refreshFromApi()
+      } catch (e) {
+        window.alert(e instanceof Error ? e.message : String(e))
+      }
+    },
+    [refreshFromApi],
+  )
+
   const retryInvoiceExtraction = useCallback(
     async (id: string) => {
       if (USE_MOCK_INVOICES) {
@@ -754,6 +773,7 @@ export function useInvoiceDashboard() {
     categoryLocalOnly: !USE_MOCK_INVOICES,
     refreshFromApi,
     retryInvoiceExtraction,
+    adoptInvoiceVendor,
     sendInvoiceToKsef,
     createSalesInvoice,
   }

@@ -5,6 +5,7 @@ import {
   accountingExportBatchSchema,
   invoiceClassifyBodySchema,
   invoiceCreateSchema,
+  invoiceAdoptVendorBodySchema,
   invoiceIdParamSchema,
   invoiceIntakeSchema,
   invoiceItemCreateSchema,
@@ -22,6 +23,7 @@ import {
 import { intakeInvoice } from "../modules/invoices/invoice-intake.service.js";
 import * as invoiceService from "../modules/invoices/invoice.service.js";
 import { openInvoicePrimaryDocumentStream } from "../modules/invoices/invoice-primary-document.service.js";
+import { adoptInvoiceVendor } from "../modules/invoices/invoice-adopt-vendor.service.js";
 import { retryInvoiceExtraction } from "../modules/pipeline/retry-invoice-extraction.service.js";
 
 const invoicesRoutes: FastifyPluginAsync = async (app) => {
@@ -85,6 +87,29 @@ const invoicesRoutes: FastifyPluginAsync = async (app) => {
         id,
       );
       return reply.status(202).send(result);
+    },
+  );
+
+  app.post(
+    "/invoices/:id/adopt-vendor",
+    {
+      preHandler: [app.authenticate, app.checkIdempotency],
+      schema: {
+        tags: ["Invoices"],
+        summary: "Create or link contractor from invoice (trusted vendor / new NIP)",
+      },
+    },
+    async (request, reply) => {
+      assertCanMutate(request.authUser!.role);
+      const { id } = parseOrThrow(invoiceIdParamSchema, request.params, "Invalid id");
+      const body = parseOrThrow(invoiceAdoptVendorBodySchema, request.body ?? {});
+      const result = await adoptInvoiceVendor(
+        app.prisma,
+        request.authUser!.tenantId,
+        id,
+        body,
+      );
+      return reply.status(200).send(result);
     },
   );
 

@@ -114,3 +114,23 @@ export function scoreInvoiceDuplicatePair(input: {
   confidence = Math.min(1, confidence);
   return { confidence, reasonCodes };
 }
+
+/**
+ * Wybór „oryginał” (canonical) vs duplikat (candidate): faktury z KSeF (`KSEF_API`)
+ * zawsze wygrywają z innymi kanałami; przy remisie — starszy wpis (`createdAt`).
+ */
+export function orientInvoiceDuplicateRoles(
+  a: { id: string; intakeSourceType: string; createdAt: Date },
+  b: { id: string; intakeSourceType: string; createdAt: Date },
+): { canonicalId: string; candidateId: string } {
+  const aK = a.intakeSourceType === "KSEF_API";
+  const bK = b.intakeSourceType === "KSEF_API";
+  if (aK && !bK) return { canonicalId: a.id, candidateId: b.id };
+  if (bK && !aK) return { canonicalId: b.id, candidateId: a.id };
+  const aTime = a.createdAt.getTime();
+  const bTime = b.createdAt.getTime();
+  if (aTime !== bTime) {
+    return aTime <= bTime ? { canonicalId: a.id, candidateId: b.id } : { canonicalId: b.id, candidateId: a.id };
+  }
+  return a.id <= b.id ? { canonicalId: a.id, candidateId: b.id } : { canonicalId: b.id, candidateId: a.id };
+}

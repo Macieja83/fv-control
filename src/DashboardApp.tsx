@@ -65,6 +65,7 @@ export default function DashboardApp() {
     categoryLocalOnly,
     refreshFromApi,
     retryInvoiceExtraction,
+    adoptInvoiceVendor,
     sendInvoiceToKsef,
     createSalesInvoice,
   } = useInvoiceDashboard()
@@ -190,6 +191,7 @@ export default function DashboardApp() {
           onRetryExtraction={(id) => void retryInvoiceExtraction(id)}
           onDeleteInvoice={(id) => void deleteInvoice(id)}
           onSendToKsef={(id) => void sendInvoiceToKsef(id)}
+          onAdoptVendor={(id, body) => void adoptInvoiceVendor(id, body)}
         />
       )}
       <ActivityDrawer open={activityOpen} onClose={() => setActivityOpen(false)} />

@@ -176,8 +176,15 @@ export const accountingExportBatchSchema = z.object({
   invoiceIds: z.array(z.string().uuid()).min(1).max(500),
 });
 
+/** Opcjonalne nadpisanie NIP/nazwy przy dopisywaniu kontrahenta z faktury. */
+export const invoiceAdoptVendorBodySchema = z.object({
+  nip: z.string().max(24).optional(),
+  name: z.string().max(300).optional(),
+});
+
 export type InvoiceCreateInput = z.output<typeof invoiceCreateSchema>;
 export type InvoiceUpdateInput = z.infer<typeof invoiceUpdateSchema>;
 export type InvoiceListQuery = z.output<typeof invoiceListQuerySchema>;
 export type InvoiceItemInput = z.infer<typeof invoiceItemInputSchema>;
 export type InvoiceIntakeInput = z.output<typeof invoiceIntakeSchema>;
+export type InvoiceAdoptVendorBody = z.infer<typeof invoiceAdoptVendorBodySchema>;

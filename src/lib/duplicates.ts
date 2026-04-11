@@ -24,15 +24,25 @@ export function enrichDuplicateMetadata(
   return rows.map((r) => {
     let duplicate_score = r.duplicate_score ?? 0
     let duplicate_of_id: string | null = r.duplicate_of_id ?? null
+    let duplicate_canonical_number: string | null = r.duplicate_canonical_number ?? null
     let duplicate_reason: string | null = r.duplicate_reason ?? null
 
     if (r.ksef_number) {
       const group = byKsef.get(r.ksef_number.trim().toUpperCase()) ?? []
       if (group.length > 1) {
-        const first = group[0]
+        const ksefFirst = (x: InvoiceRecord) => (x.source_type === 'ksef' ? 0 : 1)
+        const sorted = [...group].sort((a, b) => {
+          const ch = ksefFirst(a) - ksefFirst(b)
+          if (ch !== 0) return ch
+          return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        })
+        const first = sorted[0]
         duplicate_score = 1
         duplicate_reason = `Ten sam numer KSeF (${r.ksef_number}) co inny rekord na liście faktur.`
-        if (first.id !== r.id) duplicate_of_id = first.id
+        if (first.id !== r.id) {
+          duplicate_of_id = first.id
+          duplicate_canonical_number = duplicate_canonical_number ?? first.invoice_number
+        }
       }
     }
 
@@ -40,24 +50,30 @@ export function enrichDuplicateMetadata(
       const tripleKey = `${r.supplier_nip.replace(/\s/g, '')}|${r.invoice_number.trim().toUpperCase()}|${r.gross_amount.toFixed(2)}`
       const group = byTriple.get(tripleKey) ?? []
       if (group.length > 1) {
-        const sorted = [...group].sort(
-          (a, b) =>
-            new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
-        )
+        const ksefFirst = (x: InvoiceRecord) => (x.source_type === 'ksef' ? 0 : 1)
+        const sorted = [...group].sort((a, b) => {
+          const ch = ksefFirst(a) - ksefFirst(b)
+          if (ch !== 0) return ch
+          return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        })
         const first = sorted[0]
         duplicate_score = Math.max(duplicate_score, 0.85)
-        duplicate_reason =
-          duplicate_reason ??
-          `Powtarzający się zestaw: NIP + numer faktury + kwota brutto (${group.length} wpisów).`
         if (first.id !== r.id) {
           duplicate_of_id = duplicate_of_id ?? first.id
+          duplicate_canonical_number = duplicate_canonical_number ?? first.invoice_number
         }
+        duplicate_reason =
+          duplicate_reason ??
+          (duplicate_canonical_number
+            ? `Duplikat faktury nr „${duplicate_canonical_number}” (NIP + numer + kwota brutto).`
+            : `Powtarzający się zestaw: NIP + numer faktury + kwota brutto (${group.length} wpisów).`)
       }
     }
 
     if (r.duplicate_resolution === 'rejected') {
       duplicate_score = 0
       duplicate_of_id = null
+      duplicate_canonical_number = null
       duplicate_reason = null
     }
 
@@ -66,6 +82,8 @@ export function enrichDuplicateMetadata(
       duplicate_score,
       duplicate_of_id:
         r.duplicate_resolution === 'rejected' ? null : duplicate_of_id,
+      duplicate_canonical_number:
+        r.duplicate_resolution === 'rejected' ? null : duplicate_canonical_number,
       duplicate_reason:
         r.duplicate_resolution === 'rejected' ? null : duplicate_reason,
     }

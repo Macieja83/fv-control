@@ -274,7 +274,21 @@ export function KsefInvoicePreview({ xmlText, ksefNumber: ksefNumProp, onDownloa
     setTimeout(() => { win.print() }, 350)
   }, [data?.invoiceNumber])
 
-  if (!data) return null
+  if (!data) {
+    return (
+      <div className="ksef-doc-wrap ksef-doc-wrap--fallback">
+        <p className="doc-preview__hint" role="status">
+          Nie udało się odczytać struktury FA z pliku XML (np. inna wersja schematu KSeF). Dane w tabeli pochodzą z
+          przetwarzania backendu — możesz pobrać plik XML i zweryfikować treść ręcznie.
+        </p>
+        {onDownload && (
+          <button type="button" className="btn btn--primary btn--sm" onClick={onDownload}>
+            Pobierz XML
+          </button>
+        )}
+      </div>
+    )
+  }
 
   const ksefNum = ksefNumProp || data.ksefNumber || ''
 

@@ -32,6 +32,8 @@ type Props = {
   onDeleteInvoice: (id: string) => void
   /** Wysyłka do KSeF (faktury sprzedaży). */
   onSendToKsef?: (id: string) => void | Promise<void>
+  /** Utwórz / dopnij kontrahenta po NIP i przypisz do faktury kosztowej. */
+  onAdoptVendor?: (id: string, body?: { nip?: string; name?: string }) => void | Promise<void>
 }
 
 export function DetailPanel({
@@ -54,18 +56,27 @@ export function DetailPanel({
   onRetryExtraction,
   onDeleteInvoice,
   onSendToKsef,
+  onAdoptVendor,
 }: Props) {
   const [draftNotes, setDraftNotes] = useState('')
   const [ocrBusy, setOcrBusy] = useState(false)
   const [ksefBusy, setKsefBusy] = useState(false)
+  const [adoptNip, setAdoptNip] = useState('')
+  const [adoptName, setAdoptName] = useState('')
+  const [adoptBusy, setAdoptBusy] = useState(false)
   const overlayRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!row) {
       setDraftNotes('')
+      setAdoptNip('')
+      setAdoptName('')
       return
     }
     setDraftNotes(row.notes)
+    const digits = (row.extracted_vendor_nip || row.supplier_nip || '').replace(/\D/g, '')
+    setAdoptNip(digits.slice(0, 10))
+    setAdoptName('')
   }, [row?.id])
 
   const handleKeyDown = useCallback(
@@ -128,9 +139,11 @@ export function DetailPanel({
                 <h3>Dane faktury</h3>
                 <dl className="detail-dl">
                   <dt>{row.ledger_kind === 'sale' ? 'Nabywca' : 'Dostawca'}</dt>
-                  <dd>{row.supplier_name}</dd>
+                  <dd>
+                    {row.supplier_name?.trim() && row.supplier_name.trim() !== '—' ? row.supplier_name : '—'}
+                  </dd>
                   <dt>NIP</dt>
-                  <dd className="mono">{row.supplier_nip}</dd>
+                  <dd className="mono">{row.supplier_nip?.trim() || '—'}</dd>
                   <dt>Numer faktury</dt>
                   <dd className="mono">{row.invoice_number}</dd>
                   <dt>Rejestr</dt>
@@ -161,8 +174,57 @@ export function DetailPanel({
                 </dl>
                 {row.needs_contractor_verification && row.ledger_kind !== 'sale' && (
                   <div className="detail-alert" role="status">
-                    Brak dopasowanego kontrahenta w bazie — sprawdź, czy to faktycznie koszt firmy. Dodaj dostawcę w
-                    sekcji <strong>Kontrahenci</strong> (NIP: {row.extracted_vendor_nip || row.supplier_nip || '—'}).
+                    Brak dopasowanego kontrahenta w bazie — sprawdź, czy to faktycznie koszt firmy. Możesz dopisać
+                    kontrahenta poniżej albo ręcznie w sekcji <strong>Kontrahenci</strong> (NIP:{' '}
+                    {row.extracted_vendor_nip || row.supplier_nip || '—'}).
+                  </div>
+                )}
+                {row.needs_contractor_verification && row.ledger_kind !== 'sale' && onAdoptVendor && (
+                  <div className="detail-adopt-vendor" style={{ marginTop: 14 }}>
+                    <h4 className="detail-adopt-vendor__title">Zaufany kontrahent</h4>
+                    <p className="workspace-panel__muted" style={{ marginBottom: 10 }}>
+                      Rozpoznajesz tego kontrahenta? Utwórz wpis na liście (lub dopnij istniejący po NIP) i przypisz go
+                      do tej faktury.
+                    </p>
+                    <label className="field" style={{ marginBottom: 8 }}>
+                      <span className="field__label">NIP (10 cyfr)</span>
+                      <input
+                        className="input mono"
+                        inputMode="numeric"
+                        autoComplete="off"
+                        maxLength={10}
+                        value={adoptNip}
+                        onChange={(e) => setAdoptNip(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                      />
+                    </label>
+                    <label className="field" style={{ marginBottom: 10 }}>
+                      <span className="field__label">Nazwa (opcjonalnie)</span>
+                      <input
+                        className="input"
+                        maxLength={300}
+                        value={adoptName}
+                        onChange={(e) => setAdoptName(e.target.value)}
+                        placeholder="np. z nagłówka faktury"
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      className="btn btn--primary"
+                      disabled={adoptBusy || row.invoice_status === 'INGESTING' || adoptNip.length !== 10}
+                      onClick={async () => {
+                        setAdoptBusy(true)
+                        try {
+                          await onAdoptVendor(row.id, {
+                            nip: adoptNip.trim() || undefined,
+                            name: adoptName.trim() || undefined,
+                          })
+                        } finally {
+                          setAdoptBusy(false)
+                        }
+                      }}
+                    >
+                      {adoptBusy ? 'Zapisywanie…' : 'Dodaj kontrahenta i przypisz'}
+                    </button>
                   </div>
                 )}
               </section>
@@ -271,7 +333,7 @@ export function DetailPanel({
                   <button type="button" className="btn" onClick={() => onRejectDup(row.id)}>Odrzuć duplikat</button>
                   {row.duplicate_of_id && linkedRow && (
                     <button type="button" className="btn btn--link" onClick={() => onGoTo(row.duplicate_of_id!)}>
-                      Przejdź do powiązanego ({linkedRow.invoice_number})
+                      Przejdź do oryginału ({row.duplicate_canonical_number?.trim() || linkedRow.invoice_number})
                     </button>
                   )}
                   <button
@@ -291,7 +353,7 @@ export function DetailPanel({
                     </p>
                   )}
 
-                  {onRetryExtraction && (
+                  {onRetryExtraction && row.source_type !== 'ksef' && (
                     <button
                       type="button"
                       className="btn btn--warning"

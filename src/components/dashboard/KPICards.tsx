@@ -26,7 +26,7 @@ export function KPICards({
     { key: 'noCat' as const, label: 'Bez kategorii', value: noCat, hint: 'Wymaga kategorii kosztu' },
     {
       key: 'unknownVendor' as const,
-      label: 'Nowy dostawca',
+      label: 'Nowy kontrahent',
       value: unknownVendor,
       hint: 'Brak kontrahenta w bazie',
     },
