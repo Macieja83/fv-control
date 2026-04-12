@@ -19,6 +19,7 @@ import { refreshInvoiceCompliance } from "../compliance/compliance.service.js";
 import { findContractorByNormalizedNip, polishNipDigits10 } from "../contractors/contractor-resolve.js";
 import { tryExtractDraftFromKsefFaXml } from "../ksef/ksef-fa-xml-extract.js";
 import { draftFromKsefDocumentMetadata } from "../ksef/ksef-metadata-draft.js";
+import { promoteKsefXmlPrimaryToSummaryPdf } from "../ksef/ksef-primary-visual-document.service.js";
 import { extractVendorNipFromNormalizedPayload } from "../invoices/invoice-vendor-nip.js";
 import { parseInvoiceDate } from "../invoices/invoice-dates.js";
 
@@ -296,6 +297,34 @@ export async function runPipelineJob(prisma: PrismaClient, processingJobId: stri
       include: { contractor: true, files: true },
     });
     if (!refreshed) throw new Error("Invoice missing after update");
+
+    if (fromKsefSource) {
+      try {
+        await promoteKsefXmlPrimaryToSummaryPdf(prisma, {
+          tenantId: jobRow.tenantId,
+          invoiceId: invoice.id,
+          xmlDocument: {
+            id: document.id,
+            mimeType: document.mimeType,
+            sourceExternalId: document.sourceExternalId,
+          },
+          ksefNumber: refreshed.ksefNumber ?? document.sourceExternalId,
+          invoiceNumber: refreshed.number,
+          issueDate: refreshed.issueDate,
+          contractorName: refreshed.contractor?.name ?? null,
+          contractorNip: refreshed.contractor?.nip ?? null,
+          netTotal: refreshed.netTotal.toString(),
+          vatTotal: refreshed.vatTotal.toString(),
+          grossTotal: refreshed.grossTotal.toString(),
+          currency: refreshed.currency,
+        });
+      } catch (e) {
+        console.warn(
+          "[pipeline] KSeF summary PDF (primary):",
+          e instanceof Error ? e.message : String(e),
+        );
+      }
+    }
 
     const refreshedNip = (refreshed.contractor?.nip ?? "").replace(/\D/g, "");
     const peerOr: Prisma.InvoiceWhereInput[] = [

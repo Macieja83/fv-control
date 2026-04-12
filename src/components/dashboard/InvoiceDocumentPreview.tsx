@@ -91,7 +91,7 @@ async function fetchDocument(
   }
   if (res.status === 404) {
     throw new Error(
-      'Plik źródłowy nie jest dostępny — dokument mógł zostać usunięty z magazynu plików lub faktura pochodzi z KSeF (tylko dane XML).',
+      'Plik źródłowy nie jest dostępny — dokument mógł zostać usunięty z magazynu albo faktura nie ma jeszcze powiązanego pliku w storage.',
     )
   }
   if (!res.ok) {
@@ -172,7 +172,7 @@ export function InvoiceDocumentPreview({ invoiceId, ksefNumber }: Props) {
       <div className="doc-preview doc-preview--error">
         <p role="alert">{message}</p>
         <p className="doc-preview__hint">
-          Jeśli faktura pochodzi z KSeF, dane zostały już wyodrębnione z pliku XML — podgląd PDF nie jest wymagany.
+          Jeśli faktura jest z KSeF i dopiero co została przetworzona, odśwież panel lub użyj „Spróbuj ponownie” — podgląd PDF tworzy się po zakończeniu pipeline na serwerze.
         </p>
         <div className="doc-preview__error-actions">
           <button
