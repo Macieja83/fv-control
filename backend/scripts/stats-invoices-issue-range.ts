@@ -52,6 +52,18 @@ async function main(): Promise<void> {
     where: { ...whereBase, intakeSourceType: "KSEF_API" },
   });
 
+  const ksefApiStuck = await prisma.invoice.count({
+    where: {
+      ...whereBase,
+      intakeSourceType: "KSEF_API",
+      status: { in: ["INGESTING", "FAILED_NEEDS_REVIEW", "PENDING_REVIEW"] },
+    },
+  });
+
+  const ksefApiMissingNumber = await prisma.invoice.count({
+    where: { ...whereBase, intakeSourceType: "KSEF_API", ksefNumber: null },
+  });
+
   console.log(
     JSON.stringify(
       {
@@ -61,6 +73,8 @@ async function main(): Promise<void> {
         ledgerKind,
         total,
         ksefApiOnly: ksefOnly,
+        ksefApiStuckPipeline: ksefApiStuck,
+        ksefApiMissingKsefNumber: ksefApiMissingNumber,
         byIntakeSourceType: Object.fromEntries(byIntake.map((r) => [r.intakeSourceType, r._count._all])),
         byStatus: Object.fromEntries(byStatus.map((r) => [r.status, r._count._all])),
       },

@@ -42,6 +42,29 @@ export type KsefSyncResult = {
 const KSEF_SYNC_ACTOR_ID = "00000000-0000-0000-0000-000000000000";
 const PAGE_SIZE = 100;
 
+/**
+ * Gdy `hasMore && isTruncated`, MF wymaga zawężenia `dateRange.from` do „ostatniego rekordu”
+ * i wyzerowania `pageOffset` (OpenAPI `POST /invoices/query/metadata`).
+ * Sortowanie zależy od `dateRange.dateType` — dla **Issue** nie wolno używać `permanentStorageDate`
+ * (to pomijałoby strony wyników i część faktur nigdy nie trafiałaby do ingestu).
+ */
+function nextMetadataQueryFrom(
+  dateType: "PermanentStorage" | "Issue",
+  last: KsefInvoiceMetadata,
+): string {
+  if (dateType === "PermanentStorage") {
+    return last.permanentStorageDate;
+  }
+  const invoicing = last.invoicingDate?.trim();
+  if (invoicing) return invoicing;
+  const issue = last.issueDate?.trim();
+  if (issue && /^\d{4}-\d{2}-\d{2}$/.test(issue)) {
+    return `${issue}T00:00:00.000Z`;
+  }
+  if (issue) return issue;
+  return last.permanentStorageDate;
+}
+
 function createInvoiceXmlThrottle(minIntervalMs: number): () => Promise<void> {
   let lastFetchAt = 0;
   return async () => {
@@ -166,7 +189,10 @@ export async function runKsefSyncJob(
         if (hasMore && page.isTruncated) {
           const lastInvoice = page.invoices[page.invoices.length - 1];
           if (lastInvoice) {
-            currentFrom = lastInvoice.permanentStorageDate;
+            currentFrom = nextMetadataQueryFrom(dateType, lastInvoice);
+            console.info(
+              `[KSeF sync] isTruncated dateType=${dateType} → next from=${currentFrom} (po ${lastInvoice.ksefNumber})`,
+            );
           }
           pageOffset = 0;
         } else if (hasMore) {
