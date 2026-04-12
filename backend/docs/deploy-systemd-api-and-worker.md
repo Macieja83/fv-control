@@ -123,6 +123,17 @@ systemctl --user restart fv-control-worker.service
 2. Oba serwisy **active (running)**.
 3. Po `POST .../sync` w logach workera powinny pojawić się ślady przetwarzania (bez błędów połączenia z Redis).
 
+### Po wdrożeniu poprawki „brak duplikatów KSeF↔KSeF”
+
+Stare wiersze `invoice_duplicates` (utworzone **przed** poprawką w pipeline) **nie znikają same**. Jednorazowo na VPS, po `git pull` i buildzie backendu:
+
+```bash
+cd ~/fv-control/backend
+npm run cleanup:ksef-ksef-dups
+```
+
+Usuwa tylko pary **OPEN**, gdzie **oba** końce to faktury z repozytorium KSeF (zgodnie z `duplicate-score.ts`). Następnie odświeża compliance dla dotkniętych faktur.
+
 ## Uwaga: `postgres` w `DATABASE_URL` na hoście
 
 Jeśli API działa **na hoście** (systemd), a w `DATABASE_URL` jest host `**postgres`**, to zadziała tylko wtedy, gdy ten hostname jest rozwiązywany (np. wpis w `/etc/hosts` albo Docker network — rzadko domyślnie).  
