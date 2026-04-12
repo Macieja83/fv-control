@@ -23,6 +23,7 @@
     "prisma:seed": "tsx prisma/seed.ts",
     "verify:openai": "node scripts/verify-openai-connection.mjs",
     "refresh:dup-compliance": "tsx scripts/refresh-open-duplicate-compliance.ts",
+    "cleanup:ksef-ksef-dups": "tsx scripts/cleanup-ksef-ksef-open-duplicates.ts",
     "repair:dup-orientation": "tsx scripts/repair-invoice-duplicate-orientation.ts",
     "diagnose:invoices": "tsx scripts/diagnose-invoices.ts",
     "rehydrate:ksef-xml": "tsx scripts/rehydrate-ksef-invoice-xml.ts"
