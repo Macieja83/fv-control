@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import type { InvoiceStatus, PrismaClient } from "@prisma/client";
 import { AppError } from "../../lib/errors.js";
 import { refreshInvoiceCompliance } from "../compliance/compliance.service.js";
-import { parseInvoiceDate } from "./invoice-dates.js";
+import { parseInvoiceDate, parseInvoiceDateInclusiveEndUtc } from "./invoice-dates.js";
 import { createInvoiceEvent } from "./invoice-events.js";
 import type {
   InvoiceCreateInput,
@@ -30,7 +30,7 @@ export async function listInvoices(prisma: PrismaClient, tenantId: string, q: In
       ? {
           issueDate: {
             ...(q.dateFrom ? { gte: parseInvoiceDate(q.dateFrom) } : {}),
-            ...(q.dateTo ? { lte: parseInvoiceDate(q.dateTo) } : {}),
+            ...(q.dateTo ? { lte: parseInvoiceDateInclusiveEndUtc(q.dateTo) } : {}),
           },
         }
       : {}),

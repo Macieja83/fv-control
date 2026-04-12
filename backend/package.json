@@ -27,6 +27,7 @@
     "ksef:sync-once": "tsx scripts/run-ksef-sync-once.ts",
     "repair:dup-orientation": "tsx scripts/repair-invoice-duplicate-orientation.ts",
     "diagnose:invoices": "tsx scripts/diagnose-invoices.ts",
+    "stats:issue-range": "tsx scripts/stats-invoices-issue-range.ts",
     "rehydrate:ksef-xml": "tsx scripts/rehydrate-ksef-invoice-xml.ts"
   },
   "prisma": {
