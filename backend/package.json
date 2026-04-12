@@ -23,7 +23,8 @@
     "prisma:seed": "tsx prisma/seed.ts",
     "verify:openai": "node scripts/verify-openai-connection.mjs",
     "refresh:dup-compliance": "tsx scripts/refresh-open-duplicate-compliance.ts",
-    "repair:dup-orientation": "tsx scripts/repair-invoice-duplicate-orientation.ts"
+    "repair:dup-orientation": "tsx scripts/repair-invoice-duplicate-orientation.ts",
+    "diagnose:invoices": "tsx scripts/diagnose-invoices.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
