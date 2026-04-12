@@ -61,8 +61,8 @@ const envSchema = z.object({
   KSEF_CERT: z.string().optional(),
   /** NIP of the company context for KSeF API auth. */
   KSEF_NIP: z.string().optional(),
-  /** How often (ms) the worker auto-enqueues KSeF invoice sync. 0 = disabled. */
-  KSEF_AUTO_SYNC_INTERVAL_MS: z.coerce.number().int().min(0).default(0),
+  /** How often (ms) the worker auto-enqueues KSeF invoice sync. 0 = disabled. Domyślnie 5 min przy skonfigurowanym KSeF. */
+  KSEF_AUTO_SYNC_INTERVAL_MS: z.coerce.number().int().min(0).default(300_000),
   /** Min delay (ms) between KSeF GET invoice XML calls (MF limit ~16/min). 0 = no delay. */
   KSEF_INVOICE_FETCH_MIN_INTERVAL_MS: z.coerce.number().int().min(0).default(4_000),
   /**

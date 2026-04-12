@@ -50,8 +50,18 @@ export async function refreshInvoiceCompliance(
   ]);
   const cCand = dupAsCandidate != null ? Number(dupAsCandidate.confidence) : 0;
   const cCanon = dupAsCanonical != null ? Number(dupAsCanonical.confidence) : 0;
+  /** Oryginał z KSeF nie dostaje „duplikatu” w compliance tylko dlatego, że jest canonical — badge tylko dla strony candidate. */
+  const isKsefOriginal =
+    inv.intakeSourceType === "KSEF_API" ||
+    (typeof inv.ksefNumber === "string" && inv.ksefNumber.trim().length > 0);
   const duplicateConfidence =
-    dupAsCandidate != null || dupAsCanonical != null ? Math.max(cCand, cCanon) : null;
+    dupAsCandidate != null
+      ? cCand
+      : isKsefOriginal
+        ? null
+        : dupAsCanonical != null
+          ? cCanon
+          : null;
 
   const mime = inv.primaryDocId
     ? (await prisma.document.findUnique({ where: { id: inv.primaryDocId }, select: { mimeType: true } }))?.mimeType

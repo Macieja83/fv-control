@@ -83,4 +83,10 @@ describe("orientInvoiceDuplicateRoles", () => {
     const newer = { id: "y", intakeSourceType: "UPLOAD", createdAt: t1 };
     expect(orientInvoiceDuplicateRoles(newer, older)).toEqual({ canonicalId: "x", candidateId: "y" });
   });
+
+  it("prefers invoice with ksefNumber as canonical even if intakeSourceType is not KSEF_API", () => {
+    const fromRepo = { id: "k", intakeSourceType: "UPLOAD", createdAt: t1, ksefNumber: "1234567890-AB-CD-EF" };
+    const scan = { id: "s", intakeSourceType: "UPLOAD", createdAt: t0, ksefNumber: null };
+    expect(orientInvoiceDuplicateRoles(scan, fromRepo)).toEqual({ canonicalId: "k", candidateId: "s" });
+  });
 });

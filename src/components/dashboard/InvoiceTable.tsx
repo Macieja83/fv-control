@@ -296,10 +296,13 @@ export function InvoiceTable({
               <th>Status</th>
               <th>Źródło</th>
               <th className="hide-mobile">Lokal</th>
-              <th>Dostawca</th>
+              <th>Kontrahent</th>
               <th className="hide-mobile">NIP</th>
               <th>Nr FV</th>
-              <th>Daty</th>
+              <th className="th-dates-col">
+                <span className="th-dates-col__main">Data wystawienia</span>
+                <span className="th-dates-col__sub">Termin płat.</span>
+              </th>
               <th className="num">Brutto</th>
               <th className="hide-mobile">Kategoria</th>
               <th className="hide-mobile">Typ</th>
@@ -364,8 +367,12 @@ export function InvoiceTable({
                     {row.invoice_number}
                   </td>
                   <td className="td-dates">
-                    <span className="td-dates__line">{row.issue_date}</span>
-                    <span className="td-dates__sub">→ {row.due_date}</span>
+                    <span className="td-dates__line" title="Data wystawienia z faktury">
+                      {row.issue_date}
+                    </span>
+                    <span className="td-dates__sub" title="Termin płatności">
+                      {row.due_date ? `→ ${row.due_date}` : '—'}
+                    </span>
                   </td>
                   <td className="num cell-strong td-clip">
                     {formatMoney(row.gross_amount, row.currency)}

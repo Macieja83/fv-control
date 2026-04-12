@@ -38,9 +38,14 @@ export function enrichDuplicateMetadata(
     if (r.ksef_number) {
       const group = byKsef.get(r.ksef_number.trim().toUpperCase()) ?? []
       if (group.length > 1) {
-        const ksefFirst = (x: InvoiceRecord) => (x.source_type === 'ksef' ? 0 : 1)
+        /** Niższy = bardziej „oryginał KSeF”: numer KSeF na fakturze, potem źródło ksef, potem starszy wpis. */
+        const canonicalRank = (x: InvoiceRecord) => {
+          if (x.ksef_number?.trim()) return 0
+          if (x.source_type === 'ksef') return 1
+          return 2
+        }
         const sorted = [...group].sort((a, b) => {
-          const ch = ksefFirst(a) - ksefFirst(b)
+          const ch = canonicalRank(a) - canonicalRank(b)
           if (ch !== 0) return ch
           return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
         })
@@ -58,9 +63,13 @@ export function enrichDuplicateMetadata(
       const tripleKey = `${r.supplier_nip.replace(/\s/g, '')}|${r.invoice_number.trim().toUpperCase()}|${r.gross_amount.toFixed(2)}`
       const group = byTriple.get(tripleKey) ?? []
       if (group.length > 1) {
-        const ksefFirst = (x: InvoiceRecord) => (x.source_type === 'ksef' ? 0 : 1)
+        const canonicalRank = (x: InvoiceRecord) => {
+          if (x.ksef_number?.trim()) return 0
+          if (x.source_type === 'ksef') return 1
+          return 2
+        }
         const sorted = [...group].sort((a, b) => {
-          const ch = ksefFirst(a) - ksefFirst(b)
+          const ch = canonicalRank(a) - canonicalRank(b)
           if (ch !== 0) return ch
           return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
         })
@@ -84,9 +93,13 @@ export function enrichDuplicateMetadata(
         const dayGross = `${nip10}|${r.issue_date}|${r.gross_amount.toFixed(2)}`
         const group = byNipDayGross.get(dayGross) ?? []
         if (group.length > 1) {
-          const ksefFirst = (x: InvoiceRecord) => (x.source_type === 'ksef' ? 0 : 1)
+          const canonicalRank = (x: InvoiceRecord) => {
+            if (x.ksef_number?.trim()) return 0
+            if (x.source_type === 'ksef') return 1
+            return 2
+          }
           const sorted = [...group].sort((a, b) => {
-            const ch = ksefFirst(a) - ksefFirst(b)
+            const ch = canonicalRank(a) - canonicalRank(b)
             if (ch !== 0) return ch
             return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
           })

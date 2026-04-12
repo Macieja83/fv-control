@@ -115,14 +115,32 @@ export function scoreInvoiceDuplicatePair(input: {
   return { confidence, reasonCodes };
 }
 
+export type InvoiceDuplicateRoleInput = {
+  id: string;
+  intakeSourceType: string;
+  createdAt: Date;
+  /** Ustawione dla faktur z repozytorium KSeF — silniejszy sygnał niż sam `intakeSourceType` (np. po migracji). */
+  ksefNumber?: string | null;
+};
+
+function isKsefRepositoryInvoice(x: InvoiceDuplicateRoleInput): boolean {
+  return Boolean(x.ksefNumber?.trim()) || x.intakeSourceType === "KSEF_API";
+}
+
 /**
- * Wybór „oryginał” (canonical) vs duplikat (candidate): faktury z KSeF (`KSEF_API`)
- * zawsze wygrywają z innymi kanałami; przy remisie — starszy wpis (`createdAt`).
+ * Wybór „oryginał” (canonical) vs duplikat (candidate):
+ * — dokument z numerem KSeF (`ksefNumber`) lub `KSEF_API` zawsze nad kanałem zwykłym;
+ * — przy remisie — starszy wpis (`createdAt`).
  */
 export function orientInvoiceDuplicateRoles(
-  a: { id: string; intakeSourceType: string; createdAt: Date },
-  b: { id: string; intakeSourceType: string; createdAt: Date },
+  a: InvoiceDuplicateRoleInput,
+  b: InvoiceDuplicateRoleInput,
 ): { canonicalId: string; candidateId: string } {
+  const aRepo = isKsefRepositoryInvoice(a);
+  const bRepo = isKsefRepositoryInvoice(b);
+  if (aRepo && !bRepo) return { canonicalId: a.id, candidateId: b.id };
+  if (bRepo && !aRepo) return { canonicalId: b.id, candidateId: a.id };
+
   const aK = a.intakeSourceType === "KSEF_API";
   const bK = b.intakeSourceType === "KSEF_API";
   if (aK && !bK) return { canonicalId: a.id, candidateId: b.id };

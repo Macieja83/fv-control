@@ -583,6 +583,23 @@ html[data-theme='dark'] .app-shell {
 }
 
 .data-table .td-clip { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 0; }
+.data-table .th-dates-col {
+  line-height: 1.2;
+  font-weight: 600;
+  white-space: normal;
+  vertical-align: bottom;
+}
+.data-table .th-dates-col__main {
+  display: block;
+  font-size: 0.68rem;
+}
+.data-table .th-dates-col__sub {
+  display: block;
+  font-size: 0.58rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
 .data-table .td-dates { max-width: 0; line-height: 1.25; white-space: normal; }
 .data-table .td-dates__line { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .data-table .td-dates__sub { display: block; font-size: 0.62rem; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -829,32 +846,6 @@ html[data-theme='dark'] .btn-icon-del { color: #f87171; }
 .doc-preview__fallback { padding: 1rem; display: flex; flex-direction: column; align-items: flex-start; gap: 0.5rem; }
 
 /* ─── Upload Bar ─── */
-
-/* Purchase row: upload + ręczny sync KSeF */
-.ksef-sync-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: 0.75rem 1.25rem;
-  margin-bottom: 0.75rem;
-}
-.ksef-sync-bar > .upload-bar {
-  margin-bottom: 0;
-  flex: 1 1 auto;
-  min-width: min(100%, 240px);
-}
-.ksef-sync-bar__side {
-  flex: 1 1 200px;
-  max-width: 28rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-}
-.ksef-sync-bar__hint {
-  font-size: 0.72rem;
-  line-height: 1.4;
-  color: var(--text-muted);
-}
 
 .upload-bar {
   display: flex;

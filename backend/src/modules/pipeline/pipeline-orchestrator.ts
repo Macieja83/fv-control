@@ -335,8 +335,14 @@ export async function runPipelineJob(prisma: PrismaClient, processingJobId: stri
             id: refreshed.id,
             intakeSourceType: refreshed.intakeSourceType,
             createdAt: refreshed.createdAt,
+            ksefNumber: refreshed.ksefNumber,
           },
-          { id: p.id, intakeSourceType: p.intakeSourceType, createdAt: p.createdAt },
+          {
+            id: p.id,
+            intakeSourceType: p.intakeSourceType,
+            createdAt: p.createdAt,
+            ksefNumber: p.ksefNumber,
+          },
         );
         canonicalsToRefreshCompliance.add(canonicalId);
         const inverted = await prisma.invoiceDuplicate.findFirst({
