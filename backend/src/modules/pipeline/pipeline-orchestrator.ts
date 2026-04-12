@@ -12,7 +12,9 @@ import { loadConfig } from "../../config.js";
 import { pipelineJobsTotal } from "../../lib/metrics.js";
 import { classifyDocumentType } from "../compliance/compliance-engine.js";
 import { refreshInvoiceCompliance } from "../compliance/compliance.service.js";
+import { findContractorByNormalizedNip, polishNipDigits10 } from "../contractors/contractor-resolve.js";
 import { tryExtractDraftFromKsefFaXml } from "../ksef/ksef-fa-xml-extract.js";
+import { extractVendorNipFromNormalizedPayload } from "../invoices/invoice-vendor-nip.js";
 import { parseInvoiceDate } from "../invoices/invoice-dates.js";
 
 async function streamToBuffer(stream: Readable): Promise<Buffer> {
@@ -196,20 +198,21 @@ export async function runPipelineJob(prisma: PrismaClient, processingJobId: stri
       }
 
       let contractorId = invoice.contractorId;
-      const nipDigits = (draft.contractorNip ?? "").replace(/\D/g, "");
       const ocrContractorName = draft.contractorName?.trim();
-      if (nipDigits.length === 10) {
-        let contractor = await tx.contractor.findFirst({
-          where: { tenantId: jobRow.tenantId, nip: nipDigits, deletedAt: null },
-        });
+      let nip10 =
+        polishNipDigits10(draft.contractorNip) ??
+        polishNipDigits10(extractVendorNipFromNormalizedPayload(draft as unknown));
+      if (nip10) {
+        let contractor = await findContractorByNormalizedNip(tx, jobRow.tenantId, nip10);
         if (!contractor) {
           const name =
             ocrContractorName && ocrContractorName.length > 0
               ? ocrContractorName.slice(0, 500)
-              : `Kontrahent ${nipDigits}`;
-          contractor = await tx.contractor.create({
-            data: { tenantId: jobRow.tenantId, nip: nipDigits, name },
+              : `Kontrahent ${nip10}`;
+          const created = await tx.contractor.create({
+            data: { tenantId: jobRow.tenantId, nip: nip10, name },
           });
+          contractor = { id: created.id };
         }
         contractorId = contractor.id;
       }

@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import { AppError } from "../../lib/errors.js";
 import { refreshInvoiceCompliance } from "../compliance/compliance.service.js";
+import { findContractorByNormalizedNip, polishNipDigits10 } from "../contractors/contractor-resolve.js";
 import {
   extractVendorNameFromNormalizedPayload,
   extractVendorNipFromNormalizedPayload,
@@ -42,26 +43,25 @@ export async function adoptInvoiceVendor(
     throw AppError.validation("Ta faktura ma już przypisanego kontrahenta.");
   }
 
-  const fromBody = input.nip?.replace(/\D/g, "") ?? "";
-  const fromPayload = extractVendorNipFromNormalizedPayload(inv.normalizedPayload)?.replace(/\D/g, "") ?? "";
-  const nipDigits = (fromBody.length >= 10 ? fromBody : fromPayload).slice(0, 14);
-  if (nipDigits.length !== 10) {
+  const fromBody = polishNipDigits10(input.nip ?? "");
+  const fromPayload = polishNipDigits10(extractVendorNipFromNormalizedPayload(inv.normalizedPayload));
+  const nip10 = fromBody ?? fromPayload;
+  if (!nip10) {
     throw AppError.validation("Podaj prawidłowy NIP kontrahenta (10 cyfr) albo uzupełnij dane ekstrakcji na fakturze.");
   }
 
   const nameGuess =
     input.name?.trim() ||
     extractVendorNameFromNormalizedPayload(inv.normalizedPayload) ||
-    `Kontrahent ${nipDigits}`;
+    `Kontrahent ${nip10}`;
 
   let created = false;
-  let contractor = await prisma.contractor.findFirst({
-    where: { tenantId, nip: nipDigits, deletedAt: null },
-  });
+  let contractor = await findContractorByNormalizedNip(prisma, tenantId, nip10);
   if (!contractor) {
-    contractor = await prisma.contractor.create({
-      data: { tenantId, nip: nipDigits, name: nameGuess.slice(0, 300) },
+    const row = await prisma.contractor.create({
+      data: { tenantId, nip: nip10, name: nameGuess.slice(0, 300) },
     });
+    contractor = { id: row.id };
     created = true;
   }
 

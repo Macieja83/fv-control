@@ -4,6 +4,7 @@
  */
 import { XMLParser } from "fast-xml-parser";
 import type { ExtractedInvoiceDraft } from "../../adapters/ai/ai-invoice.adapter.js";
+import { polishNipDigits10 } from "../contractors/contractor-resolve.js";
 
 function isXmlMime(mime: string): boolean {
   const m = (mime ?? "").toLowerCase();
@@ -123,13 +124,24 @@ export function tryExtractDraftFromKsefFaXml(
   let contractorName: string | null = null;
   const pod1 = asRecord(oneOrFirst(fa.Podmiot1 as unknown[]));
   if (pod1) {
-    const dane = asRecord(oneOrFirst(pod1.DaneIdentyfikacyjne as unknown[]));
-    if (dane) {
-      const nipRaw = pickText(dane.NIP);
-      const digits = nipRaw.replace(/\D/g, "");
-      if (digits.length === 10) contractorNip = digits;
-      const nm = pickText(dane.Nazwa);
-      contractorName = nm.length > 0 ? nm : null;
+    const daneRoot = pod1.DaneIdentyfikacyjne;
+    const blocks = daneRoot == null ? [] : Array.isArray(daneRoot) ? daneRoot : [daneRoot];
+    for (const block of blocks) {
+      const dane = asRecord(block);
+      if (!dane) continue;
+      const nipRaw =
+        pickText(dane.NIP) ||
+        pickText(dane.Nip) ||
+        pickText(dane.NumerIdentyfikacjiPodatkowej) ||
+        pickText(dane.IdentyfikatorPodatkowy);
+      const nip10 = polishNipDigits10(nipRaw);
+      const nm = pickText(dane.Nazwa) || pickText(dane.Nazwisko) || "";
+      if (nip10) {
+        contractorNip = nip10;
+        contractorName = nm.length > 0 ? nm : null;
+        break;
+      }
+      if (nm.length > 0 && !contractorName) contractorName = nm;
     }
   }
 
