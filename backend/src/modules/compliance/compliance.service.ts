@@ -67,6 +67,11 @@ export async function refreshInvoiceCompliance(
     ? (await prisma.document.findUnique({ where: { id: inv.primaryDocId }, select: { mimeType: true } }))?.mimeType
     : null;
   const hasXml = Boolean(mime && mime.includes("xml"));
+  /** Po promocji podglądu PDF primary nie jest już XML — nadal uznajemy KSeF za źródło strukturalne. */
+  const hasStructuredKsefPayload =
+    overrides.hasStructuredKsefPayload !== undefined
+      ? overrides.hasStructuredKsefPayload
+      : hasXml || inv.intakeSourceType === "KSEF_API";
 
   const isOwnSales = overrides.isOwnSales ?? inv.ledgerKind === "SALE";
 
@@ -76,7 +81,7 @@ export async function refreshInvoiceCompliance(
     currency: inv.currency,
     grossTotal: Number(inv.grossTotal.toString()),
     isOwnSales,
-    hasStructuredKsefPayload: overrides.hasStructuredKsefPayload ?? hasXml,
+    hasStructuredKsefPayload,
     ocrConfidence:
       overrides.ocrConfidence ??
       (inv.ocrConfidence != null ? Number(inv.ocrConfidence.toString()) : null),

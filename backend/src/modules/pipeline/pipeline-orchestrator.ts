@@ -298,34 +298,6 @@ export async function runPipelineJob(prisma: PrismaClient, processingJobId: stri
     });
     if (!refreshed) throw new Error("Invoice missing after update");
 
-    if (fromKsefSource) {
-      try {
-        await promoteKsefXmlPrimaryToSummaryPdf(prisma, {
-          tenantId: jobRow.tenantId,
-          invoiceId: invoice.id,
-          xmlDocument: {
-            id: document.id,
-            mimeType: document.mimeType,
-            sourceExternalId: document.sourceExternalId,
-          },
-          ksefNumber: refreshed.ksefNumber ?? document.sourceExternalId,
-          invoiceNumber: refreshed.number,
-          issueDate: refreshed.issueDate,
-          contractorName: refreshed.contractor?.name ?? null,
-          contractorNip: refreshed.contractor?.nip ?? null,
-          netTotal: refreshed.netTotal.toString(),
-          vatTotal: refreshed.vatTotal.toString(),
-          grossTotal: refreshed.grossTotal.toString(),
-          currency: refreshed.currency,
-        });
-      } catch (e) {
-        console.warn(
-          "[pipeline] KSeF summary PDF (primary):",
-          e instanceof Error ? e.message : String(e),
-        );
-      }
-    }
-
     const refreshedNip = (refreshed.contractor?.nip ?? "").replace(/\D/g, "");
     const peerOr: Prisma.InvoiceWhereInput[] = [
       { issueDate: refreshed.issueDate },
@@ -484,6 +456,36 @@ export async function runPipelineJob(prisma: PrismaClient, processingJobId: stri
       where: { id: processingJobId },
       data: { status: "COMPLETED", currentStep: "AUDIT", lastError: null },
     });
+
+    // Po zakończeniu pipeline (compliance na primary XML) — podgląd PDF nie blokuje statusu joba ani refreshu.
+    if (fromKsefSource) {
+      try {
+        await promoteKsefXmlPrimaryToSummaryPdf(prisma, {
+          tenantId: jobRow.tenantId,
+          invoiceId: invoice.id,
+          xmlDocument: {
+            id: document.id,
+            mimeType: document.mimeType,
+            sourceExternalId: document.sourceExternalId,
+          },
+          ksefNumber: refreshed.ksefNumber ?? document.sourceExternalId,
+          invoiceNumber: refreshed.number,
+          issueDate: refreshed.issueDate,
+          contractorName: refreshed.contractor?.name ?? null,
+          contractorNip: refreshed.contractor?.nip ?? null,
+          netTotal: refreshed.netTotal.toString(),
+          vatTotal: refreshed.vatTotal.toString(),
+          grossTotal: refreshed.grossTotal.toString(),
+          currency: refreshed.currency,
+        });
+      } catch (e) {
+        console.warn(
+          "[pipeline] KSeF summary PDF (primary):",
+          e instanceof Error ? e.message : String(e),
+        );
+      }
+    }
+
     pipelineJobsTotal.inc({ result: "completed" });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
