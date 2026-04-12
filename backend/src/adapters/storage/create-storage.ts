@@ -16,12 +16,39 @@ function hasS3Config(): boolean {
  */
 export function createObjectStorage(): ObjectStorageAdapter {
   const cfg = loadConfig();
-  const primary =
-    cfg.STORAGE_DRIVER === "s3"
-      ? createS3ObjectStorage(cfg)
-      : createLocalObjectStorage(cfg.UPLOAD_DIR);
 
-  if (cfg.STORAGE_DRIVER === "s3" || !hasS3Config()) {
+  /** Zapis z `STORAGE_DRIVER=local` daje klucz `objects/<tenant>/...`; S3 używa `<tenant>/...` — bez tego worker na S3 nie widzi pliku. */
+  function s3ReadKey(key: string): string {
+    return key.startsWith("objects/") ? key.slice("objects/".length) : key;
+  }
+
+  if (cfg.STORAGE_DRIVER === "s3") {
+    const s3 = createS3ObjectStorage(cfg);
+    const localReads = createLocalObjectStorage(cfg.UPLOAD_DIR);
+    return {
+      putObject: (params) => s3.putObject(params),
+      getObjectStream: async (params) => {
+        if (params.bucket) {
+          return s3.getObjectStream(params);
+        }
+        const normalized = s3ReadKey(params.key);
+        try {
+          return await s3.getObjectStream({ ...params, key: normalized });
+        } catch {
+          /* np. plik tylko na dysku API (legacy) */
+        }
+        if (params.key.startsWith("objects/")) {
+          return localReads.getObjectStream({ key: params.key });
+        }
+        return s3.getObjectStream(params);
+      },
+      getPublicUrl: s3.getPublicUrl,
+    };
+  }
+
+  const primary = createLocalObjectStorage(cfg.UPLOAD_DIR);
+
+  if (!hasS3Config()) {
     return primary;
   }
 
