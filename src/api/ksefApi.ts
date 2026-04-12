@@ -29,3 +29,22 @@ export async function fetchKsefConnectorStatus(token: string): Promise<KsefConne
   if (!res.ok) throw new Error(await readErrorMessage(res))
   return (await res.json()) as KsefConnectorStatus
 }
+
+export type PostKsefSyncBody = { force?: boolean; fromDate?: string }
+
+/** Kolejkuje pełną synchronizację faktur przychodzących z KSeF (worker). Wymaga roli z prawem zapisu. */
+export async function postKsefSync(
+  token: string,
+  body?: PostKsefSyncBody,
+): Promise<{ queued: boolean; jobId?: string | number }> {
+  const res = await fetch(`${API}/connectors/ksef/sync`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body ?? {}),
+  })
+  if (!res.ok) throw new Error(await readErrorMessage(res))
+  return (await res.json()) as { queued: boolean; jobId?: string | number }
+}

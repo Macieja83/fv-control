@@ -830,6 +830,32 @@ html[data-theme='dark'] .btn-icon-del { color: #f87171; }
 
 /* ─── Upload Bar ─── */
 
+/* Purchase row: upload + ręczny sync KSeF */
+.ksef-sync-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.75rem 1.25rem;
+  margin-bottom: 0.75rem;
+}
+.ksef-sync-bar > .upload-bar {
+  margin-bottom: 0;
+  flex: 1 1 auto;
+  min-width: min(100%, 240px);
+}
+.ksef-sync-bar__side {
+  flex: 1 1 200px;
+  max-width: 28rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.ksef-sync-bar__hint {
+  font-size: 0.72rem;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
 .upload-bar {
   display: flex;
   align-items: center;

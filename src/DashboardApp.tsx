@@ -65,6 +65,7 @@ export default function DashboardApp() {
     categoryLocalOnly,
     refreshFromApi,
     retryInvoiceExtraction,
+    enqueueKsefPortalSync,
     adoptInvoiceVendor,
     sendInvoiceToKsef,
     createSalesInvoice,
@@ -116,7 +117,27 @@ export default function DashboardApp() {
             unknownVendor={kpi.unknownVendor}
             onPickFilter={pickKpi}
           />
-          {invoiceLedger === 'purchase' && <InvoiceUpload onUploaded={() => void refreshFromApi()} />}
+          {invoiceLedger === 'purchase' && (
+            <div className="ksef-sync-bar">
+              <InvoiceUpload onUploaded={() => void refreshFromApi()} />
+              {dataSource === 'api' && (
+                <div className="ksef-sync-bar__side">
+                  <button
+                    type="button"
+                    className="btn btn--sm"
+                    title="Pobiera z API MF faktury kosztowe od ostatniej synchronizacji. Filtr „Od–Do” to data wystawienia z faktury, nie data trwałego zapisu w KSeF."
+                    onClick={() => void enqueueKsefPortalSync()}
+                  >
+                    Pobierz z KSeF teraz
+                  </button>
+                  <span className="ksef-sync-bar__hint">
+                    Lista filtruje po <strong>dacie wystawienia</strong> z faktury; KSeF indeksuje też{' '}
+                    <strong>datę trwałego zapisu</strong> — mogą się różnić o 1 dzień lub więcej.
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
           {invoiceLedger === 'sale' && (
             <div className="upload-bar" style={{ marginBottom: '0.5rem' }}>
               <button type="button" className="upload-bar__btn upload-bar__btn--camera" onClick={() => setSalesDialogOpen(true)}>

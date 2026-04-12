@@ -16,6 +16,7 @@ import { enrichDuplicateMetadata, isDuplicateFlagged } from '../lib/duplicates'
 import { COST_CATEGORIES } from '../data/categories'
 import { mapApiInvoiceRowToRecord } from '../lib/mapApiInvoice'
 import { getStoredToken } from '../auth/session'
+import { postKsefSync } from '../api/ksefApi'
 
 const USE_MOCK_INVOICES =
   import.meta.env.VITE_USE_MOCK_INVOICES === 'true' ||
@@ -659,6 +660,28 @@ export function useInvoiceDashboard() {
     [refreshFromApi],
   )
 
+  /** Kolejka pobrania nowych faktur z KSeF (koszty). Nie zastępuje auto-sync na workerze — tylko ręczne „pociągnij teraz”. */
+  const enqueueKsefPortalSync = useCallback(
+    async (opts?: { fromDate?: string }) => {
+      if (USE_MOCK_INVOICES) {
+        window.alert('W trybie demo synchronizacja KSeF jest wyłączona.')
+        return
+      }
+      const token = getStoredToken()
+      if (!token) return
+      try {
+        await postKsefSync(token, opts?.fromDate ? { fromDate: opts.fromDate } : undefined)
+        window.alert(
+          'Synchronizacja KSeF została dodana do kolejki. Nowe faktury pojawią się na liście po przetworzeniu przez worker (zwykle w ciągu kilku minut).',
+        )
+        await refreshFromApi()
+      } catch (e) {
+        window.alert(e instanceof Error ? e.message : String(e))
+      }
+    },
+    [refreshFromApi],
+  )
+
   const deleteFollowerDuplicates = useCallback(async () => {
     if (USE_MOCK_INVOICES) {
       setSelectedId(null)
@@ -773,6 +796,7 @@ export function useInvoiceDashboard() {
     categoryLocalOnly: !USE_MOCK_INVOICES,
     refreshFromApi,
     retryInvoiceExtraction,
+    enqueueKsefPortalSync,
     adoptInvoiceVendor,
     sendInvoiceToKsef,
     createSalesInvoice,
