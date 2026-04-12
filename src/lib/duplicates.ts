@@ -29,8 +29,15 @@ export function enrichDuplicateMetadata(
     }
   }
 
+  const canonicalRank = (x: InvoiceRecord) => {
+    if (x.ksef_number?.trim()) return 0
+    if (x.source_type === 'ksef') return 1
+    return 2
+  }
+
   return rows.map((r) => {
-    let duplicate_score = r.duplicate_score ?? 0
+    const fromApiScore = r.duplicate_score ?? 0
+    let duplicate_score = fromApiScore
     let duplicate_of_id: string | null = r.duplicate_of_id ?? null
     let duplicate_canonical_number: string | null = r.duplicate_canonical_number ?? null
     let duplicate_reason: string | null = r.duplicate_reason ?? null
@@ -38,23 +45,18 @@ export function enrichDuplicateMetadata(
     if (r.ksef_number) {
       const group = byKsef.get(r.ksef_number.trim().toUpperCase()) ?? []
       if (group.length > 1) {
-        /** Niższy = bardziej „oryginał KSeF”: numer KSeF na fakturze, potem źródło ksef, potem starszy wpis. */
-        const canonicalRank = (x: InvoiceRecord) => {
-          if (x.ksef_number?.trim()) return 0
-          if (x.source_type === 'ksef') return 1
-          return 2
-        }
         const sorted = [...group].sort((a, b) => {
           const ch = canonicalRank(a) - canonicalRank(b)
           if (ch !== 0) return ch
           return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
         })
-        const first = sorted[0]
-        duplicate_score = 1
-        duplicate_reason = `Ten sam numer KSeF (${r.ksef_number}) co inny rekord na liście faktur.`
+        const first = sorted[0]!
+        /** Tylko „drugi” rekord w parze — oryginał KSeF nie dostaje % duplikatu z heurystyki listy. */
         if (first.id !== r.id) {
+          duplicate_score = 1
           duplicate_of_id = first.id
           duplicate_canonical_number = duplicate_canonical_number ?? first.invoice_number
+          duplicate_reason = `Ten sam numer KSeF (${r.ksef_number}) co inny rekord na liście faktur.`
         }
       }
     }
@@ -63,27 +65,22 @@ export function enrichDuplicateMetadata(
       const tripleKey = `${r.supplier_nip.replace(/\s/g, '')}|${r.invoice_number.trim().toUpperCase()}|${r.gross_amount.toFixed(2)}`
       const group = byTriple.get(tripleKey) ?? []
       if (group.length > 1) {
-        const canonicalRank = (x: InvoiceRecord) => {
-          if (x.ksef_number?.trim()) return 0
-          if (x.source_type === 'ksef') return 1
-          return 2
-        }
         const sorted = [...group].sort((a, b) => {
           const ch = canonicalRank(a) - canonicalRank(b)
           if (ch !== 0) return ch
           return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
         })
-        const first = sorted[0]
-        duplicate_score = Math.max(duplicate_score, 0.85)
+        const first = sorted[0]!
         if (first.id !== r.id) {
+          duplicate_score = Math.max(duplicate_score, 0.85)
           duplicate_of_id = duplicate_of_id ?? first.id
           duplicate_canonical_number = duplicate_canonical_number ?? first.invoice_number
+          duplicate_reason =
+            duplicate_reason ??
+            (duplicate_canonical_number
+              ? `Duplikat faktury nr „${duplicate_canonical_number}” (NIP + numer + kwota brutto).`
+              : `Powtarzający się zestaw: NIP + numer faktury + kwota brutto (${group.length} wpisów).`)
         }
-        duplicate_reason =
-          duplicate_reason ??
-          (duplicate_canonical_number
-            ? `Duplikat faktury nr „${duplicate_canonical_number}” (NIP + numer + kwota brutto).`
-            : `Powtarzający się zestaw: NIP + numer faktury + kwota brutto (${group.length} wpisów).`)
       }
     }
 
@@ -93,28 +90,34 @@ export function enrichDuplicateMetadata(
         const dayGross = `${nip10}|${r.issue_date}|${r.gross_amount.toFixed(2)}`
         const group = byNipDayGross.get(dayGross) ?? []
         if (group.length > 1) {
-          const canonicalRank = (x: InvoiceRecord) => {
-            if (x.ksef_number?.trim()) return 0
-            if (x.source_type === 'ksef') return 1
-            return 2
-          }
           const sorted = [...group].sort((a, b) => {
             const ch = canonicalRank(a) - canonicalRank(b)
             if (ch !== 0) return ch
             return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
           })
-          const first = sorted[0]
-          duplicate_score = Math.max(duplicate_score, 0.76)
+          const first = sorted[0]!
           if (first.id !== r.id) {
+            duplicate_score = Math.max(duplicate_score, 0.76)
             duplicate_of_id = duplicate_of_id ?? first.id
             duplicate_canonical_number = duplicate_canonical_number ?? first.invoice_number
+            duplicate_reason =
+              duplicate_reason ??
+              (duplicate_canonical_number
+                ? `Podejrzenie duplikatu względem „${duplicate_canonical_number}” (ten sam NIP, data i kwota brutto).`
+                : `Ten sam NIP, data wystawienia i kwota brutto (${group.length} wpisy).`)
           }
-          duplicate_reason =
-            duplicate_reason ??
-            (duplicate_canonical_number
-              ? `Podejrzenie duplikatu względem „${duplicate_canonical_number}” (ten sam NIP, data i kwota brutto).`
-              : `Ten sam NIP, data wystawienia i kwota brutto (${group.length} wpisy).`)
         }
+      }
+    }
+
+    /** Faktura z KSeF bez powiązania „jestem duplikatem” — nie pokazujemy % z heurystyki ani starego zapisu w API. */
+    const isKsefLike = Boolean(r.ksef_number?.trim()) || r.source_type === 'ksef'
+    if (isKsefLike && duplicate_of_id == null && duplicate_score >= 0.72) {
+      if (fromApiScore < 0.72) {
+        duplicate_score = fromApiScore
+      } else {
+        duplicate_score = 0
+        duplicate_reason = null
       }
     }
 

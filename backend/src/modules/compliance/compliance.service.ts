@@ -86,6 +86,11 @@ export async function refreshInvoiceCompliance(
 
   const result = evaluateComplianceRules(input, cfg);
 
+  /** Oryginał KSeF bez roli „candidate” — czyścimy też `duplicateHash` z samego fingerprinta (wcześniej zostawał przy score null). */
+  const suppressDupDisplay = isKsefOriginal && dupAsCandidate == null;
+  const duplicateHashOut = suppressDupDisplay ? null : result.duplicateHash;
+  const duplicateScoreOut = suppressDupDisplay ? null : result.duplicateScore;
+
   await prisma.$transaction(async (tx) => {
     await tx.invoice.update({
       where: { id: invoiceId },
@@ -96,9 +101,9 @@ export async function refreshInvoiceCompliance(
         ksefStatus: result.ksefStatus,
         reviewStatus: result.reviewStatus,
         complianceFlags: result.complianceFlags,
-        duplicateHash: result.duplicateHash,
+        duplicateHash: duplicateHashOut,
         duplicateScore:
-          result.duplicateScore != null ? new Prisma.Decimal(result.duplicateScore.toFixed(4)) : null,
+          duplicateScoreOut != null ? new Prisma.Decimal(duplicateScoreOut.toFixed(4)) : null,
       },
     });
 
