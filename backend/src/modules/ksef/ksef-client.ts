@@ -305,18 +305,36 @@ export class KsefClient {
       subjectType,
       dateRange: { dateType, from, to },
     };
+    const bodyStr = JSON.stringify(body);
     const params = new URLSearchParams({
       sortOrder: "Asc",
       pageOffset: String(pageOffset),
       pageSize: String(Math.min(pageSize, 250)),
     });
-    const res = await this.authedFetch(`/invoices/query/metadata?${params}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) throw await this.apiError(res, "query metadata");
-    return (await res.json()) as KsefMetadataPage;
+    const path = `/invoices/query/metadata?${params}`;
+    const max429Attempts = 12;
+
+    for (let attempt = 0; attempt < max429Attempts; attempt++) {
+      const res = await this.authedFetch(path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: bodyStr,
+      });
+      if (res.status === 429) {
+        const text = await res.text();
+        const waitMs = parseKsefMetadata429WaitMs(res, text);
+        console.warn(
+          `[KSeF] query metadata 429 (${dateType}/${subjectType} offset=${pageOffset}), czekam ${waitMs}ms… ${text.slice(0, 160)}`,
+        );
+        await sleep(waitMs);
+        continue;
+      }
+      if (!res.ok) throw await this.apiError(res, "query metadata");
+      return (await res.json()) as KsefMetadataPage;
+    }
+    throw new Error(
+      `KSeF query metadata: nadal 429 po ${max429Attempts} próbach (${dateType}/${subjectType} offset=${pageOffset}).`,
+    );
   }
 
   /** Download raw invoice XML by KSeF number. */
@@ -503,4 +521,17 @@ export class KsefClient {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+/** MF: nagłówek Retry-After (sekundy) lub treść „Spróbuj ponownie po N sekundach”. */
+function parseKsefMetadata429WaitMs(res: Response, bodyText: string): number {
+  const ra = res.headers.get("retry-after")?.trim();
+  if (ra && /^\d+$/.test(ra)) {
+    return Math.min(600_000, Math.max(5_000, parseInt(ra, 10) * 1000));
+  }
+  const m = bodyText.match(/po\s+(\d+)\s+sekund/i);
+  if (m?.[1]) {
+    return Math.min(600_000, Math.max(5_000, parseInt(m[1], 10) * 1000 + 2_000));
+  }
+  return 70_000;
 }

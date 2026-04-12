@@ -15,6 +15,7 @@
  */
 
 import { createHash } from "node:crypto";
+import { setTimeout as delay } from "node:timers/promises";
 import type { PrismaClient } from "@prisma/client";
 import { KsefClient, type KsefInvoiceMetadata, type KsefMetadataPage } from "./ksef-client.js";
 import { ingestAttachmentAndEnqueue } from "../ingestion/attachment-intake.service.js";
@@ -148,6 +149,15 @@ export async function runKsefSyncJob(
   });
 
   for (const dateType of dateTypes) {
+    if (dateType === "Issue") {
+      const pauseMs = cfg.KSEF_METADATA_INTER_PASS_PAUSE_MS;
+      if (pauseMs > 0) {
+        console.info(
+          `[KSeF sync] Pauza ${pauseMs}ms przed przebiegiem Issue (limit zapytań metadanych MF — po PermanentStorage).`,
+        );
+        await delay(pauseMs);
+      }
+    }
     for (const subjectType of cfg.KSEF_SYNC_SUBJECT_TYPES) {
       console.info(`[KSeF sync] Paging metadata dateType=${dateType} subjectType=${subjectType} …`);
       let pageOffset = 0;

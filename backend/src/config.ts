@@ -114,6 +114,12 @@ const envSchema = z.object({
    */
   KSEF_SYNC_HWN_OVERLAP_DAYS: z.coerce.number().int().min(0).max(14).default(7),
   /**
+   * Pauza (ms) przed **pierwszym** zapytaniem `dateType=Issue` po przebiegach `PermanentStorage`.
+   * MF limituje `POST …/invoices/query/metadata` (np. ~20/h); bez pauzy Issue często zwraca 429 i cały przebieg się pomija.
+   * 0 = wyłączone (np. sandbox).
+   */
+  KSEF_METADATA_INTER_PASS_PAUSE_MS: z.coerce.number().int().min(0).default(70_000),
+  /**
    * Wysyłka faktur sprzedaży do KSeF: `stub` — tylko zapis PENDING w bazie;
    * `live` — próba wywołania API (wymaga KSEF_ENV≠mock, tokenów i poprawnego XML wg MF).
    */
