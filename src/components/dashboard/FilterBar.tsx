@@ -29,9 +29,12 @@ export function FilterBar({ filters, onChange, suppliers, restaurants, categorie
   const patch = (partial: Partial<InvoiceFilters>) =>
     onChange({ ...filters, ...partial })
 
+  const dateRangeHint =
+    'Zakres Od–Do filtruje po dacie wystawienia (jak w KSeF): zapytanie do API używa tych dat, więc widzisz wszystkie faktury z okresu, nie tylko pierwszą stronę wyników. To nie jest „data zapisania w KSeF” z portalu MF.'
+
   return (
     <div className={`filter-bar ${open ? 'filter-bar--open' : ''}`}>
-      <div className="filter-bar__top">
+      <div className="filter-bar__main">
         <label className="field filter-bar__search">
           <input
             className="input"
@@ -40,45 +43,47 @@ export function FilterBar({ filters, onChange, suppliers, restaurants, categorie
             onChange={(e) => patch({ search: e.target.value })}
           />
         </label>
+        <div className="filter-bar__date-inputs" role="group" aria-label="Zakres dat wystawienia">
+          <label className="field field--compact-date">
+            <span className="field__label">Od</span>
+            <input
+              type="date"
+              className="input"
+              value={filters.dateFrom}
+              onChange={(e) => patch({ dateFrom: e.target.value })}
+            />
+          </label>
+          <label className="field field--compact-date">
+            <span className="field__label">Do</span>
+            <input
+              type="date"
+              className="input"
+              value={filters.dateTo}
+              onChange={(e) => patch({ dateTo: e.target.value })}
+            />
+          </label>
+        </div>
         <button
           type="button"
           className={`filter-bar__toggle ${count > 0 ? 'filter-bar__toggle--active' : ''}`}
           onClick={() => setOpen((o) => !o)}
+          aria-expanded={open}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
           <span className="filter-bar__toggle-label">Filtry{count > 0 ? ` (${count})` : ''}</span>
           <svg className={`filter-bar__chevron ${open ? 'filter-bar__chevron--open' : ''}`} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="6 9 12 15 18 9"/></svg>
         </button>
-      </div>
-
-      <div className="filter-bar__date-section">
-        <div className="filter-bar__date-row">
-          <div className="filter-bar__date-inputs">
-            <label className="field field--narrow">
-              <span className="field__label">Od</span>
-              <input
-                type="date"
-                className="input"
-                value={filters.dateFrom}
-                onChange={(e) => patch({ dateFrom: e.target.value })}
-              />
-            </label>
-            <label className="field field--narrow">
-              <span className="field__label">Do</span>
-              <input
-                type="date"
-                className="input"
-                value={filters.dateTo}
-                onChange={(e) => patch({ dateTo: e.target.value })}
-              />
-            </label>
-          </div>
-          <p className="filter-bar__date-hint">
-            Zakres <strong>Od–Do</strong> filtruje po <strong>dacie wystawienia</strong> (jak w KSeF) — zapytanie idzie do API z tymi datami, więc widzisz{' '}
-            <strong>wszystkie</strong> faktury z okresu, nie tylko pierwszą stronę wyników.
-            To nie jest „data zapisania w KSeF” z portalu MF.
-          </p>
-        </div>
+        <button
+          type="button"
+          className="filter-bar__hint-btn"
+          title={dateRangeHint}
+          aria-label={dateRangeHint}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="10" />
+            <path d="M12 16v-4M12 8h.01" />
+          </svg>
+        </button>
       </div>
 
       {open && (

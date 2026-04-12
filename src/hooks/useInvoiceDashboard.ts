@@ -152,13 +152,17 @@ export function useInvoiceDashboard() {
       const merged = mergeCategoryOverrides(mapped, categoryOverridesRef.current)
       setInvoices(enrichDuplicateMetadata(merged))
       setDataSource('api')
-    } catch {
+    } catch (e) {
       if (USE_MOCK_INVOICES) {
         setListError(null)
         setInvoices(enrichDuplicateMetadata(seedInvoices()))
         setDataSource('mock')
       } else {
-        setListError('Nie udało się pobrać faktur z API.')
+        const msg =
+          e instanceof Error && e.message.trim()
+            ? e.message.trim()
+            : 'Nie udało się pobrać faktur z API.'
+        setListError(msg)
         setInvoices([])
       }
     } finally {

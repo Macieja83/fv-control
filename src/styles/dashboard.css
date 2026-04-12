@@ -270,31 +270,67 @@ html[data-theme='dark'] .app-shell {
 .main-content {
   max-width: 1480px;
   margin: 0 auto;
-  padding: 0.85rem 0.65rem 2.5rem;
+  padding: 0.65rem 0.65rem 2.25rem;
   min-width: 0;
   overflow-x: hidden;
 }
 
 @media (min-width: 641px) {
-  .main-content { padding: 1.1rem 1.25rem 2.75rem; }
+  .main-content { padding: 0.85rem 1.25rem 2.5rem; }
+}
+
+/* ─── Invoice list: tabs + upload w jednym rzędzie ─── */
+
+.invoice-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.65rem;
+  margin-bottom: 0.55rem;
+}
+
+.invoice-toolbar__actions {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  justify-content: flex-end;
+}
+
+.invoice-toolbar .invoice-ledger-tabs,
+.invoice-toolbar .doc-tabs {
+  margin-bottom: 0;
+}
+
+.invoice-toolbar .upload-bar {
+  margin-bottom: 0;
+}
+
+.upload-bar--toolbar {
+  flex-wrap: nowrap;
 }
 
 /* ─── KPI Cards ─── */
 
 .kpi-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.5rem;
-  margin-bottom: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(7.25rem, 1fr));
+  gap: 0.4rem;
+  margin-bottom: 0.55rem;
 }
 
-@media (min-width: 768px) { .kpi-grid { grid-template-columns: repeat(6, 1fr); gap: 0.6rem; margin-bottom: 1rem; } }
+@media (min-width: 1100px) {
+  .kpi-grid {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 0.45rem;
+  }
+}
 
 .kpi-card {
   text-align: left;
   border: 1px solid color-mix(in srgb, var(--border) 90%, var(--accent));
-  border-radius: var(--radius);
-  padding: 0.65rem 0.7rem;
+  border-radius: var(--radius-sm);
+  padding: 0.45rem 0.55rem;
   background: color-mix(in srgb, var(--surface-1) 92%, transparent);
   backdrop-filter: blur(8px);
   cursor: pointer;
@@ -304,29 +340,37 @@ html[data-theme='dark'] .app-shell {
 
 .kpi-card:hover {
   border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
-  box-shadow: var(--shadow-md);
-  transform: translateY(-2px);
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-1px);
 }
 
 .kpi-card__label {
   display: block;
-  font-size: 0.6rem; font-weight: 600;
+  font-size: 0.55rem; font-weight: 600;
   text-transform: uppercase; letter-spacing: 0.04em;
   color: var(--text-muted);
+  line-height: 1.2;
 }
 
 .kpi-card__value {
   display: block;
-  font-size: 1.25rem; font-weight: 700;
+  font-size: 1.1rem; font-weight: 700;
   color: var(--text-heading);
-  margin-top: 0.15rem;
+  margin-top: 0.08rem;
   font-variant-numeric: tabular-nums;
+  line-height: 1.15;
 }
 
-@media (min-width: 768px) { .kpi-card__value { font-size: 1.5rem; } }
+@media (min-width: 768px) { .kpi-card__value { font-size: 1.22rem; } }
 
-.kpi-card__hint { display: none; font-size: 0.6rem; color: var(--text-muted); margin-top: 0.2rem; }
-@media (min-width: 768px) { .kpi-card__hint { display: block; } }
+.kpi-card__hint {
+  display: none;
+  font-size: 0.55rem;
+  color: var(--text-muted);
+  margin-top: 0.12rem;
+  line-height: 1.25;
+}
+@media (min-width: 520px) { .kpi-card__hint { display: block; } }
 
 /* ─── Filter Bar ─── */
 
@@ -335,27 +379,92 @@ html[data-theme='dark'] .app-shell {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 0;
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.6rem;
   box-shadow: var(--shadow-xs);
   overflow: hidden;
 }
 
-.filter-bar__top {
+.filter-bar__main {
   display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.4rem 0.45rem;
+  padding: 0.45rem 0.5rem;
 }
 
-@media (min-width: 641px) { .filter-bar__top { padding: 0.65rem 0.75rem; } }
+@media (min-width: 641px) {
+  .filter-bar__main {
+    padding: 0.5rem 0.6rem;
+  }
+}
 
-.filter-bar__search { flex: 1; min-width: 0; margin: 0; }
-.filter-bar__search .input { font-size: 0.8rem; padding: 0.4rem 0.6rem; width: 100%; }
+@media (min-width: 1024px) {
+  .filter-bar__main {
+    flex-wrap: nowrap;
+    align-items: stretch;
+  }
+}
+
+.filter-bar__search { flex: 1 1 12rem; min-width: 0; margin: 0; }
+.filter-bar__search .input { font-size: 0.78rem; padding: 0.35rem 0.55rem; width: 100%; }
+
+.filter-bar__date-inputs {
+  display: flex;
+  gap: 0.35rem;
+  flex-shrink: 0;
+  align-items: flex-end;
+}
+
+.field--compact-date {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.field--compact-date .field__label {
+  font-size: 0.55rem;
+}
+
+.field--compact-date .input {
+  font-size: 0.72rem;
+  padding: 0.32rem 0.4rem;
+  max-width: 100%;
+}
+
+@media (min-width: 641px) {
+  .field--compact-date {
+    flex: 0 0 7.65rem;
+  }
+}
+
+.filter-bar__hint-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  flex-shrink: 0;
+  align-self: center;
+  margin-bottom: 0.05rem;
+  padding: 0;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--border);
+  background: var(--surface-0);
+  color: var(--text-muted);
+  cursor: help;
+  transition: color var(--transition), border-color var(--transition), background var(--transition);
+}
+
+.filter-bar__hint-btn:hover {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+  color: var(--accent);
+  background: var(--accent-soft);
+}
 
 .filter-bar__toggle {
   display: flex; align-items: center; gap: 0.35rem;
   font: inherit; font-size: 0.72rem; font-weight: 600;
-  padding: 0.4rem 0.6rem;
+  padding: 0.35rem 0.55rem;
+  min-height: 2.25rem;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   background: var(--surface-0);
@@ -364,6 +473,7 @@ html[data-theme='dark'] .app-shell {
   transition: all var(--transition);
   white-space: nowrap;
   flex-shrink: 0;
+  align-self: center;
 }
 
 .filter-bar__toggle:hover { border-color: var(--accent); color: var(--accent); }
@@ -374,42 +484,6 @@ html[data-theme='dark'] .app-shell {
 
 .filter-bar__chevron { transition: transform var(--transition); flex-shrink: 0; }
 .filter-bar__chevron--open { transform: rotate(180deg); }
-
-/* ─── Date section (always visible) ─── */
-
-.filter-bar__date-section {
-  padding: 0.5rem 0.6rem;
-  border-top: 1px solid var(--border-light);
-}
-@media (min-width: 641px) { .filter-bar__date-section { padding: 0.5rem 0.75rem; } }
-
-.filter-bar__date-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem 0.75rem;
-  align-items: flex-end;
-  width: 100%;
-}
-
-.filter-bar__date-inputs {
-  display: flex;
-  gap: 0.4rem;
-  flex-shrink: 0;
-}
-
-.filter-bar__date-hint {
-  margin: 0;
-  flex: 1;
-  min-width: min(100%, 16rem);
-  font-size: 0.65rem;
-  line-height: 1.35;
-  color: var(--text-muted);
-}
-
-.filter-bar__date-hint strong {
-  font-weight: 600;
-  color: color-mix(in srgb, var(--text-muted) 85%, var(--text));
-}
 
 .filter-bar__body {
   padding: 0.5rem 0.5rem 0.65rem;
@@ -868,7 +942,7 @@ html[data-theme='dark'] .btn-icon-del { color: #f87171; }
 .upload-bar {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.4rem;
   margin-bottom: 0.75rem;
   flex-wrap: wrap;
 }
@@ -886,11 +960,11 @@ html[data-theme='dark'] .btn-icon-del { color: #f87171; }
 .upload-bar__btn {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.35rem;
   font: inherit;
-  font-size: 0.78rem;
+  font-size: 0.74rem;
   font-weight: 600;
-  padding: 0.5rem 0.85rem;
+  padding: 0.4rem 0.7rem;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   cursor: pointer;

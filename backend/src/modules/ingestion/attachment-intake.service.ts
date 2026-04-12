@@ -23,6 +23,11 @@ export type IngestAttachmentParams = {
   metadata?: Record<string, unknown>;
   intakeSourceType: InvoiceIntakeSourceType;
   sourceAccount?: string | null;
+  /**
+   * Rzeczywista data wystawienia z źródła (np. metadane KSeF), zanim pipeline ustawi pola z XML/OCR.
+   * Bez tego `issueDate` = moment ingestu → lista filtrowana po miesiącu „gubi” faktury po aktualizacji z XML.
+   */
+  initialIssueDate?: Date;
   /** When set, skip `putObject` (blob already stored — e.g. IMAP sync). */
   existingStorage?: { storageKey: string; storageBucket?: string | null };
 };
@@ -109,13 +114,17 @@ export async function ingestAttachmentAndEnqueue(
   });
 
   const zero = new Prisma.Decimal(0);
+  const issueDate =
+    params.initialIssueDate instanceof Date && !Number.isNaN(params.initialIssueDate.getTime())
+      ? params.initialIssueDate
+      : new Date();
   const invoice = await prisma.invoice.create({
     data: {
       tenantId: params.tenantId,
       contractorId: null,
       primaryDocId: doc.id,
       number: `ING-${randomUUID().slice(0, 8).toUpperCase()}`,
-      issueDate: new Date(),
+      issueDate,
       currency: "PLN",
       netTotal: zero,
       vatTotal: zero,

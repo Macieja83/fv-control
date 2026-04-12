@@ -19,6 +19,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import type { PrismaClient } from "@prisma/client";
 import { KsefClient, type KsefInvoiceMetadata, type KsefMetadataPage } from "./ksef-client.js";
 import { ingestAttachmentAndEnqueue } from "../ingestion/attachment-intake.service.js";
+import { parseInvoiceDate } from "../invoices/invoice-dates.js";
 import { createObjectStorage } from "../../adapters/storage/create-storage.js";
 import { loadConfig } from "../../config.js";
 
@@ -104,7 +105,7 @@ export async function runKsefSyncJob(
     return { fetched: 0, ingested: 0, skippedDuplicate: 0, refetched: 0, errors: [], newHwmDate: null };
   }
 
-  const env = cfg.KSEF_ENV as "production" | "sandbox";
+  const env = cfg.KSEF_ENV;
   let client: KsefClient;
   if (cfg.KSEF_CERT && cfg.KSEF_TOKEN_PASSWORD) {
     client = KsefClient.fromEncryptedCertificate(
@@ -232,6 +233,16 @@ export async function runKsefSyncJob(
 
 type ProcessOutcome = "ingested" | "refetched" | "skipped";
 
+/** Data wystawienia z metadanych KSeF — żeby GET /invoices?dateFrom/dateTo od razu trafiała w ten sam miesiąc co w MF. */
+function issueDateFromKsefMetadata(meta: KsefInvoiceMetadata): Date | undefined {
+  const raw = meta.issueDate?.trim();
+  if (!raw) return undefined;
+  const ymd = raw.length >= 10 ? raw.slice(0, 10) : raw;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return undefined;
+  const d = parseInvoiceDate(ymd);
+  return Number.isNaN(d.getTime()) ? undefined : d;
+}
+
 async function processOneInvoice(
   prisma: PrismaClient,
   client: KsefClient,
@@ -276,6 +287,7 @@ async function processOneInvoice(
     intakeSourceType: "KSEF_API",
     sourceAccount: `KSeF ${meta.seller.nip}`,
     metadata: ksefMetadataPayload(meta),
+    initialIssueDate: issueDateFromKsefMetadata(meta),
   });
 
   return "ingested";

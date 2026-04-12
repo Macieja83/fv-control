@@ -105,7 +105,20 @@ export default function DashboardApp() {
       />
       {nav === 'invoices' && (
         <main className="main-content">
-          <InvoiceLedgerTabs value={invoiceLedger} onChange={setInvoiceLedger} />
+          <div className="invoice-toolbar">
+            <InvoiceLedgerTabs value={invoiceLedger} onChange={setInvoiceLedger} />
+            <div className="invoice-toolbar__actions">
+              {invoiceLedger === 'purchase' && <InvoiceUpload onUploaded={() => void refreshFromApi()} />}
+              {invoiceLedger === 'sale' && (
+                <div className="upload-bar upload-bar--toolbar">
+                  <button type="button" className="upload-bar__btn upload-bar__btn--camera" onClick={() => setSalesDialogOpen(true)}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+                    <span>Nowa faktura sprzedaży</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
           <KPICards
             all={kpi.all}
             unpaidBiz={kpi.unpaidBiz}
@@ -116,15 +129,6 @@ export default function DashboardApp() {
             unknownVendor={kpi.unknownVendor}
             onPickFilter={pickKpi}
           />
-          {invoiceLedger === 'purchase' && <InvoiceUpload onUploaded={() => void refreshFromApi()} />}
-          {invoiceLedger === 'sale' && (
-            <div className="upload-bar" style={{ marginBottom: '0.5rem' }}>
-              <button type="button" className="upload-bar__btn upload-bar__btn--camera" onClick={() => setSalesDialogOpen(true)}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
-                <span>Nowa faktura sprzedaży</span>
-              </button>
-            </div>
-          )}
           <FilterBar
             filters={filters}
             onChange={setFilters}
