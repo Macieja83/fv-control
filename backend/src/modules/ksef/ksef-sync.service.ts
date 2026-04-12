@@ -2,6 +2,8 @@
  * KSeF incremental invoice sync.
  *
  * Uses `permanentStorageDate` (Asc) to pull new invoices since last sync.
+ * Domyślnie odpytywane są **Subject2 i Subject1** (`KSEF_SYNC_SUBJECT_TYPES`) — pełniejszy zestaw niż sam nabywca/wystawca.
+ * Przy **jakimkolwiek** błędzie ingestu w przebiegu **nie** zapisujemy `hwmDate` (żeby nie pominąć faktur na stałe).
  * For each new invoice found:
  *   1. Check if we already have this ksefNumber (dedup).
  *   2. Download the XML.
@@ -85,46 +87,64 @@ export async function runKsefSyncJob(
   console.info(`[KSeF sync] Querying metadata from=${from} to=${to} force=${force}`);
 
   const result: KsefSyncResult = { fetched: 0, ingested: 0, skippedDuplicate: 0, refetched: 0, errors: [], newHwmDate: null };
-  let pageOffset = 0;
-  let hasMore = true;
-  let currentFrom = from;
   const beforeXmlFetch = createInvoiceXmlThrottle(cfg.KSEF_INVOICE_FETCH_MIN_INTERVAL_MS);
 
-  while (hasMore) {
-    const page = await client.queryMetadata(currentFrom, to, pageOffset, PAGE_SIZE, "Subject2");
-    result.fetched += page.invoices.length;
+  function mergeHwm(a: string | null, b: string | null): string | null {
+    if (!a) return b;
+    if (!b) return a;
+    return a > b ? a : b;
+  }
 
-    for (const inv of page.invoices) {
-      try {
-        const outcome = await processOneInvoice(prisma, client, data.tenantId, inv, force, beforeXmlFetch);
-        if (outcome === "ingested") result.ingested++;
-        else if (outcome === "refetched") result.refetched++;
-        else result.skippedDuplicate++;
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.error(`[KSeF sync] Error processing ${inv.ksefNumber}: ${msg}`);
-        result.errors.push(`${inv.ksefNumber}: ${msg}`);
+  for (const subjectType of cfg.KSEF_SYNC_SUBJECT_TYPES) {
+    console.info(`[KSeF sync] Paging metadata subjectType=${subjectType} …`);
+    let pageOffset = 0;
+    let hasMore = true;
+    let currentFrom = from;
+
+    while (hasMore) {
+      const page = await client.queryMetadata(currentFrom, to, pageOffset, PAGE_SIZE, subjectType);
+      result.fetched += page.invoices.length;
+
+      for (const inv of page.invoices) {
+        try {
+          const outcome = await processOneInvoice(prisma, client, data.tenantId, inv, force, beforeXmlFetch);
+          if (outcome === "ingested") result.ingested++;
+          else if (outcome === "refetched") result.refetched++;
+          else result.skippedDuplicate++;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error(`[KSeF sync] Error processing ${inv.ksefNumber}: ${msg}`);
+          result.errors.push(`${inv.ksefNumber}: ${msg}`);
+        }
       }
-    }
 
-    if (page.permanentStorageHwmDate) {
-      result.newHwmDate = page.permanentStorageHwmDate;
-    }
-
-    hasMore = page.hasMore;
-    if (hasMore && page.isTruncated) {
-      const lastInvoice = page.invoices[page.invoices.length - 1];
-      if (lastInvoice) {
-        currentFrom = lastInvoice.permanentStorageDate;
+      if (page.permanentStorageHwmDate) {
+        result.newHwmDate = mergeHwm(result.newHwmDate, page.permanentStorageHwmDate);
       }
-      pageOffset = 0;
-    } else if (hasMore) {
-      pageOffset++;
+
+      hasMore = page.hasMore;
+      if (hasMore && page.isTruncated) {
+        const lastInvoice = page.invoices[page.invoices.length - 1];
+        if (lastInvoice) {
+          currentFrom = lastInvoice.permanentStorageDate;
+        }
+        pageOffset = 0;
+      } else if (hasMore) {
+        pageOffset++;
+      }
     }
   }
 
-  if (result.newHwmDate) {
+  if (result.errors.length === 0 && result.newHwmDate) {
     await setHighWaterMark(prisma, data.tenantId, result.newHwmDate);
+    console.info(`[KSeF sync] Zaktualizowano hwmDate=${result.newHwmDate}`);
+  } else if (result.errors.length > 0) {
+    console.warn(
+      `[KSeF sync] Nie aktualizuję hwmDate (błędy: ${result.errors.length}) — przy następnym sync ponowi się ten sam zakres; napraw błędy lub użyj fromDate.`,
+    );
+    result.newHwmDate = null;
+  } else if (!result.newHwmDate) {
+    console.info("[KSeF sync] Brak permanentStorageHwmDate z API — hwmDate bez zmian.");
   }
 
   console.info(

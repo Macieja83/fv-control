@@ -29,6 +29,8 @@ const ksefRoutes: FastifyPluginAsync = async (app) => {
       return {
         environment: cfg.KSEF_ENV,
         configured: credentialsOk,
+        /** Role MF w `query/metadata` (zakres domyślny: Subject2 + Subject1). */
+        syncSubjectTypes: cfg.KSEF_SYNC_SUBJECT_TYPES,
         nip: cfg.KSEF_NIP ?? null,
         issuanceMode: cfg.KSEF_ISSUANCE_MODE,
         /** `true` gdy `POST /invoices/:id/send-to-ksef` wyśle FA do API MF (nie tylko stub w bazie). */

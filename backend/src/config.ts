@@ -66,6 +66,28 @@ const envSchema = z.object({
   /** Min delay (ms) between KSeF GET invoice XML calls (MF limit ~16/min). 0 = no delay. */
   KSEF_INVOICE_FETCH_MIN_INTERVAL_MS: z.coerce.number().int().min(0).default(4_000),
   /**
+   * Zapytania `POST /invoices/query/metadata` — lista ról MF (`Subject1` = m.in. wystawca, `Subject2` = m.in. nabywca).
+   * Domyślnie oba: część faktur widoczna w portalu tylko w jednym kontekście; deduplikacja po `ksefNumber`.
+   * Skrót: tylko zakupy → `Subject2`.
+   */
+  KSEF_SYNC_SUBJECT_TYPES: z.preprocess(
+    (v) => (v === "" || v === undefined ? "Subject2,Subject1" : String(v).trim()),
+    z.string(),
+  ).transform((raw): ("Subject1" | "Subject2")[] => {
+    const out: ("Subject1" | "Subject2")[] = [];
+    const seen = new Set<string>();
+    for (const part of raw
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)) {
+      if (part !== "Subject1" && part !== "Subject2") continue;
+      if (seen.has(part)) continue;
+      seen.add(part);
+      out.push(part);
+    }
+    return out.length > 0 ? out : ["Subject2", "Subject1"];
+  }),
+  /**
    * Wysyłka faktur sprzedaży do KSeF: `stub` — tylko zapis PENDING w bazie;
    * `live` — próba wywołania API (wymaga KSEF_ENV≠mock, tokenów i poprawnego XML wg MF).
    */
