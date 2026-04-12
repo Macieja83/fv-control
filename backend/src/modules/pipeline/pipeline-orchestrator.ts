@@ -18,6 +18,7 @@ import { classifyDocumentType } from "../compliance/compliance-engine.js";
 import { refreshInvoiceCompliance } from "../compliance/compliance.service.js";
 import { findContractorByNormalizedNip, polishNipDigits10 } from "../contractors/contractor-resolve.js";
 import { tryExtractDraftFromKsefFaXml } from "../ksef/ksef-fa-xml-extract.js";
+import { draftFromKsefDocumentMetadata } from "../ksef/ksef-metadata-draft.js";
 import { extractVendorNipFromNormalizedPayload } from "../invoices/invoice-vendor-nip.js";
 import { parseInvoiceDate } from "../invoices/invoice-dates.js";
 
@@ -126,6 +127,8 @@ export async function runPipelineJob(prisma: PrismaClient, processingJobId: stri
     const intakeKind = mapIngestionToIntake(document.sourceType);
     const fromKsefSource = intakeKind === "KSEF_API" || document.sourceType === "KSEF";
     const xmlExtract = tryExtractDraftFromKsefFaXml(documentBuffer, document.mimeType ?? "");
+    const docMeta = document.metadata as Record<string, unknown> | null | undefined;
+    const metaDraft = fromKsefSource ? draftFromKsefDocumentMetadata(docMeta) : null;
 
     let extractedDraft: ExtractedInvoiceDraft;
     let confidence: number;
@@ -133,6 +136,12 @@ export async function runPipelineJob(prisma: PrismaClient, processingJobId: stri
       extractedDraft = xmlExtract.draft;
       confidence = xmlExtract.confidence;
       console.info(`[pipeline] KSeF FA XML structural extract for invoice ${invoice.id}`);
+    } else if (fromKsefSource && metaDraft?.number) {
+      extractedDraft = metaDraft;
+      confidence = 0.82;
+      console.info(
+        `[pipeline] KSeF document.metadata fallback for invoice ${invoice.id} (XML structural extract or OpenAI unavailable)`,
+      );
     } else {
       const aiResult = await ai.extractInvoiceData({
         mimeType: document.mimeType,

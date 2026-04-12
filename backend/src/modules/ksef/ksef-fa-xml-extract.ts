@@ -33,14 +33,21 @@ function oneOrFirst<T>(v: T | T[] | undefined): T | undefined {
   return Array.isArray(v) ? v[0] : v;
 }
 
-/** Szuka bloku z polami faktury (P_2, P_15 / P_13_*). */
+/** Szuka bloku z polami faktury (P_2 + sumy lub wiersze FA). */
 function deepFindFaBlock(node: unknown, depth = 0): Record<string, unknown> | null {
   if (depth > 40) return null;
   const o = asRecord(node);
   if (!o) return null;
   const hasP2 = o.P_2 != null || o.p_2 != null;
-  const hasAmounts = o.P_15 != null || o.P_13_1 != null || o.P_13_2 != null || o.P_13_3 != null;
-  if (hasP2 && hasAmounts) return o;
+  const hasAmounts =
+    o.P_15 != null ||
+    o.P_13_1 != null ||
+    o.P_13_2 != null ||
+    o.P_13_3 != null ||
+    o.P_13_4 != null ||
+    o.P_13_5 != null;
+  const hasLines = o.FaWiersz != null || o.FaWiersze != null;
+  if (hasP2 && (hasAmounts || hasLines)) return o;
 
   for (const v of Object.values(o)) {
     if (v == null || typeof v === "string" || typeof v === "number" || typeof v === "boolean") continue;
@@ -51,6 +58,36 @@ function deepFindFaBlock(node: unknown, depth = 0): Record<string, unknown> | nu
     }
   }
   return null;
+}
+
+/** Sprzedawca z bloku Podmiot1 (FA(2)/FA(3) — często na poziomie Faktura, nie wewnątrz Fa). */
+function extractSellerFromPodmiot1(pod1: Record<string, unknown> | null): {
+  contractorNip: string | null;
+  contractorName: string | null;
+} {
+  let contractorNip: string | null = null;
+  let contractorName: string | null = null;
+  if (!pod1) return { contractorNip, contractorName };
+  const daneRoot = pod1.DaneIdentyfikacyjne;
+  const blocks = daneRoot == null ? [] : Array.isArray(daneRoot) ? daneRoot : [daneRoot];
+  for (const block of blocks) {
+    const dane = asRecord(block);
+    if (!dane) continue;
+    const nipRaw =
+      pickText(dane.NIP) ||
+      pickText(dane.Nip) ||
+      pickText(dane.NumerIdentyfikacjiPodatkowej) ||
+      pickText(dane.IdentyfikatorPodatkowy);
+    const nip10 = polishNipDigits10(nipRaw);
+    const nm = pickText(dane.Nazwa) || pickText(dane.Nazwisko) || "";
+    if (nip10) {
+      contractorNip = nip10;
+      contractorName = nm.length > 0 ? nm : null;
+      break;
+    }
+    if (nm.length > 0 && !contractorName) contractorName = nm;
+  }
+  return { contractorNip, contractorName };
 }
 
 function normalizeMoneyStr(raw: string): string {
@@ -99,7 +136,12 @@ export function tryExtractDraftFromKsefFaXml(
     return null;
   }
 
-  const fa = deepFindFaBlock(parsed);
+  const docRoot = asRecord(parsed);
+  const fakturaNode = asRecord(docRoot?.Faktura) ?? docRoot;
+  const faFromRoot =
+    fakturaNode?.Fa != null ? asRecord(oneOrFirst(fakturaNode.Fa as unknown[])) : null;
+  let fa = faFromRoot ?? deepFindFaBlock(parsed);
+  if (!fa) fa = deepFindFaBlock(parsed);
   if (!fa) return null;
 
   const num = pickText(fa.P_2 ?? fa.p_2);
@@ -109,8 +151,8 @@ export function tryExtractDraftFromKsefFaXml(
   const issueRaw = pickText(fa.P_1) || pickText(fa.p_1);
   const issueDate = issueRaw.length >= 10 ? issueRaw.slice(0, 10) : undefined;
 
-  const net = pickText(fa.P_13_1) || pickText(fa.P_13_2) || pickText(fa.P_13_3) || "0";
-  const vat = pickText(fa.P_14_1) || pickText(fa.P_14_2) || pickText(fa.P_14_3) || "0";
+  let net = pickText(fa.P_13_1) || pickText(fa.P_13_2) || pickText(fa.P_13_3) || "0";
+  let vat = pickText(fa.P_14_1) || pickText(fa.P_14_2) || pickText(fa.P_14_3) || "0";
   let gross = pickText(fa.P_15);
   if (!gross) {
     const n = Number.parseFloat(normalizeMoneyStr(net));
@@ -121,29 +163,16 @@ export function tryExtractDraftFromKsefFaXml(
 
   const currency = pickText(fa.KodWaluty) || "PLN";
 
-  let contractorNip: string | null = null;
-  let contractorName: string | null = null;
-  const pod1 = asRecord(oneOrFirst(fa.Podmiot1 as unknown[]));
-  if (pod1) {
-    const daneRoot = pod1.DaneIdentyfikacyjne;
-    const blocks = daneRoot == null ? [] : Array.isArray(daneRoot) ? daneRoot : [daneRoot];
-    for (const block of blocks) {
-      const dane = asRecord(block);
-      if (!dane) continue;
-      const nipRaw =
-        pickText(dane.NIP) ||
-        pickText(dane.Nip) ||
-        pickText(dane.NumerIdentyfikacjiPodatkowej) ||
-        pickText(dane.IdentyfikatorPodatkowy);
-      const nip10 = polishNipDigits10(nipRaw);
-      const nm = pickText(dane.Nazwa) || pickText(dane.Nazwisko) || "";
-      if (nip10) {
-        contractorNip = nip10;
-        contractorName = nm.length > 0 ? nm : null;
-        break;
-      }
-      if (nm.length > 0 && !contractorName) contractorName = nm;
-    }
+  const pod1InsideFa = asRecord(oneOrFirst(fa.Podmiot1 as unknown[]));
+  const pod1AtFaktura =
+    fakturaNode?.Podmiot1 != null
+      ? asRecord(oneOrFirst(fakturaNode.Podmiot1 as unknown[]))
+      : null;
+  let { contractorNip, contractorName } = extractSellerFromPodmiot1(pod1InsideFa);
+  if (!contractorNip) {
+    const fromRoot = extractSellerFromPodmiot1(pod1AtFaktura);
+    contractorNip = contractorNip ?? fromRoot.contractorNip;
+    contractorName = contractorName ?? fromRoot.contractorName;
   }
 
   const wiersze = fa.FaWiersz ?? fa.FaWiersze;
@@ -168,6 +197,26 @@ export function tryExtractDraftFromKsefFaXml(
         netValue: netVal,
         grossValue: grossLine,
       });
+    }
+  }
+
+  if (
+    normalizeMoneyStr(gross) === "0.00" &&
+    lineItems.length > 0 &&
+    normalizeMoneyStr(net) === "0.00"
+  ) {
+    let sumNet = 0;
+    let sumGross = 0;
+    for (const li of lineItems) {
+      sumNet += Number.parseFloat(li.netValue);
+      sumGross += Number.parseFloat(li.grossValue);
+    }
+    if (Number.isFinite(sumNet) && sumNet > 0) {
+      net = sumNet.toFixed(2);
+      gross = (Number.isFinite(sumGross) && sumGross > 0 ? sumGross : sumNet).toFixed(2);
+      const g = Number.parseFloat(gross);
+      const n = Number.parseFloat(net);
+      vat = (g - n).toFixed(2);
     }
   }
 

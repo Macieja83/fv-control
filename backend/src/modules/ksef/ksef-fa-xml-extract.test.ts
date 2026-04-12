@@ -45,4 +45,30 @@ describe("tryExtractDraftFromKsefFaXml", () => {
     expect(r).not.toBeNull();
     expect(r!.draft.issueDate).toBe("2026-04-11");
   });
+
+  it("reads Podmiot1 from Faktura when not nested inside Fa (FA(3)-style layout)", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<Faktura xmlns="http://crd.gov.pl/wzor/2025/06/25/13775/">
+  <Podmiot1>
+    <DaneIdentyfikacyjne>
+      <NIP>1234567890</NIP>
+      <Nazwa>SPRZEDAWCA SP Z O O</Nazwa>
+    </DaneIdentyfikacyjne>
+  </Podmiot1>
+  <Fa>
+    <P_1>2026-04-01</P_1>
+    <P_2>FV/FA3/001</P_2>
+    <KodWaluty>PLN</KodWaluty>
+    <P_13_1>50.00</P_13_1>
+    <P_14_1>11.50</P_14_1>
+    <P_15>61.50</P_15>
+  </Fa>
+</Faktura>`;
+    const r = tryExtractDraftFromKsefFaXml(Buffer.from(xml, "utf8"), "application/xml");
+    expect(r).not.toBeNull();
+    expect(r!.draft.number).toBe("FV/FA3/001");
+    expect(r!.draft.contractorNip).toBe("1234567890");
+    expect(r!.draft.contractorName).toContain("SPRZEDAWCA");
+    expect(r!.draft.grossTotal).toBe("61.50");
+  });
 });
