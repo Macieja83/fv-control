@@ -380,17 +380,35 @@ html[data-theme='dark'] .app-shell {
 .filter-bar__date-section {
   padding: 0.5rem 0.6rem;
   border-top: 1px solid var(--border-light);
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  align-items: flex-end;
 }
 @media (min-width: 641px) { .filter-bar__date-section { padding: 0.5rem 0.75rem; } }
+
+.filter-bar__date-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  align-items: flex-end;
+  width: 100%;
+}
 
 .filter-bar__date-inputs {
   display: flex;
   gap: 0.4rem;
   flex-shrink: 0;
+}
+
+.filter-bar__date-hint {
+  margin: 0;
+  flex: 1;
+  min-width: min(100%, 16rem);
+  font-size: 0.65rem;
+  line-height: 1.35;
+  color: var(--text-muted);
+}
+
+.filter-bar__date-hint strong {
+  font-weight: 600;
+  color: color-mix(in srgb, var(--text-muted) 85%, var(--text));
 }
 
 .filter-bar__body {

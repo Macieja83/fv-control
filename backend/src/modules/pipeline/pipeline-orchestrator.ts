@@ -7,7 +7,11 @@ import { createMockAiAdapter } from "../../adapters/ai/ai-invoice.adapter.js";
 import { createOpenAiAdapter } from "../../adapters/ai/openai-invoice.adapter.js";
 import { createObjectStorage } from "../../adapters/storage/create-storage.js";
 import { buildInvoiceFingerprint } from "../../domain/deduplication/invoice-fingerprint.js";
-import { orientInvoiceDuplicateRoles, scoreInvoiceDuplicatePair } from "../../domain/deduplication/duplicate-score.js";
+import {
+  areBothKsefRepositoryInvoices,
+  orientInvoiceDuplicateRoles,
+  scoreInvoiceDuplicatePair,
+} from "../../domain/deduplication/duplicate-score.js";
 import { loadConfig } from "../../config.js";
 import { pipelineJobsTotal } from "../../lib/metrics.js";
 import { classifyDocumentType } from "../compliance/compliance-engine.js";
@@ -216,7 +220,7 @@ export async function runPipelineJob(prisma: PrismaClient, processingJobId: stri
 
       let contractorId = invoice.contractorId;
       const ocrContractorName = draft.contractorName?.trim();
-      let nip10 =
+      const nip10 =
         polishNipDigits10(draft.contractorNip) ??
         polishNipDigits10(extractVendorNipFromNormalizedPayload(draft as unknown));
       if (nip10) {
@@ -330,20 +334,22 @@ export async function runPipelineJob(prisma: PrismaClient, processingJobId: stri
         issueDateB: p.issueDate,
       });
       if (score.confidence >= 0.72) {
-        const { canonicalId, candidateId } = orientInvoiceDuplicateRoles(
-          {
-            id: refreshed.id,
-            intakeSourceType: refreshed.intakeSourceType,
-            createdAt: refreshed.createdAt,
-            ksefNumber: refreshed.ksefNumber,
-          },
-          {
-            id: p.id,
-            intakeSourceType: p.intakeSourceType,
-            createdAt: p.createdAt,
-            ksefNumber: p.ksefNumber,
-          },
-        );
+        const roleA = {
+          id: refreshed.id,
+          intakeSourceType: refreshed.intakeSourceType,
+          createdAt: refreshed.createdAt,
+          ksefNumber: refreshed.ksefNumber,
+        };
+        const roleB = {
+          id: p.id,
+          intakeSourceType: p.intakeSourceType,
+          createdAt: p.createdAt,
+          ksefNumber: p.ksefNumber,
+        };
+        if (areBothKsefRepositoryInvoices(roleA, roleB)) {
+          continue;
+        }
+        const { canonicalId, candidateId } = orientInvoiceDuplicateRoles(roleA, roleB);
         canonicalsToRefreshCompliance.add(canonicalId);
         const inverted = await prisma.invoiceDuplicate.findFirst({
           where: {

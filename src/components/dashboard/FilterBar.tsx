@@ -52,25 +52,30 @@ export function FilterBar({ filters, onChange, suppliers, restaurants, categorie
       </div>
 
       <div className="filter-bar__date-section">
-        <div className="filter-bar__date-inputs">
-          <label className="field field--narrow">
-            <span className="field__label">Od</span>
-            <input
-              type="date"
-              className="input"
-              value={filters.dateFrom}
-              onChange={(e) => patch({ dateFrom: e.target.value })}
-            />
-          </label>
-          <label className="field field--narrow">
-            <span className="field__label">Do</span>
-            <input
-              type="date"
-              className="input"
-              value={filters.dateTo}
-              onChange={(e) => patch({ dateTo: e.target.value })}
-            />
-          </label>
+        <div className="filter-bar__date-row">
+          <div className="filter-bar__date-inputs">
+            <label className="field field--narrow">
+              <span className="field__label">Od</span>
+              <input
+                type="date"
+                className="input"
+                value={filters.dateFrom}
+                onChange={(e) => patch({ dateFrom: e.target.value })}
+              />
+            </label>
+            <label className="field field--narrow">
+              <span className="field__label">Do</span>
+              <input
+                type="date"
+                className="input"
+                value={filters.dateTo}
+                onChange={(e) => patch({ dateTo: e.target.value })}
+              />
+            </label>
+          </div>
+          <p className="filter-bar__date-hint">
+            Zakres dat dotyczy <strong>daty wystawienia</strong> z faktury, nie „daty zapisania w KSeF” z portalu MF.
+          </p>
         </div>
       </div>
 

@@ -35,4 +35,14 @@ describe("tryExtractDraftFromKsefFaXml", () => {
     const r = tryExtractDraftFromKsefFaXml(Buffer.from("%PDF-1.4"), "application/pdf");
     expect(r).toBeNull();
   });
+
+  it("uses P_1 as issue date only, not P_6 (sale/service date)", () => {
+    const xml = SAMPLE_FA.replace(
+      "<P_1>2026-04-11</P_1>",
+      "<P_1>2026-04-11</P_1>\n    <P_6>2026-04-10</P_6>",
+    );
+    const r = tryExtractDraftFromKsefFaXml(Buffer.from(xml, "utf8"), "application/xml");
+    expect(r).not.toBeNull();
+    expect(r!.draft.issueDate).toBe("2026-04-11");
+  });
 });

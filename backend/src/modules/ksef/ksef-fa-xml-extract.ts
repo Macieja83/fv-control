@@ -22,7 +22,7 @@ function asRecord(v: unknown): Record<string, unknown> | null {
 
 function pickText(el: unknown): string {
   if (typeof el === "string" || typeof el === "number") return String(el).trim();
-  if (el && typeof el === "object" && "#text" in (el as object)) {
+  if (typeof el === "object" && el !== null && "#text" in el) {
     return String((el as { "#text": unknown })["#text"]).trim();
   }
   return "";
@@ -105,7 +105,8 @@ export function tryExtractDraftFromKsefFaXml(
   const num = pickText(fa.P_2 ?? fa.p_2);
   if (!num) return null;
 
-  const issueRaw = pickText(fa.P_1) || pickText(fa.P_6);
+  /** Tylko P_1 = data wystawienia wg FA. P_6 to data sprzedaży/usługi — portal KSeF pokazuje „wystawienie” inaczej niż my, gdy mieszamy z P_6. */
+  const issueRaw = pickText(fa.P_1) || pickText(fa.p_1);
   const issueDate = issueRaw.length >= 10 ? issueRaw.slice(0, 10) : undefined;
 
   const net = pickText(fa.P_13_1) || pickText(fa.P_13_2) || pickText(fa.P_13_3) || "0";

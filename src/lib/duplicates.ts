@@ -35,6 +35,9 @@ export function enrichDuplicateMetadata(
     return 2
   }
 
+  const rowIsKsefOrigin = (x: InvoiceRecord) =>
+    Boolean(x.ksef_number?.trim()) || x.source_type === 'ksef'
+
   return rows.map((r) => {
     const fromApiScore = r.duplicate_score ?? 0
     let duplicate_score = fromApiScore
@@ -64,7 +67,7 @@ export function enrichDuplicateMetadata(
     if (duplicate_score < 1) {
       const tripleKey = `${r.supplier_nip.replace(/\s/g, '')}|${r.invoice_number.trim().toUpperCase()}|${r.gross_amount.toFixed(2)}`
       const group = byTriple.get(tripleKey) ?? []
-      if (group.length > 1) {
+      if (group.length > 1 && !group.every(rowIsKsefOrigin)) {
         const sorted = [...group].sort((a, b) => {
           const ch = canonicalRank(a) - canonicalRank(b)
           if (ch !== 0) return ch
@@ -89,7 +92,7 @@ export function enrichDuplicateMetadata(
       if (nip10.length === 10) {
         const dayGross = `${nip10}|${r.issue_date}|${r.gross_amount.toFixed(2)}`
         const group = byNipDayGross.get(dayGross) ?? []
-        if (group.length > 1) {
+        if (group.length > 1 && !group.every(rowIsKsefOrigin)) {
           const sorted = [...group].sort((a, b) => {
             const ch = canonicalRank(a) - canonicalRank(b)
             if (ch !== 0) return ch

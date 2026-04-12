@@ -123,8 +123,16 @@ export type InvoiceDuplicateRoleInput = {
   ksefNumber?: string | null;
 };
 
-function isKsefRepositoryInvoice(x: InvoiceDuplicateRoleInput): boolean {
+export function isKsefRepositoryInvoice(x: InvoiceDuplicateRoleInput): boolean {
   return Boolean(x.ksefNumber?.trim()) || x.intakeSourceType === "KSEF_API";
+}
+
+/** Oba wpisy z KSeF — bez relacji duplikatu między sobą (oba to oryginały z MF). */
+export function areBothKsefRepositoryInvoices(
+  a: InvoiceDuplicateRoleInput,
+  b: InvoiceDuplicateRoleInput,
+): boolean {
+  return isKsefRepositoryInvoice(a) && isKsefRepositoryInvoice(b);
 }
 
 /**
