@@ -140,6 +140,23 @@ export async function runPipelineJob(prisma: PrismaClient, processingJobId: stri
       confidence = aiResult.confidence;
     }
 
+    if (fromKsefSource) {
+      const meta = document.metadata as Record<string, unknown> | null | undefined;
+      const sellerNip10 =
+        typeof meta?.sellerNip === "string" ? polishNipDigits10(meta.sellerNip) : null;
+      const sellerName = typeof meta?.sellerName === "string" ? meta.sellerName.trim() : "";
+      if (sellerNip10 && !polishNipDigits10(extractedDraft.contractorNip)) {
+        extractedDraft = {
+          ...extractedDraft,
+          contractorNip: sellerNip10,
+          contractorName:
+            extractedDraft.contractorName?.trim() ||
+            (sellerName.length > 0 ? sellerName : null) ||
+            undefined,
+        };
+      }
+    }
+
     workingDraft = extractedDraft;
     await prisma.extractionRun.create({
       data: {
