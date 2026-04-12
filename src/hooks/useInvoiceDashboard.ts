@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   deleteInvoiceRequest,
-  fetchInvoicesList,
+  fetchInvoicesListAllPages,
   patchInvoice,
   patchInvoiceStatus,
   postAdoptInvoiceVendor,
@@ -140,9 +140,13 @@ export function useInvoiceDashboard() {
     setListLoading(true)
     setListError(null)
     try {
-      const res = await fetchInvoicesList(token, {
+      const df = filters.dateFrom.trim()
+      const dt = filters.dateTo.trim()
+      const res = await fetchInvoicesListAllPages(token, {
         limit: 100,
         ledgerKind: invoiceLedger === 'sale' ? 'SALE' : 'PURCHASE',
+        ...(df ? { dateFrom: df } : {}),
+        ...(dt ? { dateTo: dt } : {}),
       })
       const mapped = res.data.map(mapApiInvoiceRowToRecord)
       const merged = mergeCategoryOverrides(mapped, categoryOverridesRef.current)
@@ -160,7 +164,7 @@ export function useInvoiceDashboard() {
     } finally {
       setListLoading(false)
     }
-  }, [invoiceLedger])
+  }, [invoiceLedger, filters.dateFrom, filters.dateTo])
 
   useEffect(() => {
     void refreshFromApi()

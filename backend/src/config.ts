@@ -112,7 +112,7 @@ const envSchema = z.object({
    * Przy automatycznym `from` z hwmDate: cofnij początek o tyle dni względem „teraz” (max z hwm i now−N),
    * żeby ponownie objąć faktury zgrzytające się między datą zapisu a datą wystawienia.
    */
-  KSEF_SYNC_HWN_OVERLAP_DAYS: z.coerce.number().int().min(0).max(14).default(3),
+  KSEF_SYNC_HWN_OVERLAP_DAYS: z.coerce.number().int().min(0).max(14).default(7),
   /**
    * Wysyłka faktur sprzedaży do KSeF: `stub` — tylko zapis PENDING w bazie;
    * `live` — próba wywołania API (wymaga KSEF_ENV≠mock, tokenów i poprawnego XML wg MF).

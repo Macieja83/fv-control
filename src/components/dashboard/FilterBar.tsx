@@ -74,7 +74,9 @@ export function FilterBar({ filters, onChange, suppliers, restaurants, categorie
             </label>
           </div>
           <p className="filter-bar__date-hint">
-            Zakres dat dotyczy <strong>daty wystawienia</strong> z faktury, nie „daty zapisania w KSeF” z portalu MF.
+            Zakres <strong>Od–Do</strong> filtruje po <strong>dacie wystawienia</strong> (jak w KSeF) — zapytanie idzie do API z tymi datami, więc widzisz{' '}
+            <strong>wszystkie</strong> faktury z okresu, nie tylko pierwszą stronę wyników.
+            To nie jest „data zapisania w KSeF” z portalu MF.
           </p>
         </div>
       </div>

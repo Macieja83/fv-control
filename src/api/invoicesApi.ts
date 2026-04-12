@@ -52,15 +52,21 @@ async function readErrorMessage(res: Response): Promise<string> {
   return `HTTP ${res.status}`
 }
 
+export type FetchInvoicesListOpts = {
+  limit?: number
+  page?: number
+  /** YYYY-MM-DD — pole `issueDate` w bazie (jak „data wystawienia” w KSeF). */
+  dateFrom?: string
+  dateTo?: string
+  q?: string
+  documentKind?: string
+  legalChannel?: string
+  ledgerKind?: 'PURCHASE' | 'SALE'
+}
+
 export async function fetchInvoicesList(
   token: string,
-  opts?: {
-    limit?: number
-    page?: number
-    documentKind?: string
-    legalChannel?: string
-    ledgerKind?: 'PURCHASE' | 'SALE'
-  },
+  opts?: FetchInvoicesListOpts,
 ): Promise<InvoicesListResponse> {
   const limit = opts?.limit ?? 100
   const page = opts?.page ?? 1
@@ -68,11 +74,50 @@ export async function fetchInvoicesList(
   if (opts?.documentKind) q.set('documentKind', opts.documentKind)
   if (opts?.legalChannel) q.set('legalChannel', opts.legalChannel)
   if (opts?.ledgerKind) q.set('ledgerKind', opts.ledgerKind)
+  if (opts?.dateFrom) q.set('dateFrom', opts.dateFrom)
+  if (opts?.dateTo) q.set('dateTo', opts.dateTo)
+  if (opts?.q) q.set('q', opts.q)
   const res = await fetch(`${API}/invoices?${q}`, {
     headers: { Authorization: `Bearer ${token}` },
   })
   if (!res.ok) throw new Error(await readErrorMessage(res))
   return (await res.json()) as InvoicesListResponse
+}
+
+/** Pobiera wszystkie strony listy (limit max. 100/strona wg API), żeby widok miesiąca nie ucinał rekordów. */
+export async function fetchInvoicesListAllPages(
+  token: string,
+  opts: FetchInvoicesListOpts & { maxPages?: number },
+): Promise<InvoicesListResponse> {
+  const maxPages = opts.maxPages ?? 50
+  const limit = Math.min(opts.limit ?? 100, 100)
+  const slice: FetchInvoicesListOpts = {
+    limit,
+    documentKind: opts.documentKind,
+    legalChannel: opts.legalChannel,
+    ledgerKind: opts.ledgerKind,
+    dateFrom: opts.dateFrom,
+    dateTo: opts.dateTo,
+    q: opts.q,
+  }
+  const first = await fetchInvoicesList(token, { ...slice, page: 1 })
+  const acc = [...first.data]
+  let page = 1
+  while (page < first.meta.totalPages && page < maxPages) {
+    page++
+    const next = await fetchInvoicesList(token, { ...slice, page })
+    acc.push(...next.data)
+  }
+  return {
+    data: acc,
+    meta: {
+      ...first.meta,
+      page: 1,
+      limit: acc.length,
+      totalPages: 1,
+      total: first.meta.total,
+    },
+  }
 }
 
 export async function patchInvoice(
