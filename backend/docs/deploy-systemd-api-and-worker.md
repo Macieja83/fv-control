@@ -10,6 +10,19 @@
 
 **Nie używamy `:3001` w dokumentacji tego repozytorium** — to był błędny przykład; produkcyjny VPS Resta nasłuchuje na **`3000`**.
 
+### Checklist: port, nginx, systemd („nic się nie zmienia” po deployu)
+
+Skrypt **`./scripts/deploy-fv-www.sh`** w repozytorium **nie zmienia portu** — tylko synchronizuje zbudowany frontend (`dist/`) do docroot. Backend bierze port z **`backend/.env`** (`PORT`, domyślnie **3000** w `config.ts`) i uruchamia go **`fv-control-backend.service`**.
+
+Na VPS warto zweryfikować:
+
+1. `grep '^PORT=' ~/fv-control/backend/.env` — oczekiwane `PORT=3000` (o ile nie zmienialiście świadomie).
+2. `systemctl --user status fv-control-backend.service --no-pager` — `active (running)`; `WorkingDirectory` i `EnvironmentFile` wskazują na **`~/fv-control/backend`** (lub równoważną ścieżkę).
+3. `curl -sS http://127.0.0.1:3000/api/v1/ready` — w odpowiedzi `database` i `redis` mają być **`ok`**.
+4. Nginx dla `fv.resta.biz`: w `location /api/` powinno być **`proxy_pass http://127.0.0.1:3000;`** (bez sufiksu ścieżki w stylu `/api/v1/`), żeby do Fastify szła **pełna** ścieżka żądania (`/api/v1/...`). Inny port na hoście (np. osobna aplikacja na `:4000`) to **nie** ten backend — nginx musi wskazywać ten sam port co `PORT` w `.env` FV Control.
+
+**Cache przeglądarki:** często włącza się długi cache na **`/assets/*.js`** (`immutable`). Jeśli hash w nazwie pliku nie zmienił się przy kolejnym `npm run build`, przeglądarka może trzymać **stary bundel** JS, mimo że **API** już pochodzi z nowego kodu na serwerze (żądania `fetch('/api/...')` zwykle nie są cache’owane jak statyczne JS). Przy podejrzeniu starego frontu: **twarde odświeżenie** (Ctrl+Shift+R) lub wyczyszczenie cache dla domeny.
+
 Sam proces `**npm run start`** (Fastify) **tylko przyjmuje HTTP** (login, `POST .../sync`, itd.).  
 **Nie wykonuje** synchronizacji IMAP ani kroków pipeline na kolejce BullMQ.
 
