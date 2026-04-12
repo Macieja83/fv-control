@@ -53,12 +53,15 @@ const imapZenboxWorker = new Worker<ImapZenboxSyncJobData>(
   { connection, prefix: cfg.BULLMQ_PREFIX, concurrency: 1 },
 );
 
+/** Domyślny lock BullMQ (~30s) jest za krótki: sync KSeF czeka na 429 MF (nawet kilka min) i ma pauzę przed Issue — bez tego: „could not renew lock”. */
+const KSEF_SYNC_LOCK_MS = 3_600_000;
+
 const ksefWorker = new Worker<KsefSyncJobData>(
   KSEF_SYNC_QUEUE_NAME,
   async (job: Job<KsefSyncJobData>) => {
     await runKsefSyncJob(prisma, job.data);
   },
-  { connection, prefix: cfg.BULLMQ_PREFIX, concurrency: 1 },
+  { connection, prefix: cfg.BULLMQ_PREFIX, concurrency: 1, lockDuration: KSEF_SYNC_LOCK_MS },
 );
 
 worker.on("failed", (job, err) => {
