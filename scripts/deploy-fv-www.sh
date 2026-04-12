@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Kopiuj zbudowany frontend (Vite) do katalogu serwowanego przez nginx dla fv.resta.biz.
+# Kopiuj zbudowany frontend (Vite) do katalogu serwowanego przez nginx (produkcja: https://fv.resta.biz → /var/www/fv-control).
+# Kanon domeny i portu API: backend/docs/deploy-systemd-api-and-worker.md
 # Użycie (na VPS, z katalogu głównego repozytorium):
 #   npm ci && npm run build && ./scripts/deploy-fv-www.sh
 # Opcjonalnie inny docroot:

@@ -1,5 +1,15 @@
 # VPS: systemd — API **i** worker (wymagane pod mail → faktury)
 
+## Kanon adresów (Resta — zapamiętaj jedną tabelę)
+
+| Gdzie | Co | Uwaga |
+|--------|-----|--------|
+| **Przeglądarka (produkcja)** | `https://fv.resta.biz` | UI (statyczne pliki z `/var/www/fv-control`). Żądania **`/api/...`** nginx zwykle **proxy** na backend na hoście. |
+| **Backend na VPS (loopback)** | `http://127.0.0.1:3000` | Domyślny port z `backend/.env` → **`PORT=3000`** (`backend/src/config.ts`). **`curl` / diagnostyka po SSH** — zawsze ten port, **o ile** w `.env` nie zmienisz `PORT`. |
+| **Dev lokalnie** | API `http://localhost:3000`, UI Vite `http://localhost:5173` | Zgodnie z `backend/.env.example` i root `README.md`. |
+
+**Nie używamy `:3001` w dokumentacji tego repozytorium** — to był błędny przykład; produkcyjny VPS Resta nasłuchuje na **`3000`**.
+
 Sam proces `**npm run start`** (Fastify) **tylko przyjmuje HTTP** (login, `POST .../sync`, itd.).  
 **Nie wykonuje** synchronizacji IMAP ani kroków pipeline na kolejce BullMQ.
 
@@ -36,7 +46,7 @@ systemctl --user restart fv-control-worker.service
 Sprawdź:
 
 ```bash
-curl -sS http://127.0.0.1:3001/api/v1/ready
+curl -sS http://127.0.0.1:3000/api/v1/ready
 ```
 
 W JSON musi być `**"redis":"ok"**` (jeśli jest `"down"` — worker nie przetworzy kolejki).

@@ -213,7 +213,7 @@ Albo sprawdź w **UI** aplikacji.
 
 ## Diagnoza: brak faktur na fv.resta.biz (produkcja)
 
-**fv.resta.biz** to tylko adres UI/API — faktury z maila **nie „przechodzą same”**, dopóki na tym serwerze nie działa **nowy backend** + **worker** + **nowy mail** po ewentualnej poprawce IMAP.
+**`https://fv.resta.biz`** to publiczny adres **UI**; przeglądarka woła API zwykle **przez ten sam host** (`/api/...` → reverse proxy na **`127.0.0.1:3000`**, domyślny `PORT` w backendzie). Faktury z maila **nie „przechodzą same”**, dopóki na tym serwerze nie działa **nowy backend** + **worker** + **nowy mail** po ewentualnej poprawce IMAP.
 
 1. **Wdrożenie** — czy na produkcji jest obraz / build z commitem **`fix(imap): accept … octet-stream`** (parser PDF jako `application/octet-stream`)? Bez tego wiele PDF z poczty jest **ciszej odrzucanych**.
 2. **Worker** — **osobny proces** `npm run worker:start` (produkcja) lub `npm run worker` (dev). Sam **`npm run start`** (API) **nie** przetwarza kolejki — bez workera faktury z maila **nie dojdą** do UI. Instrukcja systemd: [deploy-systemd-api-and-worker.md](./deploy-systemd-api-and-worker.md).

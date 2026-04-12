@@ -53,7 +53,9 @@ Docker Compose runs migrations for **api** and **worker** startup commands (see 
 
 ## Frontend (nginx static root)
 
-Jeśli produkcyjny UI jest pod **nginx** z `root` innym niż katalog `dist/` z buildu (np. **fv.resta.biz** → `/var/www/fv-control`), po `npm run build` w korzeniu repozytorium uruchom **`./scripts/deploy-fv-www.sh`** (zob. [deploy-systemd-api-and-worker.md](./docs/deploy-systemd-api-and-worker.md)).
+Jeśli produkcyjny UI jest pod **nginx** z `root` innym niż katalog `dist/` z buildu (np. **https://fv.resta.biz** → `/var/www/fv-control`), po `npm run build` w korzeniu repozytorium uruchom **`./scripts/deploy-fv-www.sh`** (zob. [deploy-systemd-api-and-worker.md](./docs/deploy-systemd-api-and-worker.md) — **kanon portów i domen**).
+
+**API (Fastify):** domyślnie **`PORT=3000`** na hoście; smoke test z maszyny VPS: `curl -sS http://127.0.0.1:3000/api/v1/ready`.
 
 ## Smoke tests after deploy
 
