@@ -295,8 +295,8 @@ export function KsefInvoicePreview({ xmlText, ksefNumber: ksefNumProp, onDownloa
   return (
     <div className="ksef-doc-wrap">
       <div className="ksef-doc-toolbar">
-        <button type="button" className="btn btn--primary btn--sm" onClick={handlePrintPdf}>
-          Pobierz PDF
+        <button type="button" className="btn btn--primary btn--sm" onClick={handlePrintPdf} aria-label="Drukuj podgląd faktury">
+          Drukuj
         </button>
         {onDownload && (
           <button type="button" className="btn btn--ghost btn--sm" onClick={onDownload}>
