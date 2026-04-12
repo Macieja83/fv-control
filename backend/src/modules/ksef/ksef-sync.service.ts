@@ -1,8 +1,10 @@
 /**
  * KSeF incremental invoice sync.
  *
- * Uses `permanentStorageDate` (Asc) to pull new invoices since last sync.
- * Domyślnie odpytywane są **Subject2 i Subject1** (`KSEF_SYNC_SUBJECT_TYPES`) — pełniejszy zestaw niż sam nabywca/wystawca.
+ * Używa `permanentStorageDate` (Asc) oraz — domyślnie — drugiego przebiegu po **dacie wystawienia** (`Issue`),
+ * żeby zestawić się z portalem MF (data wystawienia vs trwały zapis).
+ * Domyślnie odpytywane są **Subject2 i Subject1** (`KSEF_SYNC_SUBJECT_TYPES`).
+ * `hwmDate` jest cofane o kilka dni (`KSEF_SYNC_HWN_OVERLAP_DAYS`) względem „teraz”, żeby ponownie objąć skrajne przypadki.
  * Przy **jakimkolwiek** błędzie ingestu w przebiegu **nie** zapisujemy `hwmDate` (żeby nie pominąć faktur na stałe).
  * For each new invoice found:
  *   1. Check if we already have this ksefNumber (dedup).
@@ -14,7 +16,7 @@
 
 import { createHash } from "node:crypto";
 import type { PrismaClient } from "@prisma/client";
-import { KsefClient, type KsefInvoiceMetadata } from "./ksef-client.js";
+import { KsefClient, type KsefInvoiceMetadata, type KsefMetadataPage } from "./ksef-client.js";
 import { ingestAttachmentAndEnqueue } from "../ingestion/attachment-intake.service.js";
 import { createObjectStorage } from "../../adapters/storage/create-storage.js";
 import { loadConfig } from "../../config.js";
@@ -51,6 +53,22 @@ function createInvoiceXmlThrottle(minIntervalMs: number): () => Promise<void> {
   };
 }
 
+/** Początek okna sync: jawny fromDate albo max(cofnięcie hwm, now−overlapDays). */
+function resolveSyncFrom(opts: {
+  fromOverride?: string;
+  hwm: string | null;
+  overlapDays: number;
+}): string {
+  const o = opts.fromOverride?.trim();
+  if (o) return o;
+  const dayMs = 24 * 60 * 60 * 1000;
+  const thirtyAgo = new Date(Date.now() - 30 * dayMs).toISOString();
+  const base = opts.hwm ?? thirtyAgo;
+  if (opts.overlapDays <= 0) return base;
+  const overlapFrom = new Date(Date.now() - opts.overlapDays * dayMs).toISOString();
+  return base < overlapFrom ? base : overlapFrom;
+}
+
 export async function runKsefSyncJob(
   prisma: PrismaClient,
   data: KsefSyncJobData,
@@ -78,13 +96,18 @@ export async function runKsefSyncJob(
   await client.authenticate();
   console.info("[KSeF sync] Authenticated.");
 
-  const from = data.fromDate
-    ?? await getHighWaterMark(prisma, data.tenantId)
-    ?? new Date(Date.now() - 30 * 24 * 60_000 * 60).toISOString();
+  const hwmOnly = data.fromDate ? null : await getHighWaterMark(prisma, data.tenantId);
+  const from = resolveSyncFrom({
+    fromOverride: data.fromDate,
+    hwm: hwmOnly,
+    overlapDays: cfg.KSEF_SYNC_HWN_OVERLAP_DAYS,
+  });
   const to = new Date().toISOString();
   const force = data.forceRefetchFiles === true;
 
-  console.info(`[KSeF sync] Querying metadata from=${from} to=${to} force=${force}`);
+  console.info(
+    `[KSeF sync] Querying metadata from=${from} to=${to} force=${force} overlapDays=${cfg.KSEF_SYNC_HWN_OVERLAP_DAYS} (hwm=${hwmOnly ?? "—"})`,
+  );
 
   const result: KsefSyncResult = { fetched: 0, ingested: 0, skippedDuplicate: 0, refetched: 0, errors: [], newHwmDate: null };
   const beforeXmlFetch = createInvoiceXmlThrottle(cfg.KSEF_INVOICE_FETCH_MIN_INTERVAL_MS);
@@ -95,42 +118,60 @@ export async function runKsefSyncJob(
     return a > b ? a : b;
   }
 
-  for (const subjectType of cfg.KSEF_SYNC_SUBJECT_TYPES) {
-    console.info(`[KSeF sync] Paging metadata subjectType=${subjectType} …`);
-    let pageOffset = 0;
-    let hasMore = true;
-    let currentFrom = from;
+  const dateTypes = [...cfg.KSEF_SYNC_DATE_TYPES].sort((a, b) => {
+    if (a === "PermanentStorage" && b !== "PermanentStorage") return -1;
+    if (b === "PermanentStorage" && a !== "PermanentStorage") return 1;
+    return 0;
+  });
 
-    while (hasMore) {
-      const page = await client.queryMetadata(currentFrom, to, pageOffset, PAGE_SIZE, subjectType);
-      result.fetched += page.invoices.length;
+  for (const dateType of dateTypes) {
+    for (const subjectType of cfg.KSEF_SYNC_SUBJECT_TYPES) {
+      console.info(`[KSeF sync] Paging metadata dateType=${dateType} subjectType=${subjectType} …`);
+      let pageOffset = 0;
+      let hasMore = true;
+      let currentFrom = from;
 
-      for (const inv of page.invoices) {
+      while (hasMore) {
+        let page: KsefMetadataPage;
         try {
-          const outcome = await processOneInvoice(prisma, client, data.tenantId, inv, force, beforeXmlFetch);
-          if (outcome === "ingested") result.ingested++;
-          else if (outcome === "refetched") result.refetched++;
-          else result.skippedDuplicate++;
+          page = await client.queryMetadata(currentFrom, to, pageOffset, PAGE_SIZE, subjectType, dateType);
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
-          console.error(`[KSeF sync] Error processing ${inv.ksefNumber}: ${msg}`);
-          result.errors.push(`${inv.ksefNumber}: ${msg}`);
+          if (dateType === "Issue") {
+            console.warn(`[KSeF sync] Pomijam dateType=Issue dla ${subjectType}: ${msg}`);
+            break;
+          }
+          throw err;
         }
-      }
+        result.fetched += page.invoices.length;
 
-      if (page.permanentStorageHwmDate) {
-        result.newHwmDate = mergeHwm(result.newHwmDate, page.permanentStorageHwmDate);
-      }
-
-      hasMore = page.hasMore;
-      if (hasMore && page.isTruncated) {
-        const lastInvoice = page.invoices[page.invoices.length - 1];
-        if (lastInvoice) {
-          currentFrom = lastInvoice.permanentStorageDate;
+        for (const inv of page.invoices) {
+          try {
+            const outcome = await processOneInvoice(prisma, client, data.tenantId, inv, force, beforeXmlFetch);
+            if (outcome === "ingested") result.ingested++;
+            else if (outcome === "refetched") result.refetched++;
+            else result.skippedDuplicate++;
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.error(`[KSeF sync] Error processing ${inv.ksefNumber}: ${msg}`);
+            result.errors.push(`${inv.ksefNumber}: ${msg}`);
+          }
         }
-        pageOffset = 0;
-      } else if (hasMore) {
-        pageOffset++;
+
+        if (dateType === "PermanentStorage" && page.permanentStorageHwmDate) {
+          result.newHwmDate = mergeHwm(result.newHwmDate, page.permanentStorageHwmDate);
+        }
+
+        hasMore = page.hasMore;
+        if (hasMore && page.isTruncated) {
+          const lastInvoice = page.invoices[page.invoices.length - 1];
+          if (lastInvoice) {
+            currentFrom = lastInvoice.permanentStorageDate;
+          }
+          pageOffset = 0;
+        } else if (hasMore) {
+          pageOffset++;
+        }
       }
     }
   }

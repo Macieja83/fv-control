@@ -298,10 +298,12 @@ export class KsefClient {
     pageOffset = 0,
     pageSize = 100,
     subjectType: "Subject1" | "Subject2" = "Subject1",
+    /** `PermanentStorage` — przyrost MF; `Issue` — data wystawienia (jak w portalu) — uzupełnia luki przy rozjazdach. */
+    dateType: "PermanentStorage" | "Issue" = "PermanentStorage",
   ): Promise<KsefMetadataPage> {
     const body = {
       subjectType,
-      dateRange: { dateType: "PermanentStorage", from, to },
+      dateRange: { dateType, from, to },
     };
     const params = new URLSearchParams({
       sortOrder: "Asc",

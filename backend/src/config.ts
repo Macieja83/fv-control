@@ -88,6 +88,32 @@ const envSchema = z.object({
     return out.length > 0 ? out : ["Subject2", "Subject1"];
   }),
   /**
+   * Zapytania metadanych: `PermanentStorage` (oficjalny przyrost) oraz opcjonalnie `Issue` (data wystawienia — zgodnie z widokiem w portalu).
+   * Gdy MF zwróci błąd dla `Issue`, ten przebieg jest pomijany (nie blokuje zapisu hwmDate z PermanentStorage).
+   */
+  KSEF_SYNC_DATE_TYPES: z.preprocess(
+    (v) => (v === "" || v === undefined ? "PermanentStorage,Issue" : String(v).trim()),
+    z.string(),
+  ).transform((raw): ("PermanentStorage" | "Issue")[] => {
+    const out: ("PermanentStorage" | "Issue")[] = [];
+    const seen = new Set<string>();
+    for (const part of raw
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)) {
+      if (part !== "PermanentStorage" && part !== "Issue") continue;
+      if (seen.has(part)) continue;
+      seen.add(part);
+      out.push(part);
+    }
+    return out.length > 0 ? out : ["PermanentStorage", "Issue"];
+  }),
+  /**
+   * Przy automatycznym `from` z hwmDate: cofnij początek o tyle dni względem „teraz” (max z hwm i now−N),
+   * żeby ponownie objąć faktury zgrzytające się między datą zapisu a datą wystawienia.
+   */
+  KSEF_SYNC_HWN_OVERLAP_DAYS: z.coerce.number().int().min(0).max(14).default(3),
+  /**
    * Wysyłka faktur sprzedaży do KSeF: `stub` — tylko zapis PENDING w bazie;
    * `live` — próba wywołania API (wymaga KSEF_ENV≠mock, tokenów i poprawnego XML wg MF).
    */
