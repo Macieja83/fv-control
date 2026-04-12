@@ -457,33 +457,29 @@ export async function runPipelineJob(prisma: PrismaClient, processingJobId: stri
       data: { status: "COMPLETED", currentStep: "AUDIT", lastError: null },
     });
 
-    // Po zakończeniu pipeline (compliance na primary XML) — podgląd PDF nie blokuje statusu joba ani refreshu.
+    // Podgląd PDF w tle — nie czekamy na storage (wolny putObject nie blokuje workera ani slotu Bull).
     if (fromKsefSource) {
-      try {
-        await promoteKsefXmlPrimaryToSummaryPdf(prisma, {
-          tenantId: jobRow.tenantId,
-          invoiceId: invoice.id,
-          xmlDocument: {
-            id: document.id,
-            mimeType: document.mimeType,
-            sourceExternalId: document.sourceExternalId,
-          },
-          ksefNumber: refreshed.ksefNumber ?? document.sourceExternalId,
-          invoiceNumber: refreshed.number,
-          issueDate: refreshed.issueDate,
-          contractorName: refreshed.contractor?.name ?? null,
-          contractorNip: refreshed.contractor?.nip ?? null,
-          netTotal: refreshed.netTotal.toString(),
-          vatTotal: refreshed.vatTotal.toString(),
-          grossTotal: refreshed.grossTotal.toString(),
-          currency: refreshed.currency,
-        });
-      } catch (e) {
-        console.warn(
-          "[pipeline] KSeF summary PDF (primary):",
-          e instanceof Error ? e.message : String(e),
-        );
-      }
+      const promoteParams = {
+        tenantId: jobRow.tenantId,
+        invoiceId: invoice.id,
+        xmlDocument: {
+          id: document.id,
+          mimeType: document.mimeType,
+          sourceExternalId: document.sourceExternalId,
+        },
+        ksefNumber: refreshed.ksefNumber ?? document.sourceExternalId,
+        invoiceNumber: refreshed.number,
+        issueDate: refreshed.issueDate,
+        contractorName: refreshed.contractor?.name ?? null,
+        contractorNip: refreshed.contractor?.nip ?? null,
+        netTotal: refreshed.netTotal.toString(),
+        vatTotal: refreshed.vatTotal.toString(),
+        grossTotal: refreshed.grossTotal.toString(),
+        currency: refreshed.currency,
+      };
+      void promoteKsefXmlPrimaryToSummaryPdf(prisma, promoteParams).catch((e) =>
+        console.warn("[pipeline] KSeF summary PDF (primary):", e instanceof Error ? e.message : String(e)),
+      );
     }
 
     pipelineJobsTotal.inc({ result: "completed" });
@@ -492,6 +488,10 @@ export async function runPipelineJob(prisma: PrismaClient, processingJobId: stri
     await prisma.processingJob.update({
       where: { id: processingJobId },
       data: { status: "FAILED", lastError: msg },
+    });
+    await prisma.invoice.updateMany({
+      where: { id: invoice.id, status: "INGESTING" },
+      data: { status: "FAILED_NEEDS_REVIEW" },
     });
     pipelineJobsTotal.inc({ result: "failed" });
     throw e;

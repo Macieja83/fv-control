@@ -55,9 +55,24 @@ export async function retryInvoiceExtraction(
   }
 
   const cfg = loadConfig();
-  const doc = invoice.primaryDoc;
+  const primary = invoice.primaryDoc;
+  let pipelineDoc = primary;
+  const pMeta = primary.metadata as { derivedFromDocumentId?: unknown; filename?: unknown } | null;
+  const derivedXmlId =
+    typeof pMeta?.derivedFromDocumentId === "string" && pMeta.derivedFromDocumentId.trim().length > 0
+      ? pMeta.derivedFromDocumentId.trim()
+      : null;
+  const primaryIsPdf = (primary.mimeType ?? "").toLowerCase().includes("pdf");
+  if (primaryIsPdf && derivedXmlId) {
+    const xmlDoc = await prisma.document.findFirst({
+      where: { id: derivedXmlId, tenantId, deletedAt: null },
+    });
+    if (xmlDoc) {
+      pipelineDoc = xmlDoc;
+    }
+  }
 
-  const meta = doc.metadata as { filename?: unknown } | null;
+  const meta = pipelineDoc.metadata as { filename?: unknown } | null;
   const filename =
     meta && typeof meta.filename === "string" && meta.filename.length > 0 ? meta.filename : "document";
 
@@ -67,8 +82,8 @@ export async function retryInvoiceExtraction(
       queueName: PIPELINE_QUEUE_NAME,
       type: "INGEST_PIPELINE",
       correlationId: randomUUID(),
-      payload: { documentId: doc.id, invoiceId: invoice.id, filename } as object,
-      documentId: doc.id,
+      payload: { documentId: pipelineDoc.id, invoiceId: invoice.id, filename } as object,
+      documentId: pipelineDoc.id,
       invoiceId: invoice.id,
       maxAttempts: cfg.PIPELINE_MAX_ATTEMPTS,
     },
@@ -106,7 +121,7 @@ export async function retryInvoiceExtraction(
 
   return {
     invoiceId: invoice.id,
-    documentId: doc.id,
+    documentId: pipelineDoc.id,
     processingJobId: processingJob.id,
   };
 }
