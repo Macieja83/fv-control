@@ -30,7 +30,7 @@ export async function fetchKsefConnectorStatus(token: string): Promise<KsefConne
   return (await res.json()) as KsefConnectorStatus
 }
 
-export type PostKsefSyncBody = { force?: boolean; fromDate?: string }
+export type PostKsefSyncBody = { force?: boolean; fromDate?: string; toDate?: string }
 
 /** Kolejkuje pełną synchronizację faktur przychodzących z KSeF (worker). Wymaga roli z prawem zapisu. */
 export async function postKsefSync(

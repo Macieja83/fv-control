@@ -48,7 +48,7 @@ const ksefRoutes: FastifyPluginAsync = async (app) => {
   );
 
   app.post<{
-    Body: { force?: boolean; fromDate?: string };
+    Body: { force?: boolean; fromDate?: string; toDate?: string };
   }>(
     "/connectors/ksef/sync",
     {
@@ -61,6 +61,11 @@ const ksefRoutes: FastifyPluginAsync = async (app) => {
           properties: {
             force: { type: "boolean", description: "Re-download XMLs for existing invoices and store in S3" },
             fromDate: { type: "string", description: "ISO date to sync from (overrides high-water mark)" },
+            toDate: {
+              type: "string",
+              description:
+                "ISO upper bound for dateType=Issue metadata only (portal issue date). PermanentStorage still queries to now. When set, hwmDate is not updated.",
+            },
           },
         },
       },
@@ -73,11 +78,12 @@ const ksefRoutes: FastifyPluginAsync = async (app) => {
           error: { message: "KSeF not configured. Set KSEF_ENV, KSEF_TOKEN, and KSEF_NIP." },
         });
       }
-      const body = (request.body as { force?: boolean; fromDate?: string }) ?? {};
+      const body = (request.body as { force?: boolean; fromDate?: string; toDate?: string }) ?? {};
       const result = await enqueueKsefSync({
         tenantId: request.authUser!.tenantId,
         forceRefetchFiles: body.force === true,
         fromDate: body.fromDate,
+        toDate: body.toDate,
       });
       return reply.status(202).send({ queued: true, jobId: result.jobId });
     },

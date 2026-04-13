@@ -477,9 +477,11 @@ export async function runPipelineJob(prisma: PrismaClient, processingJobId: stri
         grossTotal: refreshed.grossTotal.toString(),
         currency: refreshed.currency,
       };
-      void promoteKsefXmlPrimaryToSummaryPdf(prisma, promoteParams).catch((e) =>
-        console.warn("[pipeline] KSeF summary PDF (primary):", e instanceof Error ? e.message : String(e)),
-      );
+      try {
+        await promoteKsefXmlPrimaryToSummaryPdf(prisma, promoteParams);
+      } catch (e) {
+        console.warn("[pipeline] KSeF summary PDF (primary):", e instanceof Error ? e.message : String(e));
+      }
     }
 
     pipelineJobsTotal.inc({ result: "completed" });

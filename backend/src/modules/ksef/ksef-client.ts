@@ -339,11 +339,25 @@ export class KsefClient {
 
   /** Download raw invoice XML by KSeF number. */
   async fetchInvoiceXml(ksefNumber: string): Promise<string> {
-    const res = await this.authedFetch(`/invoices/ksef/${encodeURIComponent(ksefNumber)}`, {
-      headers: { Accept: "application/xml" },
-    });
-    if (!res.ok) throw await this.apiError(res, `fetch invoice ${ksefNumber}`);
-    return res.text();
+    const path = `/invoices/ksef/${encodeURIComponent(ksefNumber)}`;
+    const max429Attempts = 12;
+    for (let attempt = 0; attempt < max429Attempts; attempt++) {
+      const res = await this.authedFetch(path, {
+        headers: { Accept: "application/xml" },
+      });
+      if (res.status === 429) {
+        const text = await res.text();
+        const waitMs = parseKsefMetadata429WaitMs(res, text);
+        console.warn(
+          `[KSeF] fetch XML 429 (${ksefNumber}), czekam ${waitMs}ms… ${text.slice(0, 120)}`,
+        );
+        await sleep(waitMs);
+        continue;
+      }
+      if (!res.ok) throw await this.apiError(res, `fetch invoice ${ksefNumber}`);
+      return res.text();
+    }
+    throw new Error(`KSeF fetch invoice XML: nadal 429 po ${max429Attempts} próbach (${ksefNumber}).`);
   }
 
   /**

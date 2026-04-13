@@ -27,6 +27,11 @@ export type KsefSyncJobData = {
   tenantId: string;
   /** Override the "from" date instead of using the stored high-water mark. */
   fromDate?: string;
+  /**
+   * Górny koniec okna metadanych (ISO). Dla np. samego kwietnia: `2026-04-30T23:59:59.999Z`.
+   * Przy ustawionym `toDate` **nie zapisujemy** `hwmDate` — żeby nie cofnąć znaku wodnego produkcji.
+   */
+  toDate?: string;
   /** Re-download XMLs for invoices that already exist in DB and store in S3. */
   forceRefetchFiles?: boolean;
 };
@@ -127,11 +132,18 @@ export async function runKsefSyncJob(
     hwm: hwmOnly,
     overlapDays: cfg.KSEF_SYNC_HWN_OVERLAP_DAYS,
   });
-  const to = new Date().toISOString();
+  const toTrim = data.toDate?.trim();
+  const toNow = new Date().toISOString();
+  /** Górny zakres dla `Issue` (np. koniec kwietnia) — portal MF filtruje po dacie wystawienia. */
+  const toIssue = toTrim && toTrim.length > 0 ? toTrim : toNow;
+  /** `PermanentStorage` zawsze do „teraz”, żeby nie pominąć faktur z kwietniową datą wystawienia zapisanych w KSeF później. */
+  const toPermanent = toNow;
+  /** Zawężony `toDate` (Issue) — nie zapisujemy HWM (odpowiedź MF przy wąskim oknie mogłaby cofnąć produkcyjny znacznik). */
+  const skipHwmPersistence = Boolean(toTrim && toTrim.length > 0);
   const force = data.forceRefetchFiles === true;
 
   console.info(
-    `[KSeF sync] Querying metadata from=${from} to=${to} force=${force} overlapDays=${cfg.KSEF_SYNC_HWN_OVERLAP_DAYS} (hwm=${hwmOnly ?? "—"})`,
+    `[KSeF sync] Querying metadata from=${from} toPermanent=${toPermanent} toIssue=${toIssue} force=${force} overlapDays=${cfg.KSEF_SYNC_HWN_OVERLAP_DAYS} (hwm=${hwmOnly ?? "—"})${skipHwmPersistence ? " [toDate: bez zapisu hwmDate]" : ""}`,
   );
 
   const result: KsefSyncResult = { fetched: 0, ingested: 0, skippedDuplicate: 0, refetched: 0, errors: [], newHwmDate: null };
@@ -160,26 +172,40 @@ export async function runKsefSyncJob(
       }
     }
     for (const subjectType of cfg.KSEF_SYNC_SUBJECT_TYPES) {
-      console.info(`[KSeF sync] Paging metadata dateType=${dateType} subjectType=${subjectType} …`);
+      const to = dateType === "Issue" ? toIssue : toPermanent;
+      console.info(`[KSeF sync] Paging metadata dateType=${dateType} subjectType=${subjectType} to=${to} …`);
       let pageOffset = 0;
       let hasMore = true;
       let currentFrom = from;
 
       while (hasMore) {
-        let page: KsefMetadataPage;
-        try {
-          page = await client.queryMetadata(currentFrom, to, pageOffset, PAGE_SIZE, subjectType, dateType);
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          if (dateType === "Issue") {
-            console.warn(`[KSeF sync] Pomijam dateType=Issue dla ${subjectType}: ${msg}`);
+        let page: KsefMetadataPage | undefined;
+        const issueMetaMaxAttempts = dateType === "Issue" ? 6 : 1;
+        let lastMetaErr: unknown;
+        for (let metaAttempt = 0; metaAttempt < issueMetaMaxAttempts; metaAttempt++) {
+          try {
+            page = await client.queryMetadata(currentFrom, to, pageOffset, PAGE_SIZE, subjectType, dateType);
             break;
+          } catch (err) {
+            lastMetaErr = err;
+            if (dateType !== "Issue" || metaAttempt + 1 >= issueMetaMaxAttempts) {
+              throw err;
+            }
+            const waitMs = 20_000 + metaAttempt * 15_000;
+            const msg = err instanceof Error ? err.message : String(err);
+            console.warn(
+              `[KSeF sync] Issue metadata błąd (próba ${metaAttempt + 1}/${issueMetaMaxAttempts}) ${subjectType} offset=${pageOffset}: ${msg} — czekam ${waitMs}ms`,
+            );
+            await delay(waitMs);
           }
-          throw err;
         }
-        result.fetched += page.invoices.length;
+        if (!page) {
+          throw lastMetaErr instanceof Error ? lastMetaErr : new Error(String(lastMetaErr));
+        }
+        const metaPage = page;
+        result.fetched += metaPage.invoices.length;
 
-        for (const inv of page.invoices) {
+        for (const inv of metaPage.invoices) {
           try {
             const outcome = await processOneInvoice(prisma, client, data.tenantId, inv, force, beforeXmlFetch);
             if (outcome === "ingested") result.ingested++;
@@ -192,13 +218,13 @@ export async function runKsefSyncJob(
           }
         }
 
-        if (dateType === "PermanentStorage" && page.permanentStorageHwmDate) {
-          result.newHwmDate = mergeHwm(result.newHwmDate, page.permanentStorageHwmDate);
+        if (dateType === "PermanentStorage" && metaPage.permanentStorageHwmDate) {
+          result.newHwmDate = mergeHwm(result.newHwmDate, metaPage.permanentStorageHwmDate);
         }
 
-        hasMore = page.hasMore;
-        if (hasMore && page.isTruncated) {
-          const lastInvoice = page.invoices[page.invoices.length - 1];
+        hasMore = metaPage.hasMore;
+        if (hasMore && metaPage.isTruncated) {
+          const lastInvoice = metaPage.invoices[metaPage.invoices.length - 1];
           if (lastInvoice) {
             currentFrom = nextMetadataQueryFrom(dateType, lastInvoice);
             console.info(
@@ -213,7 +239,9 @@ export async function runKsefSyncJob(
     }
   }
 
-  if (result.errors.length === 0 && result.newHwmDate) {
+  if (skipHwmPersistence) {
+    console.info("[KSeF sync] Pomijam zapis hwmDate (ustawiono toDate — sync zawężony).");
+  } else if (result.errors.length === 0 && result.newHwmDate) {
     await setHighWaterMark(prisma, data.tenantId, result.newHwmDate);
     console.info(`[KSeF sync] Zaktualizowano hwmDate=${result.newHwmDate}`);
   } else if (result.errors.length > 0) {
