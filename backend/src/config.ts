@@ -61,10 +61,13 @@ const envSchema = z.object({
   KSEF_CERT: z.string().optional(),
   /** NIP of the company context for KSeF API auth. */
   KSEF_NIP: z.string().optional(),
-  /** How often (ms) the worker auto-enqueues KSeF invoice sync. 0 = disabled. Domyślnie 5 min przy skonfigurowanym KSeF. */
-  KSEF_AUTO_SYNC_INTERVAL_MS: z.coerce.number().int().min(0).default(300_000),
+  /**
+   * Jak często worker próbuje dodać auto-sync KSeF (na tenant). 0 = wyłączone.
+   * Domyślnie 10 min — krótszy interwał + długi sync składa kolejkę i dobija limit zapytań MF (~20/h metadane).
+   */
+  KSEF_AUTO_SYNC_INTERVAL_MS: z.coerce.number().int().min(0).default(600_000),
   /** Min delay (ms) between KSeF GET invoice XML calls (MF limit ~16/min). 0 = no delay. */
-  KSEF_INVOICE_FETCH_MIN_INTERVAL_MS: z.coerce.number().int().min(0).default(4_000),
+  KSEF_INVOICE_FETCH_MIN_INTERVAL_MS: z.coerce.number().int().min(0).default(4_500),
   /**
    * Zapytania `POST /invoices/query/metadata` — lista ról MF (`Subject1` = m.in. wystawca, `Subject2` = m.in. nabywca).
    * Domyślnie oba: część faktur widoczna w portalu tylko w jednym kontekście; deduplikacja po `ksefNumber`.
@@ -118,7 +121,12 @@ const envSchema = z.object({
    * MF limituje `POST …/invoices/query/metadata` (np. ~20/h); bez pauzy Issue często zwraca 429 i cały przebieg się pomija.
    * 0 = wyłączone (np. sandbox).
    */
-  KSEF_METADATA_INTER_PASS_PAUSE_MS: z.coerce.number().int().min(0).default(70_000),
+  KSEF_METADATA_INTER_PASS_PAUSE_MS: z.coerce.number().int().min(0).default(90_000),
+  /**
+   * Pauza (ms) po każdej stronie `POST …/invoices/query/metadata` gdy są kolejne strony (`hasMore`).
+   * 0 = wyłączone. Delikatnie rozprasza burst zapytań wobec limitów MF.
+   */
+  KSEF_METADATA_PAGE_PAUSE_MS: z.coerce.number().int().min(0).default(1_200),
   /**
    * Wysyłka faktur sprzedaży do KSeF: `stub` — tylko zapis PENDING w bazie;
    * `live` — próba wywołania API (wymaga KSEF_ENV≠mock, tokenów i poprawnego XML wg MF).

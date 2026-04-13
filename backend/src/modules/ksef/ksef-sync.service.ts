@@ -235,6 +235,10 @@ export async function runKsefSyncJob(
         } else if (hasMore) {
           pageOffset++;
         }
+
+        if (hasMore && cfg.KSEF_METADATA_PAGE_PAUSE_MS > 0) {
+          await delay(cfg.KSEF_METADATA_PAGE_PAUSE_MS);
+        }
       }
     }
   }

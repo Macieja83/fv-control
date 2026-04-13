@@ -134,7 +134,19 @@ async function autoScheduleKsefSync(): Promise<void> {
   try {
     const tenants = await prisma.tenant.findMany({ select: { id: true } });
     for (const t of tenants) {
-      await enqueueKsefSync({ tenantId: t.id }).catch(() => {});
+      try {
+        const r = await enqueueKsefSync({ tenantId: t.id }, { autoDedupe: true });
+        if (r.skipped) {
+          console.info(
+            `[KSeF auto] Pominięto enqueue — sync dla tenant ${t.id} już w kolejce lub w toku (bez stackowania wobec limitów MF).`,
+          );
+        }
+      } catch (e) {
+        console.warn(
+          `[KSeF auto] enqueue tenant ${t.id}:`,
+          e instanceof Error ? e.message : String(e),
+        );
+      }
     }
   } catch (err) {
     console.error("auto ksef sync scheduling failed", err);
