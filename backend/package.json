@@ -33,7 +33,8 @@
     "diff:ksef-issue-metadata": "tsx scripts/diff-ksef-issue-metadata-vs-db.ts",
     "ksef:ingest-by-numbers": "tsx scripts/ingest-ksef-by-numbers.ts",
     "pipeline:run-pending": "tsx scripts/run-pending-pipeline-jobs.ts",
-    "pipeline:tenant-status": "tsx scripts/tenant-pipeline-status.ts"
+    "pipeline:tenant-status": "tsx scripts/tenant-pipeline-status.ts",
+    "pipeline:cleanup-broken-jobs": "tsx scripts/cleanup-broken-pipeline-jobs.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
