@@ -37,6 +37,8 @@ async function main(): Promise<void> {
     where: {
       type: "INGEST_PIPELINE",
       status: { in: ["PENDING", "RUNNING"] },
+      invoiceId: { not: null },
+      documentId: { not: null },
       ...(tenantId ? { tenantId } : {}),
     },
     orderBy: { createdAt: "asc" },
