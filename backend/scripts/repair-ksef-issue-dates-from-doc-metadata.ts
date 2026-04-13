@@ -1,7 +1,8 @@
 /**
- * Ustawia `Invoice.issueDate` zgodnie z `issueDate` w metadanych dokumentu KSeF (sync MF).
- * Gdy pipeline/OCR nadpisał datę, faktura nie wchodzi w widok miesiąca zgodny z portalem,
- * choć `run-ksef-sync-once` zwraca same duplikaty (`ingested=0`).
+ * Ustawia `Invoice.issueDate` zgodnie z `issueDate` w metadanych dokumentu KSeF (sync MF)
+ * i przelicza `fingerprint`, żeby nie rozjeżdżać deduplikacji.
+ * Gdy pipeline/OCR nadpisał datę (np. pełne ISO z offsetem → inny dzień w UTC), faktura
+ * nie wchodzi w widok miesiąca zgodny z portalem, choć sync zwraca same duplikaty (`ingested=0`).
  *
  *   cd backend && npx tsx scripts/repair-ksef-issue-dates-from-doc-metadata.ts <tenantId> [--dry-run]
  *
@@ -10,6 +11,7 @@
  */
 import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
+import { buildInvoiceFingerprint } from "../src/domain/deduplication/invoice-fingerprint.js";
 import { parseInvoiceDate } from "../src/modules/invoices/invoice-dates.js";
 
 const prisma = new PrismaClient();
@@ -79,8 +81,12 @@ async function main(): Promise<void> {
     select: {
       id: true,
       issueDate: true,
+      number: true,
+      currency: true,
+      grossTotal: true,
       ksefNumber: true,
       sourceExternalId: true,
+      contractor: { select: { nip: true } },
       primaryDoc: {
         select: { id: true, sourceType: true, mimeType: true, metadata: true },
       },
@@ -121,6 +127,14 @@ async function main(): Promise<void> {
       skippedSame++;
       continue;
     }
+    const nextIssue = parseInvoiceDate(metaYmd);
+    const fingerprint = buildInvoiceFingerprint({
+      contractorNip: inv.contractor?.nip ?? null,
+      number: inv.number,
+      issueDateIso: nextIssue.toISOString(),
+      grossTotal: inv.grossTotal.toString(),
+      currency: inv.currency,
+    });
     if (dryRun) {
       console.log(`[dry-run] ${inv.id} issueDate ${currentYmd} → ${metaYmd} (${ksefNum})`);
       updated++;
@@ -128,7 +142,7 @@ async function main(): Promise<void> {
     }
     await prisma.invoice.update({
       where: { id: inv.id },
-      data: { issueDate: parseInvoiceDate(metaYmd) },
+      data: { issueDate: nextIssue, fingerprint },
     });
     console.log(`[updated] ${inv.id} ${currentYmd} → ${metaYmd} (${ksefNum})`);
     updated++;
