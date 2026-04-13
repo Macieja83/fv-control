@@ -40,6 +40,24 @@ chmod +x scripts/backup-postgres.sh
 Domyślnie zrzut trafia do `~/backups/fv-control-db/` (format custom `-Fc`).  
 Nadpisanie katalogu: `BACKUP_DIR=/ścieżka/do/kopii ./scripts/backup-postgres.sh`
 
+### Gdy `pg_dump: command not found`
+
+Zainstaluj klienta PostgreSQL (Debian/Ubuntu):
+
+```bash
+sudo apt-get update && sudo apt-get install -y postgresql-client
+```
+
+**Albo** zrzut z kontenera Docker (gdy baza działa jako usługa `postgres` z `docker-compose.yml` w katalogu głównym repo):
+
+```bash
+mkdir -p ~/backups/fv-control-db
+cd ~/fv-control
+docker compose exec -T postgres pg_dump -U fvresta -d fvresta -Fc > ~/backups/fv-control-db/fv-control-docker-$(date -u +%Y%m%dT%H%M%SZ).dump
+```
+
+Dostosuj `-U` / `-d`, jeśli w `docker-compose.yml` masz inne wartości niż domyślne `fvresta`.
+
 Przywracanie (skrót):
 
 ```bash
