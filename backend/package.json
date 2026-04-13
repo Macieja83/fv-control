@@ -29,7 +29,8 @@
     "diagnose:invoices": "tsx scripts/diagnose-invoices.ts",
     "stats:issue-range": "tsx scripts/stats-invoices-issue-range.ts",
     "rehydrate:ksef-xml": "tsx scripts/rehydrate-ksef-invoice-xml.ts",
-    "repair:ksef-issue-dates": "tsx scripts/repair-ksef-issue-dates-from-doc-metadata.ts"
+    "repair:ksef-issue-dates": "tsx scripts/repair-ksef-issue-dates-from-doc-metadata.ts",
+    "diff:ksef-issue-metadata": "tsx scripts/diff-ksef-issue-metadata-vs-db.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

@@ -55,7 +55,7 @@ const PAGE_SIZE = 100;
  * Sortowanie zależy od `dateRange.dateType` — dla **Issue** nie wolno używać `permanentStorageDate`
  * (to pomijałoby strony wyników i część faktur nigdy nie trafiałaby do ingestu).
  */
-function nextMetadataQueryFrom(
+export function nextMetadataQueryFrom(
   dateType: "PermanentStorage" | "Issue",
   last: KsefInvoiceMetadata,
 ): string {
