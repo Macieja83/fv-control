@@ -9,6 +9,11 @@ type Props = {
   ksefNumber?: string | null
   /** Przycisk „Pobierz z KSeF” przy braku pliku w storage (np. 404). */
   allowKsefRehydrate?: boolean
+  /**
+   * Dla faktur z KSeF: `GET …/primary-document?source=ksef-fa-xml` — pełny podgląd z FA XML
+   * zamiast jednostronicowego PDF podsumowania po `primaryDoc` = PDF.
+   */
+  preferKsefFaXml?: boolean
 }
 
 function baseMime(ct: string | null): string {
@@ -71,10 +76,13 @@ function parseFileName(contentDisposition: string | null): string | null {
 async function fetchDocument(
   invoiceId: string,
   disposition: 'inline' | 'attachment',
+  opts?: { ksefFaXml?: boolean },
 ): Promise<{ blob: Blob; mime: string; fileName: string }> {
   const token = getStoredToken()
   if (!token) throw new Error('Brak sesji — zaloguj się ponownie.')
-  const url = `/api/v1/invoices/${encodeURIComponent(invoiceId)}/primary-document?disposition=${disposition}`
+  const q = new URLSearchParams({ disposition })
+  if (opts?.ksefFaXml) q.set('source', 'ksef-fa-xml')
+  const url = `/api/v1/invoices/${encodeURIComponent(invoiceId)}/primary-document?${q.toString()}`
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
   if (res.status === 401) {
     throw new Error('Sesja wygasła lub token jest nieprawidłowy — zaloguj się ponownie.')
@@ -107,7 +115,12 @@ async function fetchDocument(
   return { blob, mime, fileName }
 }
 
-export function InvoiceDocumentPreview({ invoiceId, ksefNumber, allowKsefRehydrate = false }: Props) {
+export function InvoiceDocumentPreview({
+  invoiceId,
+  ksefNumber,
+  allowKsefRehydrate = false,
+  preferKsefFaXml = false,
+}: Props) {
   const [reloadNonce, setReloadNonce] = useState(0)
   const [phase, setPhase] = useState<'loading' | 'error' | 'ready'>('loading')
   const [message, setMessage] = useState('')
@@ -124,7 +137,23 @@ export function InvoiceDocumentPreview({ invoiceId, ksefNumber, allowKsefRehydra
     const run = async () => {
       try {
         setXmlPreview(null)
-        const { blob, mime: m, fileName: fn } = await fetchDocument(invoiceId, 'inline')
+        let blob: Blob
+        let m: string
+        let fn: string
+        try {
+          const r = await fetchDocument(invoiceId, 'inline', {
+            ksefFaXml: preferKsefFaXml,
+          })
+          blob = r.blob
+          m = r.mime
+          fn = r.fileName
+        } catch (firstErr) {
+          if (!preferKsefFaXml) throw firstErr
+          const r = await fetchDocument(invoiceId, 'inline', { ksefFaXml: false })
+          blob = r.blob
+          m = r.mime
+          fn = r.fileName
+        }
         if (cancelled) return
         const xml = await fullXmlFromBlob(blob, m)
         if (cancelled) return
@@ -146,11 +175,22 @@ export function InvoiceDocumentPreview({ invoiceId, ksefNumber, allowKsefRehydra
       cancelled = true
       if (urlToRevoke) URL.revokeObjectURL(urlToRevoke)
     }
-  }, [invoiceId, reloadNonce])
+  }, [invoiceId, reloadNonce, preferKsefFaXml])
 
   const onDownload = useCallback(async () => {
     try {
-      const { blob, fileName: fn } = await fetchDocument(invoiceId, 'attachment')
+      let blob: Blob
+      let fn: string
+      try {
+        const r = await fetchDocument(invoiceId, 'attachment', { ksefFaXml: preferKsefFaXml })
+        blob = r.blob
+        fn = r.fileName
+      } catch (firstErr) {
+        if (!preferKsefFaXml) throw firstErr
+        const r = await fetchDocument(invoiceId, 'attachment', { ksefFaXml: false })
+        blob = r.blob
+        fn = r.fileName
+      }
       const u = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = u
@@ -160,7 +200,7 @@ export function InvoiceDocumentPreview({ invoiceId, ksefNumber, allowKsefRehydra
     } catch (e) {
       window.alert(e instanceof Error ? e.message : 'Pobieranie nie powiodło się.')
     }
-  }, [invoiceId])
+  }, [invoiceId, preferKsefFaXml])
 
   const openInNewTab = useCallback(() => {
     if (!blobUrl) return

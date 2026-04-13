@@ -12,9 +12,33 @@ export type KsefSummaryPdfInput = {
   currency: string;
 };
 
-/** Helvetica (WinAnsi) — usuń znaki spoza podstawowego zestawu, żeby uniknąć błędów pdf-lib. */
+/** Helvetica (WinAnsi) — polskie znaki → ASCII, reszta spoza Latin → `?` / spacja. */
 export function foldForPdfText(s: string): string {
-  return s
+  const pl: Record<string, string> = {
+    ą: "a",
+    ć: "c",
+    ę: "e",
+    ł: "l",
+    ń: "n",
+    ó: "o",
+    ś: "s",
+    ź: "z",
+    ż: "z",
+    Ą: "A",
+    Ć: "C",
+    Ę: "E",
+    Ł: "L",
+    Ń: "N",
+    Ó: "O",
+    Ś: "S",
+    Ź: "Z",
+    Ż: "Z",
+  };
+  let t = s.normalize("NFC");
+  for (const [k, v] of Object.entries(pl)) {
+    if (k.length === 1) t = t.split(k).join(v);
+  }
+  return t
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^\n\t\x20-\x7E]/g, (ch) => (/\s/.test(ch) ? " " : "?"));

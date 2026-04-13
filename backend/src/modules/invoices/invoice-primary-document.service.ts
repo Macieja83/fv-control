@@ -4,6 +4,51 @@ import { createObjectStorage } from "../../adapters/storage/create-storage.js";
 import { loadConfig } from "../../config.js";
 import { AppError } from "../../lib/errors.js";
 
+export type PrimaryDocumentStreamOptions = {
+  /**
+   * Dla faktur z KSeF: zwróć **oryginalny FA XML** zamiast wizualnego PDF podsumowania,
+   * żeby frontend mógł pokazać pełny podgląd (`KsefInvoicePreview`).
+   */
+  ksefFaXml?: boolean;
+};
+
+async function resolveKsefFaXmlDocument(
+  prisma: PrismaClient,
+  tenantId: string,
+  invoice: {
+    id: string;
+    ksefNumber: string | null;
+    sourceExternalId: string | null;
+    intakeSourceType: string;
+    primaryDoc: Document | null;
+  },
+): Promise<Document | null> {
+  if (invoice.intakeSourceType !== "KSEF_API") return null;
+  const primary = invoice.primaryDoc;
+  if (!primary) return null;
+
+  const meta = primary.metadata as Record<string, unknown> | null;
+  if (meta?.kind === "ksef_summary_pdf") {
+    const raw = meta.derivedFromDocumentId;
+    if (typeof raw === "string" && raw.trim().length > 0) {
+      const derived = await prisma.document.findFirst({
+        where: { id: raw.trim(), tenantId, deletedAt: null },
+      });
+      if (derived) {
+        const mt = (derived.mimeType ?? "").toLowerCase();
+        if (mt.includes("xml") || mt.includes("text")) return derived;
+      }
+    }
+  }
+
+  const kn = (invoice.ksefNumber ?? invoice.sourceExternalId)?.trim();
+  if (!kn) return null;
+  return prisma.document.findFirst({
+    where: { tenantId, sourceType: "KSEF", sourceExternalId: kn, deletedAt: null },
+    orderBy: { createdAt: "desc" },
+  });
+}
+
 function documentDownloadName(doc: Document): string {
   const meta = doc.metadata as Record<string, unknown> | null;
   const fn = meta?.filename;
@@ -17,6 +62,7 @@ export async function openInvoicePrimaryDocumentStream(
   prisma: PrismaClient,
   tenantId: string,
   invoiceId: string,
+  opts?: PrimaryDocumentStreamOptions,
 ): Promise<{
   stream: Readable;
   mimeType: string;
@@ -28,9 +74,23 @@ export async function openInvoicePrimaryDocumentStream(
     include: { primaryDoc: true },
   });
   if (!inv) throw AppError.notFound("Invoice not found");
-  const doc = inv.primaryDoc;
+  let doc = inv.primaryDoc;
   if (!doc || doc.deletedAt) {
     throw AppError.notFound("Invoice has no primary document");
+  }
+
+  if (opts?.ksefFaXml) {
+    const xmlDoc = await resolveKsefFaXmlDocument(prisma, tenantId, {
+      id: inv.id,
+      ksefNumber: inv.ksefNumber,
+      sourceExternalId: inv.sourceExternalId,
+      intakeSourceType: inv.intakeSourceType,
+      primaryDoc: inv.primaryDoc,
+    });
+    if (!xmlDoc || xmlDoc.deletedAt) {
+      throw AppError.notFound("KSeF FA XML not found for this invoice");
+    }
+    doc = xmlDoc;
   }
 
   const cfg = loadConfig();

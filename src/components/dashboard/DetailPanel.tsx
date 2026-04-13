@@ -135,6 +135,7 @@ export function DetailPanel({
                   invoiceId={row.id}
                   ksefNumber={row.ksef_number}
                   allowKsefRehydrate={row.source_type === 'ksef' || Boolean(row.ksef_number?.trim())}
+                  preferKsefFaXml={row.source_type === 'ksef' || Boolean(row.ksef_number?.trim())}
                 />
               </section>
             </div>
