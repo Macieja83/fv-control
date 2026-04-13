@@ -13,6 +13,7 @@ import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
 import { buildInvoiceFingerprint } from "../src/domain/deduplication/invoice-fingerprint.js";
 import { parseInvoiceDate } from "../src/modules/invoices/invoice-dates.js";
+import { issueYmdEmbeddedInKsefNumber } from "../src/modules/ksef/ksef-metadata-draft.js";
 
 const prisma = new PrismaClient();
 
@@ -97,7 +98,7 @@ async function main(): Promise<void> {
   let updated = 0;
   let skippedNoKsef = 0;
   let skippedNoDoc = 0;
-  let skippedNoMetaYmd = 0;
+  let skippedNoIssueYmd = 0;
   let skippedPrefix = 0;
   let skippedSame = 0;
 
@@ -114,20 +115,30 @@ async function main(): Promise<void> {
       continue;
     }
     const metaYmd = issueYmdFromMetadata(xmlDoc.metadata as Record<string, unknown> | null);
-    if (!metaYmd) {
-      skippedNoMetaYmd++;
+    const fromNum = issueYmdEmbeddedInKsefNumber(ksefNum);
+    let resolvedYmd = metaYmd ?? fromNum;
+    /** Gdy metadane mają zły miesiąc, a numer KSeF (segment MF) wskazuje właściwy — wyrównujemy do numeru. */
+    if (
+      onlyMetaPrefix &&
+      fromNum?.startsWith(onlyMetaPrefix) &&
+      (!metaYmd || !metaYmd.startsWith(onlyMetaPrefix))
+    ) {
+      resolvedYmd = fromNum;
+    }
+    if (!resolvedYmd) {
+      skippedNoIssueYmd++;
       continue;
     }
-    if (onlyMetaPrefix && !metaYmd.startsWith(onlyMetaPrefix)) {
+    if (onlyMetaPrefix && !resolvedYmd.startsWith(onlyMetaPrefix)) {
       skippedPrefix++;
       continue;
     }
     const currentYmd = ymdFromDbIssue(inv.issueDate);
-    if (metaYmd === currentYmd) {
+    if (resolvedYmd === currentYmd) {
       skippedSame++;
       continue;
     }
-    const nextIssue = parseInvoiceDate(metaYmd);
+    const nextIssue = parseInvoiceDate(resolvedYmd);
     const fingerprint = buildInvoiceFingerprint({
       contractorNip: inv.contractor?.nip ?? null,
       number: inv.number,
@@ -136,7 +147,7 @@ async function main(): Promise<void> {
       currency: inv.currency,
     });
     if (dryRun) {
-      console.log(`[dry-run] ${inv.id} issueDate ${currentYmd} → ${metaYmd} (${ksefNum})`);
+      console.log(`[dry-run] ${inv.id} issueDate ${currentYmd} → ${resolvedYmd} (${ksefNum})`);
       updated++;
       continue;
     }
@@ -144,7 +155,7 @@ async function main(): Promise<void> {
       where: { id: inv.id },
       data: { issueDate: nextIssue, fingerprint },
     });
-    console.log(`[updated] ${inv.id} ${currentYmd} → ${metaYmd} (${ksefNum})`);
+    console.log(`[updated] ${inv.id} ${currentYmd} → ${resolvedYmd} (${ksefNum})`);
     updated++;
   }
 
@@ -158,7 +169,7 @@ async function main(): Promise<void> {
         updated,
         skippedNoKsef,
         skippedNoDoc,
-        skippedNoMetaYmd,
+        skippedNoIssueYmd,
         skippedPrefix,
         skippedSame,
       },

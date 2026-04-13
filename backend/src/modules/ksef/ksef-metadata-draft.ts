@@ -1,6 +1,18 @@
 import type { ExtractedInvoiceDraft } from "../../adapters/ai/ai-invoice.adapter.js";
 import { polishNipDigits10 } from "../contractors/contractor-resolve.js";
 
+/**
+ * Numer KSeF MF: segment `YYYYMMDD` (np. `5220002860-20260401-…`) → `YYYY-MM-DD`.
+ * Używane gdy brak `issueDate` w metadanych zapisanych na dokumencie.
+ */
+export function issueYmdEmbeddedInKsefNumber(ksefNumber: string): string | null {
+  const parts = ksefNumber.trim().split("-");
+  if (parts.length < 2 || !/^\d{8}$/.test(parts[1]!)) return null;
+  const s = parts[1]!;
+  const ymd = `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`;
+  return /^\d{4}-\d{2}-\d{2}$/.test(ymd) ? ymd : null;
+}
+
 function toFiniteNumber(v: unknown): number | null {
   if (typeof v === "number" && Number.isFinite(v)) return v;
   if (typeof v === "string") {

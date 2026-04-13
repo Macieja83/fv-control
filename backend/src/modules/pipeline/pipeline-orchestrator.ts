@@ -18,7 +18,7 @@ import { classifyDocumentType } from "../compliance/compliance-engine.js";
 import { refreshInvoiceCompliance } from "../compliance/compliance.service.js";
 import { findContractorByNormalizedNip, polishNipDigits10 } from "../contractors/contractor-resolve.js";
 import { tryExtractDraftFromKsefFaXml } from "../ksef/ksef-fa-xml-extract.js";
-import { draftFromKsefDocumentMetadata } from "../ksef/ksef-metadata-draft.js";
+import { draftFromKsefDocumentMetadata, issueYmdEmbeddedInKsefNumber } from "../ksef/ksef-metadata-draft.js";
 import { promoteKsefXmlPrimaryToSummaryPdf } from "../ksef/ksef-primary-visual-document.service.js";
 import { extractVendorNipFromNormalizedPayload } from "../invoices/invoice-vendor-nip.js";
 import { parseInvoiceDate, parseIssueDateCalendarYmd } from "../invoices/invoice-dates.js";
@@ -202,12 +202,17 @@ export async function runPipelineJob(prisma: PrismaClient, processingJobId: stri
      */
     const metaIssueRaw =
       fromKsefSource && docMeta && typeof docMeta.issueDate === "string" ? docMeta.issueDate.trim() : "";
+    const ksefExt = document.sourceExternalId?.trim() ?? "";
+    const issueYmdFromNumber =
+      fromKsefSource && ksefExt ? issueYmdEmbeddedInKsefNumber(ksefExt) : null;
     const issueDate =
       fromKsefSource && metaIssueRaw.length >= 10 && /^\d{4}-\d{2}-\d{2}/.test(metaIssueRaw)
         ? parseInvoiceDate(metaIssueRaw.slice(0, 10))
-        : draft.issueDate
-          ? parseIssueDateCalendarYmd(draft.issueDate, invoice.issueDate)
-          : invoice.issueDate;
+        : fromKsefSource && issueYmdFromNumber
+          ? parseInvoiceDate(issueYmdFromNumber)
+          : draft.issueDate
+            ? parseIssueDateCalendarYmd(draft.issueDate, invoice.issueDate)
+            : invoice.issueDate;
     const net = new Prisma.Decimal(String(draft.netTotal ?? "0"));
     const vat = new Prisma.Decimal(String(draft.vatTotal ?? "0"));
     const gross = new Prisma.Decimal(String(draft.grossTotal ?? "0"));

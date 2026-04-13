@@ -20,6 +20,7 @@ import type { PrismaClient } from "@prisma/client";
 import { KsefClient, type KsefInvoiceMetadata, type KsefMetadataPage } from "./ksef-client.js";
 import { polishNipDigits10 } from "../contractors/contractor-resolve.js";
 import { tryExtractDraftFromKsefFaXml } from "./ksef-fa-xml-extract.js";
+import { issueYmdEmbeddedInKsefNumber } from "./ksef-metadata-draft.js";
 import { ingestAttachmentAndEnqueue } from "../ingestion/attachment-intake.service.js";
 import { parseInvoiceDate } from "../invoices/invoice-dates.js";
 import { createObjectStorage } from "../../adapters/storage/create-storage.js";
@@ -278,16 +279,6 @@ function issueDateFromKsefMetadata(meta: KsefInvoiceMetadata): Date | undefined 
   return Number.isNaN(d.getTime()) ? undefined : d;
 }
 
-/** Segment daty `YYYYMMDD` w numerze KSeF (np. `…-20260401-…`) → `YYYY-MM-DD`. */
-function issueYmdFromKsefNumber(ksefNumber: string): string | undefined {
-  const parts = ksefNumber.split("-");
-  if (parts.length >= 2 && /^\d{8}$/.test(parts[1]!)) {
-    const s = parts[1]!;
-    return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`;
-  }
-  return undefined;
-}
-
 function parseDraftMoney(s: string | undefined): number {
   if (!s) return 0;
   const normalized = s.replace(/\s/g, "").replace(/,/g, ".");
@@ -303,7 +294,7 @@ function ksefMetadataFromFaXmlDraft(
   const d = extracted.draft;
   const issueYmd =
     (d.issueDate && d.issueDate.length >= 10 ? d.issueDate.slice(0, 10) : undefined) ??
-    issueYmdFromKsefNumber(ksefNumber) ??
+    issueYmdEmbeddedInKsefNumber(ksefNumber) ??
     "1970-01-01";
   const nip = polishNipDigits10(d.contractorNip ?? "") ?? "0000000000";
   const net = parseDraftMoney(d.netTotal);
