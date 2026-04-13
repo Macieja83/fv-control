@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useState } from 'react'
 import { getStoredToken } from '../../auth/session'
+import { postRehydrateKsefInvoice } from '../../api/invoicesApi'
 import { KsefInvoicePreview } from './KsefInvoicePreview'
 
 type Props = {
   invoiceId: string
   /** Z bazy — dokładniejszy niż numer z nazwy pliku XML. */
   ksefNumber?: string | null
+  /** Przycisk „Pobierz z KSeF” przy braku pliku w storage (np. 404). */
+  allowKsefRehydrate?: boolean
 }
 
 function baseMime(ct: string | null): string {
@@ -104,10 +107,11 @@ async function fetchDocument(
   return { blob, mime, fileName }
 }
 
-export function InvoiceDocumentPreview({ invoiceId, ksefNumber }: Props) {
+export function InvoiceDocumentPreview({ invoiceId, ksefNumber, allowKsefRehydrate = false }: Props) {
   const [reloadNonce, setReloadNonce] = useState(0)
   const [phase, setPhase] = useState<'loading' | 'error' | 'ready'>('loading')
   const [message, setMessage] = useState('')
+  const [rehydrateBusy, setRehydrateBusy] = useState(false)
   const [blobUrl, setBlobUrl] = useState<string | null>(null)
   const [mime, setMime] = useState('')
   const [fileName, setFileName] = useState('dokument')
@@ -167,12 +171,40 @@ export function InvoiceDocumentPreview({ invoiceId, ksefNumber }: Props) {
     return <div className="doc-preview doc-preview--loading">Ładowanie podglądu dokumentu…</div>
   }
 
+  const showKsefRehydrate =
+    allowKsefRehydrate &&
+    (message.includes('404') ||
+      message.includes('nie jest dostępny') ||
+      message.includes('storage') ||
+      message.includes('magazynu'))
+
+  const handleRehydrateFromKsef = async () => {
+    const token = getStoredToken()
+    if (!token) {
+      setMessage('Brak sesji — zaloguj się ponownie.')
+      return
+    }
+    setRehydrateBusy(true)
+    try {
+      await postRehydrateKsefInvoice(token, invoiceId)
+      setPhase('loading')
+      setReloadNonce((n) => n + 1)
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : 'Nie udało się pobrać pliku z KSeF.')
+    } finally {
+      setRehydrateBusy(false)
+    }
+  }
+
   if (phase === 'error') {
     return (
       <div className="doc-preview doc-preview--error">
         <p role="alert">{message}</p>
         <p className="doc-preview__hint">
           Jeśli faktura jest z KSeF i dopiero co została przetworzona, odśwież panel lub użyj „Spróbuj ponownie” — podgląd PDF tworzy się po zakończeniu pipeline na serwerze.
+          {message.includes('Sesja wygasła') || message.includes('401')
+            ? ' Błąd 401 oznacza wygasły token — wyloguj się i zaloguj ponownie.'
+            : ''}
         </p>
         <div className="doc-preview__error-actions">
           <button
@@ -185,6 +217,16 @@ export function InvoiceDocumentPreview({ invoiceId, ksefNumber }: Props) {
           >
             Spróbuj ponownie
           </button>
+          {showKsefRehydrate ? (
+            <button
+              type="button"
+              className="btn btn--primary btn--sm"
+              disabled={rehydrateBusy}
+              onClick={() => void handleRehydrateFromKsef()}
+            >
+              {rehydrateBusy ? 'Pobieranie z KSeF…' : 'Pobierz XML z KSeF (naprawa)'}
+            </button>
+          ) : null}
         </div>
       </div>
     )

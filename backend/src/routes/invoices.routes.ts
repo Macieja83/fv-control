@@ -25,6 +25,7 @@ import * as invoiceService from "../modules/invoices/invoice.service.js";
 import { openInvoicePrimaryDocumentStream } from "../modules/invoices/invoice-primary-document.service.js";
 import { adoptInvoiceVendor } from "../modules/invoices/invoice-adopt-vendor.service.js";
 import { retryInvoiceExtraction } from "../modules/pipeline/retry-invoice-extraction.service.js";
+import { rehydrateKsefInvoiceFromApi } from "../modules/ksef/ksef-invoice-rehydrate.service.js";
 
 const invoicesRoutes: FastifyPluginAsync = async (app) => {
   app.get(
@@ -86,6 +87,23 @@ const invoicesRoutes: FastifyPluginAsync = async (app) => {
         request.authUser!.tenantId,
         id,
       );
+      return reply.status(202).send(result);
+    },
+  );
+
+  app.post(
+    "/invoices/:id/rehydrate-from-ksef",
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        tags: ["Invoices"],
+        summary: "Re-download KSeF FA XML from MF, store in storage, reset primary to XML, re-queue pipeline",
+      },
+    },
+    async (request, reply) => {
+      assertCanMutate(request.authUser!.role);
+      const { id } = parseOrThrow(invoiceIdParamSchema, request.params, "Invalid id");
+      const result = await rehydrateKsefInvoiceFromApi(app.prisma, request.authUser!.tenantId, id);
       return reply.status(202).send(result);
     },
   );

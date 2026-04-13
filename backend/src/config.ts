@@ -63,9 +63,9 @@ const envSchema = z.object({
   KSEF_NIP: z.string().optional(),
   /**
    * Jak często worker próbuje dodać auto-sync KSeF (na tenant). 0 = wyłączone.
-   * Domyślnie 10 min — krótszy interwał + długi sync składa kolejkę i dobija limit zapytań MF (~20/h metadane).
+   * Domyślnie 5 min; kolizje z limitami MF ogranicza deduplikacja jobów (`auto-ksef:<tenantId>`) + odstępy między zapytaniami.
    */
-  KSEF_AUTO_SYNC_INTERVAL_MS: z.coerce.number().int().min(0).default(600_000),
+  KSEF_AUTO_SYNC_INTERVAL_MS: z.coerce.number().int().min(0).default(300_000),
   /** Min delay (ms) between KSeF GET invoice XML calls (MF limit ~16/min). 0 = no delay. */
   KSEF_INVOICE_FETCH_MIN_INTERVAL_MS: z.coerce.number().int().min(0).default(4_500),
   /**

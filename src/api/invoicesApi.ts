@@ -197,6 +197,29 @@ export async function postCreateInvoice(
   return data
 }
 
+export type RehydrateFromKsefResponse = {
+  invoiceId: string
+  xmlDocumentId: string
+  ksefNumber: string
+  storageKey: string
+  storageBucket: string | null
+  processingJobId: string | null
+}
+
+/** Ponownie pobiera XML z MF, zapisuje w storage i kolejkuje pipeline (naprawa 404 podglądu). */
+export async function postRehydrateKsefInvoice(
+  token: string,
+  invoiceId: string,
+): Promise<RehydrateFromKsefResponse> {
+  const res = await fetch(`${API}/invoices/${encodeURIComponent(invoiceId)}/rehydrate-from-ksef`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (res.status === 401) throw new Error('Sesja wygasła — zaloguj się ponownie.')
+  if (!res.ok) throw new Error(await readErrorMessage(res))
+  return (await res.json()) as RehydrateFromKsefResponse
+}
+
 export async function postRetryInvoiceExtraction(
   token: string,
   invoiceOrDocumentId: string,
