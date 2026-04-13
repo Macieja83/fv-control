@@ -472,8 +472,8 @@ export async function runPipelineJob(prisma: PrismaClient, processingJobId: stri
       data: { status: "COMPLETED", currentStep: "AUDIT", lastError: null },
     });
 
-    // Podgląd PDF w tle — nie czekamy na storage (wolny putObject nie blokuje workera ani slotu Bull).
-    if (fromKsefSource) {
+    // Opcjonalny PDF podglądu — domyślnie wyłączony: primary zostaje FA XML (spójny podgląd z resztą faktur).
+    if (fromKsefSource && cfg.KSEF_PROMOTE_SUMMARY_PDF_PRIMARY) {
       const promoteParams = {
         tenantId: jobRow.tenantId,
         invoiceId: invoice.id,

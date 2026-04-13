@@ -34,7 +34,8 @@
     "ksef:ingest-by-numbers": "tsx scripts/ingest-ksef-by-numbers.ts",
     "pipeline:run-pending": "tsx scripts/run-pending-pipeline-jobs.ts",
     "pipeline:tenant-status": "tsx scripts/tenant-pipeline-status.ts",
-    "pipeline:cleanup-broken-jobs": "tsx scripts/cleanup-broken-pipeline-jobs.ts"
+    "pipeline:cleanup-broken-jobs": "tsx scripts/cleanup-broken-pipeline-jobs.ts",
+    "repair:ksef-primary-xml": "tsx scripts/repair-ksef-primary-xml.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

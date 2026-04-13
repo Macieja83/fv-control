@@ -69,6 +69,12 @@ const envSchema = z.object({
   /** Min delay (ms) between KSeF GET invoice XML calls (MF limit ~16/min). 0 = no delay. */
   KSEF_INVOICE_FETCH_MIN_INTERVAL_MS: z.coerce.number().int().min(0).default(4_500),
   /**
+   * Po pipeline: podmień `Invoice.primaryDocId` na jednostronicowy PDF „podsumowanie” zamiast FA XML.
+   * Domyślnie **false** — zostaje XML jako główny dokument (pełny podgląd w UI jak u pozostałych źródeł z treścią faktury).
+   * `true` = stare zachowanie (PDF w primary + `GET …?source=ksef-fa-xml` dla pełnego podglądu).
+   */
+  KSEF_PROMOTE_SUMMARY_PDF_PRIMARY: z.coerce.boolean().default(false),
+  /**
    * Zapytania `POST /invoices/query/metadata` — lista ról MF (`Subject1` = m.in. wystawca, `Subject2` = m.in. nabywca).
    * Domyślnie oba: część faktur widoczna w portalu tylko w jednym kontekście; deduplikacja po `ksefNumber`.
    * Skrót: tylko zakupy → `Subject2`.

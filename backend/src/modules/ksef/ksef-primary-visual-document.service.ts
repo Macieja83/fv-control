@@ -6,8 +6,8 @@ import { buildKsefInvoiceSummaryPdf } from "./ksef-invoice-summary-pdf.js";
 export type XmlDocumentRef = Pick<Document, "id" | "mimeType" | "sourceExternalId">;
 
 /**
- * Dla faktur z KSeF (primary = XML) tworzy PDF podglądu, zapisuje w storage i ustawia jako primary,
- * żeby GET …/primary-document zwracał plik graficzny jak przy PDF z maila.
+ * Opcjonalnie: PDF „podsumowanie” i ustawienie go jako `primaryDoc` (włącz `KSEF_PROMOTE_SUMMARY_PDF_PRIMARY`).
+ * Domyślnie pipeline **nie** wywołuje tej funkcji — `primaryDoc` zostaje FA XML dla pełnego podglądu w UI.
  */
 export async function promoteKsefXmlPrimaryToSummaryPdf(
   prisma: PrismaClient,
