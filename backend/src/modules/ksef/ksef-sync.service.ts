@@ -18,6 +18,8 @@ import { createHash } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import type { PrismaClient } from "@prisma/client";
 import { KsefClient, type KsefInvoiceMetadata, type KsefMetadataPage } from "./ksef-client.js";
+import { polishNipDigits10 } from "../contractors/contractor-resolve.js";
+import { tryExtractDraftFromKsefFaXml } from "./ksef-fa-xml-extract.js";
 import { ingestAttachmentAndEnqueue } from "../ingestion/attachment-intake.service.js";
 import { parseInvoiceDate } from "../invoices/invoice-dates.js";
 import { createObjectStorage } from "../../adapters/storage/create-storage.js";
@@ -72,7 +74,7 @@ export function nextMetadataQueryFrom(
   return last.permanentStorageDate;
 }
 
-function createInvoiceXmlThrottle(minIntervalMs: number): () => Promise<void> {
+export function createInvoiceXmlThrottle(minIntervalMs: number): () => Promise<void> {
   let lastFetchAt = 0;
   return async () => {
     if (minIntervalMs <= 0) return;
@@ -274,6 +276,114 @@ function issueDateFromKsefMetadata(meta: KsefInvoiceMetadata): Date | undefined 
   if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return undefined;
   const d = parseInvoiceDate(ymd);
   return Number.isNaN(d.getTime()) ? undefined : d;
+}
+
+/** Segment daty `YYYYMMDD` w numerze KSeF (np. `…-20260401-…`) → `YYYY-MM-DD`. */
+function issueYmdFromKsefNumber(ksefNumber: string): string | undefined {
+  const parts = ksefNumber.split("-");
+  if (parts.length >= 2 && /^\d{8}$/.test(parts[1]!)) {
+    const s = parts[1]!;
+    return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`;
+  }
+  return undefined;
+}
+
+function parseDraftMoney(s: string | undefined): number {
+  if (!s) return 0;
+  const normalized = s.replace(/\s/g, "").replace(/,/g, ".");
+  const n = Number.parseFloat(normalized);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** Metadane jak z `query/metadata`, zbudowane z treści FA po pobraniu XML. */
+function ksefMetadataFromFaXmlDraft(
+  ksefNumber: string,
+  extracted: NonNullable<ReturnType<typeof tryExtractDraftFromKsefFaXml>>,
+): KsefInvoiceMetadata {
+  const d = extracted.draft;
+  const issueYmd =
+    (d.issueDate && d.issueDate.length >= 10 ? d.issueDate.slice(0, 10) : undefined) ??
+    issueYmdFromKsefNumber(ksefNumber) ??
+    "1970-01-01";
+  const nip = polishNipDigits10(d.contractorNip ?? "") ?? "0000000000";
+  const net = parseDraftMoney(d.netTotal);
+  const vat = parseDraftMoney(d.vatTotal);
+  let gross = parseDraftMoney(d.grossTotal);
+  if (gross <= 0 && (net > 0 || vat > 0)) gross = net + vat;
+  const nowIso = new Date().toISOString();
+  return {
+    ksefNumber,
+    invoiceNumber: (d.number?.trim() || ksefNumber).slice(0, 500),
+    issueDate: issueYmd,
+    invoicingDate: `${issueYmd}T12:00:00.000Z`,
+    permanentStorageDate: nowIso,
+    seller: { nip, name: (d.contractorName?.trim() || "—").slice(0, 512) },
+    buyer: null,
+    netAmount: net,
+    grossAmount: gross,
+    vatAmount: vat,
+    currency: (d.currency || "PLN").slice(0, 8),
+    invoiceType: "FA",
+    invoiceHash: "",
+  };
+}
+
+/**
+ * Pobiera XML po numerze KSeF i wprowadza fakturę tak jak sync — na uzupełnienie luk,
+ * gdy metadane MF zawierają numer, którego nie ma jeszcze w `Document` / `Invoice`.
+ */
+export async function ingestKsefInvoiceXmlByKsefNumber(
+  prisma: PrismaClient,
+  client: KsefClient,
+  tenantId: string,
+  ksefNumber: string,
+  beforeXmlFetch: () => Promise<void>,
+): Promise<"ingested" | "skipped"> {
+  const kn = ksefNumber.trim();
+  if (!kn) throw new Error("pusty numer KSeF");
+
+  const existingDoc = await prisma.document.findFirst({
+    where: { tenantId, sourceType: "KSEF", sourceExternalId: kn },
+    select: { id: true },
+  });
+  const existingInv = await prisma.invoice.findFirst({
+    where: { tenantId, ksefNumber: kn },
+    select: { id: true },
+  });
+  if (existingDoc || existingInv) return "skipped";
+
+  await beforeXmlFetch();
+  const xml = await client.fetchInvoiceXml(kn);
+  const buf = Buffer.from(xml, "utf-8");
+
+  const extracted = tryExtractDraftFromKsefFaXml(buf, "application/xml");
+  if (!extracted) {
+    throw new Error(`nie rozpoznano struktury FA w XML dla ${kn}`);
+  }
+
+  const meta = ksefMetadataFromFaXmlDraft(kn, extracted);
+
+  const actorUser = await prisma.user.findFirst({
+    where: { tenantId, role: { in: ["OWNER", "ADMIN"] }, isActive: true },
+    select: { id: true },
+  });
+  const actorId = actorUser?.id ?? KSEF_SYNC_ACTOR_ID;
+
+  await ingestAttachmentAndEnqueue(prisma, {
+    tenantId,
+    actorUserId: actorId,
+    buffer: buf,
+    filename: `${kn}.xml`,
+    mimeType: "application/xml",
+    ingestionSourceType: "KSEF",
+    sourceExternalId: kn,
+    intakeSourceType: "KSEF_API",
+    sourceAccount: `KSeF ${meta.seller.nip}`,
+    metadata: ksefMetadataPayload(meta),
+    initialIssueDate: issueDateFromKsefMetadata(meta),
+  });
+
+  return "ingested";
 }
 
 async function processOneInvoice(
