@@ -36,13 +36,8 @@ export async function enqueueKsefSync(
     const existing = await q.getJob(autoJobId);
     if (existing) {
       const st = await existing.getState();
-      if (
-        st === "waiting" ||
-        st === "delayed" ||
-        st === "active" ||
-        st === "paused" ||
-        st === "waiting-children"
-      ) {
+      /** BullMQ — nie stackujemy drugiego auto-syncu, dopóki pierwszy nie zakończy się lub nie padnie. */
+      if (st === "waiting" || st === "delayed" || st === "active" || st === "waiting-children") {
         return { jobId: existing.id ?? autoJobId, skipped: true };
       }
       if (st === "failed") {
