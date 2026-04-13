@@ -245,6 +245,7 @@ export async function runKsefSyncJob(
 
   if (skipHwmPersistence) {
     console.info("[KSeF sync] Pomijam zapis hwmDate (ustawiono toDate — sync zawężony).");
+    result.newHwmDate = null;
   } else if (result.errors.length === 0 && result.newHwmDate) {
     await setHighWaterMark(prisma, data.tenantId, result.newHwmDate);
     console.info(`[KSeF sync] Zaktualizowano hwmDate=${result.newHwmDate}`);
