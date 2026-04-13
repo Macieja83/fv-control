@@ -21,7 +21,10 @@ import { KsefClient, type KsefInvoiceMetadata, type KsefMetadataPage } from "./k
 import { polishNipDigits10 } from "../contractors/contractor-resolve.js";
 import { tryExtractDraftFromKsefFaXml } from "./ksef-fa-xml-extract.js";
 import { issueYmdEmbeddedInKsefNumber } from "./ksef-metadata-draft.js";
-import { ingestAttachmentAndEnqueue } from "../ingestion/attachment-intake.service.js";
+import {
+  ingestAttachmentAndEnqueue,
+  resumePipelineForOrphanKsefDocument,
+} from "../ingestion/attachment-intake.service.js";
 import { parseInvoiceDate } from "../invoices/invoice-dates.js";
 import { createObjectStorage } from "../../adapters/storage/create-storage.js";
 import { loadConfig } from "../../config.js";
@@ -211,7 +214,7 @@ export async function runKsefSyncJob(
         for (const inv of metaPage.invoices) {
           try {
             const outcome = await processOneInvoice(prisma, client, data.tenantId, inv, force, beforeXmlFetch);
-            if (outcome === "ingested" || outcome === "linked") result.ingested++;
+            if (outcome === "ingested" || outcome === "linked" || outcome === "resumed") result.ingested++;
             else if (outcome === "refetched") result.refetched++;
             else result.skippedDuplicate++;
           } catch (err) {
@@ -267,7 +270,7 @@ export async function runKsefSyncJob(
   return result;
 }
 
-type ProcessOutcome = "ingested" | "refetched" | "skipped" | "linked";
+type ProcessOutcome = "ingested" | "refetched" | "skipped" | "linked" | "resumed";
 
 /**
  * Faktura powiązana z XML KSeF (`primaryDocId`), ale bez `ksefNumber` — diff MF vs DB pokazuje „brak w bazie”,
@@ -361,7 +364,7 @@ export async function ingestKsefInvoiceXmlByKsefNumber(
   tenantId: string,
   ksefNumber: string,
   beforeXmlFetch: () => Promise<void>,
-): Promise<"ingested" | "skipped" | "linked"> {
+): Promise<"ingested" | "skipped" | "linked" | "resumed"> {
   const kn = ksefNumber.trim();
   if (!kn) throw new Error("pusty numer KSeF");
 
@@ -378,6 +381,24 @@ export async function ingestKsefInvoiceXmlByKsefNumber(
   if (existingDoc) {
     const linked = await linkKsefNumberToInvoiceIfNeeded(prisma, tenantId, kn, existingDoc.id);
     if (linked) return "linked";
+    const orphan = !(await prisma.invoice.findFirst({
+      where: { tenantId, primaryDocId: existingDoc.id },
+      select: { id: true },
+    }));
+    if (orphan) {
+      const actorUser = await prisma.user.findFirst({
+        where: { tenantId, role: { in: ["OWNER", "ADMIN"] }, isActive: true },
+        select: { id: true },
+      });
+      const actorId = actorUser?.id ?? KSEF_SYNC_ACTOR_ID;
+      await resumePipelineForOrphanKsefDocument(prisma, {
+        tenantId,
+        documentId: existingDoc.id,
+        actorUserId: actorId,
+        ksefNumber: kn,
+      });
+      return "resumed";
+    }
     return "skipped";
   }
 
@@ -446,6 +467,24 @@ async function processOneInvoice(
       existingDoc.id,
     );
     if (linked) return "linked";
+    const orphan = !(await prisma.invoice.findFirst({
+      where: { tenantId, primaryDocId: existingDoc.id },
+      select: { id: true },
+    }));
+    if (orphan) {
+      const actorUser = await prisma.user.findFirst({
+        where: { tenantId, role: { in: ["OWNER", "ADMIN"] }, isActive: true },
+        select: { id: true },
+      });
+      const actorId = actorUser?.id ?? KSEF_SYNC_ACTOR_ID;
+      await resumePipelineForOrphanKsefDocument(prisma, {
+        tenantId,
+        documentId: existingDoc.id,
+        actorUserId: actorId,
+        ksefNumber: meta.ksefNumber,
+      });
+      return "resumed";
+    }
     return "skipped";
   }
 

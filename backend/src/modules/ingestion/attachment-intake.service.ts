@@ -6,6 +6,8 @@ import { loadConfig } from "../../config.js";
 import { AppError } from "../../lib/errors.js";
 import { getPipelineQueue } from "../../lib/pipeline-queue.js";
 import { PIPELINE_QUEUE_NAME } from "../../lib/queue-constants.js";
+import { polishNipDigits10 } from "../contractors/contractor-resolve.js";
+import { parseInvoiceDate } from "../invoices/invoice-dates.js";
 
 function sha256Buffer(buf: Buffer): string {
   return createHash("sha256").update(buf).digest("hex");
@@ -197,4 +199,125 @@ export async function ingestAttachmentAndEnqueue(
     invoiceId: invoice.id,
     processingJobId: processingJob.id,
   };
+}
+
+export type ResumeOrphanKsefDocumentParams = {
+  tenantId: string;
+  documentId: string;
+  actorUserId: string;
+  ksefNumber: string;
+};
+
+/**
+ * Gdy po imporcie KSeF został zapisany `Document` (XML), ale bez `Invoice` + joba pipeline
+ * (np. błąd po `document.create`), odtwarzamy fakturę i kolejkę na istniejącym dokumencie.
+ */
+export async function resumePipelineForOrphanKsefDocument(
+  prisma: PrismaClient,
+  params: ResumeOrphanKsefDocumentParams,
+): Promise<{ invoiceId: string; processingJobId: string }> {
+  const cfg = loadConfig();
+  const doc = await prisma.document.findFirst({
+    where: { id: params.documentId, tenantId: params.tenantId, deletedAt: null },
+  });
+  if (!doc) throw AppError.notFound("Document not found");
+  if (doc.sourceType !== "KSEF") {
+    throw AppError.validation("resumePipelineForOrphanKsefDocument: document is not KSEF");
+  }
+
+  const blocking = await prisma.invoice.findFirst({
+    where: { tenantId: params.tenantId, primaryDocId: doc.id },
+    select: { id: true },
+  });
+  if (blocking) {
+    throw AppError.conflict("Invoice already linked to this document");
+  }
+
+  const meta = doc.metadata as Record<string, unknown> | null;
+  const issueRaw = typeof meta?.issueDate === "string" ? meta.issueDate.trim() : "";
+  const initialIssueDate =
+    issueRaw.length >= 10 && /^\d{4}-\d{2}-\d{2}/.test(issueRaw)
+      ? parseInvoiceDate(issueRaw.slice(0, 10))
+      : new Date();
+
+  const filename =
+    (typeof meta?.filename === "string" && meta.filename.trim()) || `${params.ksefNumber.trim()}.xml`;
+  const sellerNip10 =
+    typeof meta?.sellerNip === "string" ? polishNipDigits10(meta.sellerNip) : null;
+  const sourceAccount = sellerNip10 ? `KSeF ${sellerNip10}` : "KSeF";
+  const kn = params.ksefNumber.trim();
+
+  const zero = new Prisma.Decimal(0);
+  const invoice = await prisma.invoice.create({
+    data: {
+      tenantId: params.tenantId,
+      contractorId: null,
+      primaryDocId: doc.id,
+      number: `ING-${randomUUID().slice(0, 8).toUpperCase()}`,
+      issueDate: initialIssueDate,
+      currency: "PLN",
+      netTotal: zero,
+      vatTotal: zero,
+      grossTotal: zero,
+      status: "INGESTING",
+      source: "OCR",
+      ingestionKind: "KSEF",
+      sourceExternalId: doc.sourceExternalId,
+      createdById: params.actorUserId,
+      intakeSourceType: "KSEF_API",
+      sourceAccount,
+      ksefNumber: kn,
+    },
+  });
+
+  await prisma.auditLog.create({
+    data: {
+      tenantId: params.tenantId,
+      actorId: params.actorUserId,
+      action: "INVOICE_INTAKE",
+      entityType: "INVOICE",
+      entityId: invoice.id,
+      metadata: { filename, sourceAccount, resumedFromOrphanDocument: doc.id } as object,
+    },
+  });
+
+  const processingJob = await prisma.processingJob.create({
+    data: {
+      tenantId: params.tenantId,
+      queueName: PIPELINE_QUEUE_NAME,
+      type: "INGEST_PIPELINE",
+      correlationId: randomUUID(),
+      payload: { documentId: doc.id, invoiceId: invoice.id, filename },
+      documentId: doc.id,
+      invoiceId: invoice.id,
+      maxAttempts: cfg.PIPELINE_MAX_ATTEMPTS,
+    },
+  });
+
+  try {
+    const queue = getPipelineQueue();
+    await queue.add(
+      "run",
+      { processingJobId: processingJob.id },
+      {
+        attempts: cfg.PIPELINE_MAX_ATTEMPTS,
+        backoff: { type: "exponential", delay: 5000 },
+        jobId: processingJob.id,
+        removeOnComplete: 1000,
+        removeOnFail: 5000,
+      },
+    );
+  } catch {
+    await prisma.processingJob.update({
+      where: { id: processingJob.id },
+      data: { status: "FAILED", lastError: "Redis/queue unavailable" },
+    });
+    await prisma.invoice.update({
+      where: { id: invoice.id },
+      data: { status: "FAILED_NEEDS_REVIEW" },
+    });
+    throw AppError.internal("Queue unavailable — job persisted as FAILED");
+  }
+
+  return { invoiceId: invoice.id, processingJobId: processingJob.id };
 }
