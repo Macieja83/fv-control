@@ -211,7 +211,7 @@ export async function runKsefSyncJob(
         for (const inv of metaPage.invoices) {
           try {
             const outcome = await processOneInvoice(prisma, client, data.tenantId, inv, force, beforeXmlFetch);
-            if (outcome === "ingested") result.ingested++;
+            if (outcome === "ingested" || outcome === "linked") result.ingested++;
             else if (outcome === "refetched") result.refetched++;
             else result.skippedDuplicate++;
           } catch (err) {
@@ -267,7 +267,39 @@ export async function runKsefSyncJob(
   return result;
 }
 
-type ProcessOutcome = "ingested" | "refetched" | "skipped";
+type ProcessOutcome = "ingested" | "refetched" | "skipped" | "linked";
+
+/**
+ * Faktura powiązana z XML KSeF (`primaryDocId`), ale bez `ksefNumber` — diff MF vs DB pokazuje „brak w bazie”,
+ * a sync/ingest uznaje sam `Document` za duplikat i nic nie robi.
+ */
+async function linkKsefNumberToInvoiceIfNeeded(
+  prisma: PrismaClient,
+  tenantId: string,
+  ksefNumber: string,
+  documentId: string,
+): Promise<boolean> {
+  const inv = await prisma.invoice.findFirst({
+    where: { tenantId, primaryDocId: documentId },
+    select: { id: true, ksefNumber: true, sourceExternalId: true },
+  });
+  if (!inv) return false;
+  const kn = ksefNumber.trim();
+  if (inv.ksefNumber?.trim() && inv.ksefNumber.trim() !== kn) return false;
+  const needsKsef = (inv.ksefNumber?.trim() ?? "") !== kn;
+  const needsExt = (inv.sourceExternalId?.trim() ?? "") !== kn;
+  if (!needsKsef && !needsExt) return false;
+  await prisma.invoice.update({
+    where: { id: inv.id },
+    data: {
+      ksefNumber: kn,
+      ...(needsExt ? { sourceExternalId: kn } : {}),
+      intakeSourceType: "KSEF_API",
+    },
+  });
+  console.info(`[KSeF sync] Uzupełniono powiązanie KSeF: invoiceId=${inv.id} ksefNumber=${kn}`);
+  return true;
+}
 
 /** Data wystawienia z metadanych KSeF — żeby GET /invoices?dateFrom/dateTo od razu trafiała w ten sam miesiąc co w MF. */
 function issueDateFromKsefMetadata(meta: KsefInvoiceMetadata): Date | undefined {
@@ -329,19 +361,25 @@ export async function ingestKsefInvoiceXmlByKsefNumber(
   tenantId: string,
   ksefNumber: string,
   beforeXmlFetch: () => Promise<void>,
-): Promise<"ingested" | "skipped"> {
+): Promise<"ingested" | "skipped" | "linked"> {
   const kn = ksefNumber.trim();
   if (!kn) throw new Error("pusty numer KSeF");
+
+  const existingInv = await prisma.invoice.findFirst({
+    where: { tenantId, ksefNumber: kn },
+    select: { id: true },
+  });
+  if (existingInv) return "skipped";
 
   const existingDoc = await prisma.document.findFirst({
     where: { tenantId, sourceType: "KSEF", sourceExternalId: kn },
     select: { id: true },
   });
-  const existingInv = await prisma.invoice.findFirst({
-    where: { tenantId, ksefNumber: kn },
-    select: { id: true },
-  });
-  if (existingDoc || existingInv) return "skipped";
+  if (existingDoc) {
+    const linked = await linkKsefNumberToInvoiceIfNeeded(prisma, tenantId, kn, existingDoc.id);
+    if (linked) return "linked";
+    return "skipped";
+  }
 
   await beforeXmlFetch();
   const xml = await client.fetchInvoiceXml(kn);
@@ -385,12 +423,12 @@ async function processOneInvoice(
   force: boolean,
   beforeXmlFetch: () => Promise<void>,
 ): Promise<ProcessOutcome> {
-  const existingDoc = await prisma.document.findFirst({
-    where: { tenantId, sourceType: "KSEF", sourceExternalId: meta.ksefNumber },
-    select: { id: true },
-  });
   const existingInv = await prisma.invoice.findFirst({
     where: { tenantId, ksefNumber: meta.ksefNumber },
+    select: { id: true },
+  });
+  const existingDoc = await prisma.document.findFirst({
+    where: { tenantId, sourceType: "KSEF", sourceExternalId: meta.ksefNumber },
     select: { id: true },
   });
 
@@ -398,7 +436,18 @@ async function processOneInvoice(
     return refetchAndStoreFile(prisma, client, tenantId, meta, existingDoc?.id, beforeXmlFetch);
   }
 
-  if (existingDoc || existingInv) return "skipped";
+  if (existingInv) return "skipped";
+
+  if (existingDoc) {
+    const linked = await linkKsefNumberToInvoiceIfNeeded(
+      prisma,
+      tenantId,
+      meta.ksefNumber,
+      existingDoc.id,
+    );
+    if (linked) return "linked";
+    return "skipped";
+  }
 
   await beforeXmlFetch();
   const xml = await client.fetchInvoiceXml(meta.ksefNumber);

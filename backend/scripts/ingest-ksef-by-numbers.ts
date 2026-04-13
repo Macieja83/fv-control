@@ -92,7 +92,7 @@ async function main(): Promise<void> {
     try {
       const o = await ingestKsefInvoiceXmlByKsefNumber(prisma, client, tenantId, n, beforeXmlFetch);
       results.push({ number: n, outcome: o });
-      console.info(`  ${n} → ${o}`);
+      console.info(`  ${n} → ${o}${o === "linked" ? " (uzupełniono ksefNumber na istniejącej fakturze)" : ""}`);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       results.push({ number: n, outcome: `ERROR: ${msg}` });
@@ -101,9 +101,10 @@ async function main(): Promise<void> {
   }
 
   const ingested = results.filter((r) => r.outcome === "ingested").length;
+  const linked = results.filter((r) => r.outcome === "linked").length;
   const skipped = results.filter((r) => r.outcome === "skipped").length;
   const errors = results.filter((r) => r.outcome.startsWith("ERROR")).length;
-  console.info(`Podsumowanie: ingested=${ingested}, skipped=${skipped}, errors=${errors}`);
+  console.info(`Podsumowanie: ingested=${ingested}, linked=${linked}, skipped=${skipped}, errors=${errors}`);
   console.info(JSON.stringify({ tenantId, results }, null, 2));
 }
 
