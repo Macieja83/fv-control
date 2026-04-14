@@ -6,6 +6,7 @@ import { loadConfig } from "../../config.js";
 import { AppError } from "../../lib/errors.js";
 import { getPipelineQueue } from "../../lib/pipeline-queue.js";
 import { PIPELINE_QUEUE_NAME } from "../../lib/queue-constants.js";
+import { assertInvoiceCreationAllowed } from "../billing/subscription-plans.js";
 import { polishNipDigits10 } from "../contractors/contractor-resolve.js";
 import { parseInvoiceDate } from "../invoices/invoice-dates.js";
 
@@ -55,6 +56,7 @@ export async function ingestAttachmentAndEnqueue(
   prisma: PrismaClient,
   params: IngestAttachmentParams,
 ): Promise<IngestAttachmentResult> {
+  await assertInvoiceCreationAllowed(prisma, params.tenantId);
   const cfg = loadConfig();
   const sha = sha256Buffer(params.buffer);
 
@@ -216,6 +218,7 @@ export async function resumePipelineForOrphanKsefDocument(
   prisma: PrismaClient,
   params: ResumeOrphanKsefDocumentParams,
 ): Promise<{ invoiceId: string; processingJobId: string }> {
+  await assertInvoiceCreationAllowed(prisma, params.tenantId);
   const cfg = loadConfig();
   const doc = await prisma.document.findFirst({
     where: { id: params.documentId, tenantId: params.tenantId, deletedAt: null },

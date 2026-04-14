@@ -132,6 +132,7 @@ export async function registerRequest(input: {
   tenantNip?: string | null
   email: string
   password: string
+  planCode: 'free' | 'pro'
 }): Promise<{ needsEmailVerification: boolean; verificationToken?: string }> {
   const res = await fetch('/api/v1/auth/register', {
     method: 'POST',

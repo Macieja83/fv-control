@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { InvoiceRecord } from '../../types/invoice'
 import { DuplicateBadge, PaymentBadge, ScopeBadge, SourceBadge } from './Badges'
 import { InvoiceDocumentPreview } from './InvoiceDocumentPreview'
+import { fetchInvoiceEvents, type InvoiceEventRow } from '../../api/invoicesApi'
+import { getStoredToken } from '../../auth/session'
 
 const money = (amount: number, c: InvoiceRecord['currency']) =>
   new Intl.NumberFormat('pl-PL', {
@@ -34,6 +36,8 @@ type Props = {
   onSendToKsef?: (id: string) => void | Promise<void>
   /** Utwórz / dopnij kontrahenta po NIP i przypisz do faktury kosztowej. */
   onAdoptVendor?: (id: string, body?: { nip?: string; name?: string }) => void | Promise<void>
+  /** Płatność online wybranej faktury przez checkout. */
+  onPayOnline?: (id: string, method: 'CARD' | 'BLIK' | 'GOOGLE_PAY' | 'APPLE_PAY') => void | Promise<void>
 }
 
 export function DetailPanel({
@@ -57,6 +61,7 @@ export function DetailPanel({
   onDeleteInvoice,
   onSendToKsef,
   onAdoptVendor,
+  onPayOnline,
 }: Props) {
   const [draftNotes, setDraftNotes] = useState('')
   const [ocrBusy, setOcrBusy] = useState(false)
@@ -64,6 +69,8 @@ export function DetailPanel({
   const [adoptNip, setAdoptNip] = useState('')
   const [adoptName, setAdoptName] = useState('')
   const [adoptBusy, setAdoptBusy] = useState(false)
+  const [paymentEvents, setPaymentEvents] = useState<InvoiceEventRow[]>([])
+  const [paymentEventsLoading, setPaymentEventsLoading] = useState(false)
   const overlayRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -77,6 +84,33 @@ export function DetailPanel({
     const digits = (row.extracted_vendor_nip || row.supplier_nip || '').replace(/\D/g, '')
     setAdoptNip(digits.slice(0, 10))
     setAdoptName('')
+  }, [row?.id])
+
+  useEffect(() => {
+    if (!row) {
+      setPaymentEvents([])
+      return
+    }
+    const token = getStoredToken()
+    if (!token) {
+      setPaymentEvents([])
+      return
+    }
+    setPaymentEventsLoading(true)
+    void fetchInvoiceEvents(token, row.id)
+      .then((events) => {
+        const filtered = events.filter((e) => {
+          if (e.type !== 'UPDATED' && e.type !== 'STATUS_CHANGED') return false
+          if (!e.payload || typeof e.payload !== 'object') return false
+          const payload = e.payload as { payment?: { kind?: unknown } }
+          return typeof payload.payment?.kind === 'string'
+        })
+        setPaymentEvents(filtered)
+      })
+      .catch(() => {
+        setPaymentEvents([])
+      })
+      .finally(() => setPaymentEventsLoading(false))
   }, [row?.id])
 
   const handleKeyDown = useCallback(
@@ -315,6 +349,19 @@ export function DetailPanel({
               <section className="detail-section">
                 <h3>Akcje operatora</h3>
                 <div className="action-grid action-grid--modal">
+                  {onPayOnline && row.payment_status !== 'paid' && (
+                    <>
+                      <button type="button" className="btn btn--primary" onClick={() => void onPayOnline(row.id, 'BLIK')}>
+                        Zapłać BLIK
+                      </button>
+                      <button type="button" className="btn" onClick={() => void onPayOnline(row.id, 'GOOGLE_PAY')}>
+                        Zapłać Google Pay
+                      </button>
+                      <button type="button" className="btn" onClick={() => void onPayOnline(row.id, 'APPLE_PAY')}>
+                        Zapłać Apple Pay
+                      </button>
+                    </>
+                  )}
                   <button type="button" className="btn btn--primary" onClick={() => onPaid(row.id)}>Oznacz zapłaconą</button>
                   <button type="button" className="btn" onClick={() => onUnpaid(row.id)}>Oznacz niezapłaconą</button>
                   <button type="button" className="btn" onClick={() => onNeedsReview(row.id)}>Do sprawdzenia</button>
@@ -389,6 +436,36 @@ export function DetailPanel({
                     </button>
                   )}
                 </div>
+              </section>
+
+              <section className="detail-section">
+                <h3>Historia płatności</h3>
+                {paymentEventsLoading && <p className="workspace-panel__muted">Ładowanie historii płatności…</p>}
+                {!paymentEventsLoading && paymentEvents.length === 0 && (
+                  <p className="workspace-panel__muted">Brak zdarzeń płatności dla tej faktury.</p>
+                )}
+                {!paymentEventsLoading && paymentEvents.length > 0 && (
+                  <ul className="detail-history-list">
+                    {paymentEvents.map((e) => {
+                      const payload = e.payload as {
+                        payment?: { kind?: string; provider?: string; method?: string; sessionId?: string }
+                      }
+                      const p = payload.payment
+                      const label =
+                        p?.kind === 'checkout_created'
+                          ? `Checkout utworzony (${p?.provider ?? 'provider'}, ${p?.method ?? 'method'})`
+                          : p?.kind === 'checkout_paid'
+                            ? 'Płatność potwierdzona (webhook)'
+                            : p?.kind ?? 'Zdarzenie płatności'
+                      return (
+                        <li key={e.id}>
+                          <span className="mono">{new Date(e.createdAt).toLocaleString('pl-PL')}</span> · {label}
+                          {p?.sessionId ? <span className="mono"> · {p.sessionId}</span> : null}
+                        </li>
+                      )
+                    })}
+                  </ul>
+                )}
               </section>
             </div>
           </div>

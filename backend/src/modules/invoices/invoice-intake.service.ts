@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import type { InvoiceIntakeSourceType, PrismaClient } from "@prisma/client";
 import { AppError } from "../../lib/errors.js";
+import { assertInvoiceCreationAllowed } from "../billing/subscription-plans.js";
 import { refreshInvoiceCompliance } from "../compliance/compliance.service.js";
 import { classifyDocumentType } from "../compliance/compliance-engine.js";
 import { parseInvoiceDate } from "./invoice-dates.js";
@@ -22,6 +23,7 @@ export async function intakeInvoice(
   userId: string,
   input: InvoiceIntakeInput,
 ) {
+  await assertInvoiceCreationAllowed(prisma, tenantId);
   await assertContractor(prisma, tenantId, input.contractorId);
 
   const itemRows = input.items?.map(itemRowFromInput) ?? [];

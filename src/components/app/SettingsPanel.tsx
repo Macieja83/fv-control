@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useState } from 'react'
 import { fetchTenantProfile, patchTenantProfile, type TenantProfileResponse } from '../../api/tenantApi'
 import { fetchPlatformTenants, issueImpersonationToken, type PlatformTenantRow } from '../../api/platformAdminApi'
-import { createBillingPortalSession, createSubscriptionCheckout, fetchCurrentSubscription, type SubscriptionRow } from '../../api/billingApi'
+import {
+  createBillingPortalSession,
+  createSubscriptionCheckout,
+  fetchCurrentSubscription,
+  switchSubscriptionPlan,
+  type SubscriptionRow,
+} from '../../api/billingApi'
 import { useAuth } from '../../auth/AuthContext'
 import { getStoredToken, setStoredToken } from '../../auth/session'
 
@@ -17,6 +23,9 @@ export function SettingsPanel() {
   const [platformLoading, setPlatformLoading] = useState(false)
   const [subscription, setSubscription] = useState<SubscriptionRow | null>(null)
   const [subLoading, setSubLoading] = useState(false)
+  const [checkoutLoadingMethod, setCheckoutLoadingMethod] = useState<
+    'CARD' | 'BLIK' | 'GOOGLE_PAY' | 'APPLE_PAY' | null
+  >(null)
 
   const load = useCallback(async () => {
     const token = getStoredToken()
@@ -112,18 +121,36 @@ export function SettingsPanel() {
     }
   }
 
-  const onCheckout = async (planCode: 'starter' | 'pro') => {
+  const onCheckout = async (
+    planCode: 'pro',
+    paymentMethod: 'CARD' | 'BLIK' | 'GOOGLE_PAY' | 'APPLE_PAY',
+  ) => {
     const token = getStoredToken()
     if (!token) return
     try {
+      setCheckoutLoadingMethod(paymentMethod)
       const origin = window.location.origin
       const r = await createSubscriptionCheckout(token, {
         provider: 'STRIPE',
         planCode,
         successUrl: `${origin}/?billing=success`,
         cancelUrl: `${origin}/?billing=cancel`,
+        paymentMethod,
       })
       window.location.href = r.checkoutUrl
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : String(e))
+    } finally {
+      setCheckoutLoadingMethod(null)
+    }
+  }
+
+  const onSwitchFree = async () => {
+    const token = getStoredToken()
+    if (!token) return
+    try {
+      const updated = await switchSubscriptionPlan(token, 'free')
+      setSubscription(updated)
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : String(e))
     }
@@ -186,18 +213,52 @@ export function SettingsPanel() {
         {!subLoading && (
           <>
             <p className="workspace-panel__muted">
-              Status: <strong>{subscription?.status ?? 'BRAK'}</strong> · Plan: <strong>{subscription?.planCode ?? 'starter'}</strong> ·
+              Status: <strong>{subscription?.status ?? 'BRAK'}</strong> · Plan: <strong>{subscription?.planCode ?? 'free'}</strong> ·
               Provider: <strong>{subscription?.provider ?? '—'}</strong>
+            </p>
+            <p className="workspace-panel__muted">Free: do 15 faktur / miesiąc · Pro: bez limitu, 99 zł / miesiąc</p>
+            <p className="workspace-panel__muted">
+              Płatność <strong>za faktury</strong> (BLIK / portfele) jest w szczegółach faktury — osobna od subskrypcji. Poniżej: opłata za plan aplikacji (wymaga{' '}
+              <span className="mono">STRIPE_PRICE_ID_PRO</span> na serwerze).
             </p>
             <div className="settings-form__actions">
               <button type="button" className="btn-ghost" onClick={() => void onOpenBillingPortal()}>
                 Zarządzaj subskrypcją
               </button>
-              <button type="button" className="btn-ghost" onClick={() => void onCheckout('starter')}>
-                Wybierz Starter
+              <button type="button" className="btn-ghost" onClick={() => void onSwitchFree()}>
+                Przejdź na Free
               </button>
-              <button type="button" className="btn-primary" onClick={() => void onCheckout('pro')}>
-                Przejdź na PRO
+              <button
+                type="button"
+                className="btn-primary"
+                disabled={checkoutLoadingMethod !== null}
+                onClick={() => void onCheckout('pro', 'CARD')}
+              >
+                {checkoutLoadingMethod === 'CARD' ? 'Przekierowanie…' : 'PRO - karta / portfele'}
+              </button>
+              <button
+                type="button"
+                className="btn-ghost"
+                disabled={checkoutLoadingMethod !== null}
+                onClick={() => void onCheckout('pro', 'BLIK')}
+              >
+                {checkoutLoadingMethod === 'BLIK' ? 'Przekierowanie…' : 'PRO - BLIK'}
+              </button>
+              <button
+                type="button"
+                className="btn-ghost"
+                disabled={checkoutLoadingMethod !== null}
+                onClick={() => void onCheckout('pro', 'GOOGLE_PAY')}
+              >
+                {checkoutLoadingMethod === 'GOOGLE_PAY' ? 'Przekierowanie…' : 'PRO - Google Pay'}
+              </button>
+              <button
+                type="button"
+                className="btn-ghost"
+                disabled={checkoutLoadingMethod !== null}
+                onClick={() => void onCheckout('pro', 'APPLE_PAY')}
+              >
+                {checkoutLoadingMethod === 'APPLE_PAY' ? 'Przekierowanie…' : 'PRO - Apple Pay'}
               </button>
             </div>
           </>

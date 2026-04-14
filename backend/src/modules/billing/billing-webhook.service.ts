@@ -1,5 +1,6 @@
 import type { PrismaClient, SubscriptionStatus } from "@prisma/client";
 import { AppError } from "../../lib/errors.js";
+import { createInvoiceEvent } from "../invoices/invoice-events.js";
 
 function mapStripeSubscriptionStatus(raw: unknown): SubscriptionStatus | null {
   if (typeof raw !== "string") return null;
@@ -31,6 +32,56 @@ export async function handleStripeWebhookEvent(prisma: PrismaClient, payload: Re
       ? ((payload.data as { object?: unknown }).object as Record<string, unknown> | undefined)
       : undefined;
   if (!dataObj) return { accepted: true, eventType, updated: false, reason: "missing_data_object" as const };
+
+  if (eventType === "checkout.session.completed" || eventType === "checkout.session.async_payment_succeeded") {
+    const metadata =
+      dataObj.metadata && typeof dataObj.metadata === "object"
+        ? (dataObj.metadata as Record<string, unknown>)
+        : null;
+    const billingFlow = typeof metadata?.billingFlow === "string" ? metadata.billingFlow : null;
+    const invoiceId = typeof metadata?.invoiceId === "string" ? metadata.invoiceId.trim() : "";
+    const tenantId = typeof metadata?.tenantId === "string" ? metadata.tenantId.trim() : "";
+    const paymentStatus = typeof dataObj.payment_status === "string" ? dataObj.payment_status : null;
+
+    if (billingFlow === "invoice_payment" && invoiceId && tenantId && paymentStatus === "paid") {
+      const existing = await prisma.invoice.findFirst({
+        where: { id: invoiceId, tenantId },
+        select: { id: true, status: true },
+      });
+      if (!existing) {
+        return { accepted: true, eventType, updated: false, flow: "invoice_payment" as const };
+      }
+      if (existing.status === "PAID") {
+        return { accepted: true, eventType, updated: false, flow: "invoice_payment" as const };
+      }
+      await prisma.$transaction(async (tx) => {
+        await tx.invoice.update({
+          where: { id: existing.id },
+          data: { status: "PAID" },
+        });
+        await createInvoiceEvent(tx, {
+          invoiceId: existing.id,
+          actorUserId: null,
+          type: "STATUS_CHANGED",
+          payload: {
+            from: existing.status,
+            to: "PAID",
+            source: "stripe_webhook",
+            payment: {
+              kind: "checkout_paid",
+            },
+          },
+        });
+      });
+      return {
+        accepted: true,
+        eventType,
+        updated: true,
+        flow: "invoice_payment" as const,
+      };
+    }
+  }
+
   const providerCustomerIdRaw =
     typeof dataObj.customer === "string" && dataObj.customer.trim() ? dataObj.customer.trim() : null;
   const providerSubscriptionIdRaw =

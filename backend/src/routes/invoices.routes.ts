@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
+import { z } from "zod";
 import { assertCanMutate } from "../lib/roles.js";
 import { parseOrThrow } from "../lib/validate.js";
 import {
@@ -26,6 +27,13 @@ import { openInvoicePrimaryDocumentStream } from "../modules/invoices/invoice-pr
 import { adoptInvoiceVendor } from "../modules/invoices/invoice-adopt-vendor.service.js";
 import { retryInvoiceExtraction } from "../modules/pipeline/retry-invoice-extraction.service.js";
 import { rehydrateKsefInvoiceFromApi } from "../modules/ksef/ksef-invoice-rehydrate.service.js";
+import { createInvoicePaymentCheckoutSession } from "../modules/billing/invoice-payment.service.js";
+
+const invoiceCheckoutSchema = z.object({
+  successUrl: z.string().url(),
+  cancelUrl: z.string().url(),
+  paymentMethod: z.enum(["CARD", "BLIK", "GOOGLE_PAY", "APPLE_PAY"]).optional(),
+});
 
 const invoicesRoutes: FastifyPluginAsync = async (app) => {
   app.get(
@@ -67,6 +75,26 @@ const invoicesRoutes: FastifyPluginAsync = async (app) => {
       const body = parseOrThrow(invoiceIntakeSchema, request.body);
       const row = await intakeInvoice(app.prisma, request.authUser!.tenantId, request.authUser!.id, body);
       return reply.status(201).send(row);
+    },
+  );
+
+  app.post(
+    "/invoices/:id/payment/checkout",
+    {
+      preHandler: [app.authenticate, app.checkIdempotency],
+      schema: { tags: ["Invoices"], summary: "Create checkout session to pay invoice" },
+    },
+    async (request) => {
+      assertCanMutate(request.authUser!.role);
+      const { id } = parseOrThrow(invoiceIdParamSchema, request.params, "Invalid invoice id");
+      const body = parseOrThrow(invoiceCheckoutSchema, request.body ?? {});
+      return createInvoicePaymentCheckoutSession(
+        app.prisma,
+        request.authUser!.tenantId,
+        id,
+        request.authUser!.id,
+        body,
+      );
     },
   );
 

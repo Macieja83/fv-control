@@ -3,18 +3,15 @@ import { loadConfig } from "../../config.js";
 import { AppError } from "../../lib/errors.js";
 
 type CheckoutProvider = "STRIPE" | "P24";
+type CheckoutPaymentMethod = "CARD" | "BLIK" | "GOOGLE_PAY" | "APPLE_PAY";
 
 function resolveStripePriceId(planCode: string): string {
   const cfg = loadConfig();
-  if (planCode === "starter") {
-    if (!cfg.STRIPE_PRICE_ID_STARTER) throw AppError.unavailable("Missing STRIPE_PRICE_ID_STARTER");
-    return cfg.STRIPE_PRICE_ID_STARTER;
-  }
   if (planCode === "pro") {
     if (!cfg.STRIPE_PRICE_ID_PRO) throw AppError.unavailable("Missing STRIPE_PRICE_ID_PRO");
     return cfg.STRIPE_PRICE_ID_PRO;
   }
-  throw AppError.validation("Unsupported planCode");
+  throw AppError.validation("Only PRO plan requires checkout");
 }
 
 export async function getCurrentSubscription(prisma: PrismaClient, tenantId: string) {
@@ -28,8 +25,17 @@ export async function getCurrentSubscription(prisma: PrismaClient, tenantId: str
 export async function createCheckoutSession(
   prisma: PrismaClient,
   tenantId: string,
-  input: { provider: CheckoutProvider; planCode: string; successUrl: string; cancelUrl: string },
+  input: {
+    provider: CheckoutProvider;
+    planCode: string;
+    successUrl: string;
+    cancelUrl: string;
+    paymentMethod?: CheckoutPaymentMethod;
+  },
 ) {
+  if (input.planCode !== "pro") {
+    throw AppError.validation("Checkout session is available only for PRO plan");
+  }
   if (input.provider === "P24") {
     throw AppError.unavailable("P24 checkout session endpoint is not configured yet");
   }
@@ -56,6 +62,12 @@ export async function createCheckoutSession(
     "subscription_data[metadata][tenantId]": tenantId,
     "client_reference_id": tenantId,
   });
+  if (input.paymentMethod === "BLIK") {
+    params.append("payment_method_types[]", "blik");
+  } else {
+    // Stripe Checkout renders Google Pay / Apple Pay in the card wallet sheet when eligible.
+    params.append("payment_method_types[]", "card");
+  }
   if (current?.providerCustomerId) params.set("customer", current.providerCustomerId);
   if (tenant.nip) params.set("customer_email", `${tenantId.slice(0, 8)}+${tenant.nip}@example.invalid`);
 
@@ -96,6 +108,37 @@ export async function createCheckoutSession(
   }
 
   return { checkoutUrl: body.url, sessionId: body.id };
+}
+
+export async function switchToFreePlan(prisma: PrismaClient, tenantId: string) {
+  const current = await prisma.subscription.findFirst({
+    where: { tenantId },
+    orderBy: { createdAt: "desc" },
+  });
+
+  if (current) {
+    return prisma.subscription.update({
+      where: { id: current.id },
+      data: {
+        provider: "MANUAL",
+        planCode: "free",
+        status: "ACTIVE",
+        trialEndsAt: null,
+        currentPeriodStart: new Date(),
+      },
+    });
+  }
+
+  return prisma.subscription.create({
+    data: {
+      tenantId,
+      provider: "MANUAL",
+      planCode: "free",
+      status: "ACTIVE",
+      currentPeriodStart: new Date(),
+      trialEndsAt: null,
+    },
+  });
 }
 
 export async function createBillingPortalSession(

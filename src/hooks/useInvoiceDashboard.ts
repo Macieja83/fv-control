@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  createInvoicePaymentCheckout,
   deleteInvoiceRequest,
   fetchInvoicesListAllPages,
   patchInvoice,
@@ -740,6 +741,29 @@ export function useInvoiceDashboard() {
     [refreshFromApi],
   )
 
+  const payInvoiceOnline = useCallback(
+    async (id: string, paymentMethod: 'CARD' | 'BLIK' | 'GOOGLE_PAY' | 'APPLE_PAY') => {
+      if (USE_MOCK_INVOICES) {
+        window.alert('Tryb demo: checkout płatności jest wyłączony.')
+        return
+      }
+      const token = getStoredToken()
+      if (!token) return
+      try {
+        const origin = window.location.origin
+        const r = await createInvoicePaymentCheckout(token, id, {
+          successUrl: `${origin}/?invoicePayment=success&invoiceId=${encodeURIComponent(id)}`,
+          cancelUrl: `${origin}/?invoicePayment=cancel&invoiceId=${encodeURIComponent(id)}`,
+          paymentMethod,
+        })
+        window.location.href = r.checkoutUrl
+      } catch (e) {
+        window.alert(e instanceof Error ? e.message : String(e))
+      }
+    },
+    [],
+  )
+
   return {
     invoices,
     filtered,
@@ -784,5 +808,6 @@ export function useInvoiceDashboard() {
     adoptInvoiceVendor,
     sendInvoiceToKsef,
     createSalesInvoice,
+    payInvoiceOnline,
   }
 }

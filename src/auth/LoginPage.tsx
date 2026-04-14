@@ -6,6 +6,7 @@ import './login.css'
 export default function LoginPage() {
   const { login, loginWithVerificationToken } = useAuth()
   const [mode, setMode] = useState<'login' | 'register' | 'verify'>('login')
+  const [planCode, setPlanCode] = useState<'free' | 'pro'>('free')
   const [tenantName, setTenantName] = useState('')
   const [tenantNip, setTenantNip] = useState('')
   const [email, setEmail] = useState('')
@@ -30,6 +31,7 @@ export default function LoginPage() {
           tenantNip: tenantNip.trim() || null,
           email: email.trim(),
           password,
+          planCode,
         })
         setMode('verify')
         setOk('Konto utworzone. Potwierdź e-mail, aby aktywować dostęp.')
@@ -104,6 +106,13 @@ export default function LoginPage() {
               <label className="login-field">
                 <span className="login-field__label">NIP (opcjonalnie)</span>
                 <input className="login-input" value={tenantNip} onChange={(e) => setTenantNip(e.target.value)} disabled={loading} />
+              </label>
+              <label className="login-field">
+                <span className="login-field__label">Plan</span>
+                <select className="login-input" value={planCode} onChange={(e) => setPlanCode(e.target.value as 'free' | 'pro')} disabled={loading}>
+                  <option value="free">Free - do 15 faktur / miesiąc</option>
+                  <option value="pro">Pro - bez limitu, 99 zł / miesiąc</option>
+                </select>
               </label>
             </>
           )}

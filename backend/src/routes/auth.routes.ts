@@ -27,6 +27,7 @@ const authRoutes: FastifyPluginAsync = async (app) => {
             tenantNip: { type: "string", nullable: true },
             email: { type: "string", format: "email" },
             password: { type: "string" },
+            planCode: { type: "string", enum: ["free", "pro"] },
           },
         },
       },

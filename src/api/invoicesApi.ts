@@ -166,6 +166,15 @@ export type RetryExtractionResponse = {
   processingJobId: string
 }
 
+export type InvoiceEventRow = {
+  id: string
+  invoiceId: string
+  actorUserId: string | null
+  type: string
+  payload: unknown
+  createdAt: string
+}
+
 export async function postSendInvoiceToKsef(token: string, invoiceId: string): Promise<unknown> {
   const res = await fetch(`${API}/invoices/${encodeURIComponent(invoiceId)}/send-to-ksef`, {
     method: 'POST',
@@ -234,6 +243,37 @@ export async function postRetryInvoiceExtraction(
   if (res.status === 401) throw new Error('Sesja wygasła — zaloguj się ponownie.')
   if (!res.ok) throw new Error(await readErrorMessage(res))
   return (await res.json()) as RetryExtractionResponse
+}
+
+export async function createInvoicePaymentCheckout(
+  token: string,
+  invoiceId: string,
+  body: {
+    successUrl: string
+    cancelUrl: string
+    paymentMethod?: 'CARD' | 'BLIK' | 'GOOGLE_PAY' | 'APPLE_PAY'
+  },
+): Promise<{ checkoutUrl: string }> {
+  const res = await fetch(`${API}/invoices/${encodeURIComponent(invoiceId)}/payment/checkout`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  })
+  const json = (await res.json()) as { checkoutUrl?: string; error?: { message?: string } }
+  if (!res.ok || !json.checkoutUrl) throw new Error(json.error?.message ?? `Nie udało się utworzyć checkout (${res.status})`)
+  return { checkoutUrl: json.checkoutUrl }
+}
+
+export async function fetchInvoiceEvents(token: string, invoiceId: string): Promise<InvoiceEventRow[]> {
+  const res = await fetch(`${API}/invoices/${encodeURIComponent(invoiceId)}/events`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (res.status === 401) throw new Error('Sesja wygasła — zaloguj się ponownie.')
+  if (!res.ok) throw new Error(await readErrorMessage(res))
+  return (await res.json()) as InvoiceEventRow[]
 }
 
 export type AdoptVendorResponse = { contractorId: string; created: boolean }

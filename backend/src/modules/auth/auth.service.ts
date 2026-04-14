@@ -6,6 +6,7 @@ import { AppError } from "../../lib/errors.js";
 import { signAccessToken } from "../../lib/jwt.js";
 import { hashPassword, verifyPassword } from "../../lib/password.js";
 import { generateRefreshToken, hashOpaqueToken } from "../../lib/token-hash.js";
+import type { BillingPlanCode } from "../billing/subscription-plans.js";
 import type { LoginInput, RegisterInput } from "./auth.schema.js";
 
 type GoogleStatePayload = {
@@ -39,11 +40,11 @@ export async function registerTenantAccount(prisma: PrismaClient, input: Registe
     await tx.subscription.create({
       data: {
         tenantId: tenant.id,
-        status: "TRIALING",
+        status: input.planCode === "pro" ? "TRIALING" : "ACTIVE",
         provider: "MANUAL",
-        planCode: "starter",
+        planCode: input.planCode,
         currentPeriodStart: new Date(),
-        trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+        trialEndsAt: input.planCode === "pro" ? new Date(Date.now() + 14 * 24 * 60 * 60 * 1000) : null,
       },
     });
     return { tenant, user };
@@ -275,6 +276,7 @@ export async function loginWithGoogleCode(prisma: PrismaClient, code: string, st
     } else {
       const tenantBase = (userInfo.name?.trim() || email.split("@")[0] || "Nowa firma").slice(0, 180);
       const created = await prisma.$transaction(async (tx) => {
+        const selectedPlan: BillingPlanCode = "free";
         const tenant = await tx.tenant.create({ data: { name: tenantBase } });
         const user = await tx.user.create({
           data: {
@@ -289,11 +291,11 @@ export async function loginWithGoogleCode(prisma: PrismaClient, code: string, st
         await tx.subscription.create({
           data: {
             tenantId: tenant.id,
-            status: "TRIALING",
+            status: "ACTIVE",
             provider: "MANUAL",
-            planCode: "starter",
+            planCode: selectedPlan,
             currentPeriodStart: new Date(),
-            trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+            trialEndsAt: null,
           },
         });
         return tx.authIdentity.create({

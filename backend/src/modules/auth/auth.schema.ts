@@ -10,6 +10,7 @@ export const registerSchema = z.object({
   tenantNip: z.string().max(20).optional().nullable(),
   email: z.string().email().max(320),
   password: passwordSchema,
+  planCode: z.enum(["free", "pro"]).default("free"),
 });
 
 export const loginSchema = z.object({
