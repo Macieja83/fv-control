@@ -25,5 +25,18 @@ export const logoutBodySchema = z.object({
   refreshToken: z.string().min(10).optional(),
 });
 
+export const verifyEmailSchema = z.object({
+  token: z.string().min(20),
+});
+
+export const googleStartSchema = z.object({
+  mode: z.enum(["login", "register"]).default("login"),
+});
+
+export const googleCallbackSchema = z.object({
+  code: z.string().min(1),
+  state: z.string().min(10),
+});
+
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;

@@ -7,6 +7,8 @@ export type AuthUser = {
   tenantId: string;
   email: string;
   role: UserRole;
+  isSuperAdmin: boolean;
+  impersonatedByUserId?: string;
 };
 
 export type IdempotencyContext = {

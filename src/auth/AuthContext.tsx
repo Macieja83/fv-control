@@ -7,9 +7,14 @@ import {
   useState,
 } from 'react'
 import { clearStoredToken, getStoredToken, setStoredToken } from './session'
-import { loginRequest, logoutRequest, sessionRequest } from './authApi'
+import { loginRequest, logoutRequest, sessionRequest, verifyEmailRequest } from './authApi'
 
-export type AuthUser = { email: string }
+export type AuthUser = {
+  email: string
+  tenantId: string
+  emailVerified: boolean
+  isSuperAdmin: boolean
+}
 
 type AuthStatus = 'checking' | 'guest' | 'authed'
 
@@ -17,6 +22,7 @@ type AuthContextValue = {
   status: AuthStatus
   user: AuthUser | null
   login: (email: string, password: string) => Promise<void>
+  loginWithVerificationToken: (token: string) => Promise<void>
   logout: () => Promise<void>
 }
 
@@ -37,8 +43,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const s = await sessionRequest(token)
         if (cancelled) return
-        if (s.valid && s.email) {
-          setUser({ email: s.email })
+        if (s.valid && s.user) {
+          setUser(s.user)
           setStatus('authed')
         } else {
           clearStoredToken()
@@ -61,7 +67,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const trimmed = email.trim()
     const data = await loginRequest(trimmed, password)
     setStoredToken(data.accessToken)
-    setUser({ email: data.email })
+    setUser(data.user)
+    setStatus('authed')
+  }, [])
+
+  const loginWithVerificationToken = useCallback(async (token: string) => {
+    const data = await verifyEmailRequest(token)
+    setStoredToken(data.accessToken)
+    setUser(data.user)
     setStatus('authed')
   }, [])
 
@@ -78,9 +91,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       status,
       user,
       login,
+      loginWithVerificationToken,
       logout,
     }),
-    [status, user, login, logout],
+    [status, user, login, loginWithVerificationToken, logout],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

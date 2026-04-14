@@ -71,6 +71,28 @@ html[data-theme='dark'] .login-card__title {
   gap: 1rem;
 }
 
+.login-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.35rem;
+  margin-bottom: 1rem;
+}
+
+.login-tab {
+  font: inherit;
+  border: 1px solid var(--border, #e2e5eb);
+  background: transparent;
+  border-radius: 8px;
+  padding: 0.4rem 0.5rem;
+  cursor: pointer;
+}
+
+.login-tab.is-active {
+  background: #2563eb;
+  color: #fff;
+  border-color: #2563eb;
+}
+
 .login-field {
   display: flex;
   flex-direction: column;
@@ -116,6 +138,19 @@ html[data-theme='dark'] .login-input {
   line-height: 1.35;
 }
 
+.login-ok {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #15803d;
+}
+
+.login-dev-token {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--text-muted, #6b7285);
+  overflow-wrap: anywhere;
+}
+
 html[data-theme='dark'] .login-error {
   color: #f87171;
 }
@@ -141,4 +176,23 @@ html[data-theme='dark'] .login-error {
 .login-submit:disabled {
   opacity: 0.65;
   cursor: not-allowed;
+}
+
+.login-secondary,
+.login-google {
+  font: inherit;
+  border-radius: 9px;
+  padding: 0.6rem 0.75rem;
+  cursor: pointer;
+}
+
+.login-secondary {
+  border: 1px solid var(--border, #e2e5eb);
+  background: transparent;
+}
+
+.login-google {
+  border: 1px solid #2563eb;
+  background: rgba(37, 99, 235, 0.08);
+  color: #1d4ed8;
 }

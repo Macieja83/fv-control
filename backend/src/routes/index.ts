@@ -4,6 +4,8 @@ import adminWebhooksRoutes from "./admin-webhooks.routes.js";
 import activityRoutes from "./activity.routes.js";
 import agreementsRoutes from "./agreements.routes.js";
 import authRoutes from "./auth.routes.js";
+import billingWebhooksRoutes from "./billing-webhooks.routes.js";
+import billingRoutes from "./billing.routes.js";
 import connectorsRoutes from "./connectors.routes.js";
 import contractorsRoutes from "./contractors.routes.js";
 import dashboardRoutes from "./dashboard.routes.js";
@@ -18,12 +20,15 @@ import integrationsRoutes from "./integrations.routes.js";
 import webhooksRoutes from "./webhooks.routes.js";
 import workflowsRoutes from "./workflows.routes.js";
 import ksefRoutes from "./ksef.routes.js";
+import platformAdminRoutes from "./platform-admin.routes.js";
 import tenantRoutes from "./tenant.routes.js";
 import zenboxRoutes from "./zenbox.routes.js";
 
 export async function registerApiRoutes(app: FastifyInstance): Promise<void> {
   await app.register(healthRoutes);
   await app.register(authRoutes);
+  await app.register(billingWebhooksRoutes);
+  await app.register(billingRoutes);
   await app.register(tenantRoutes);
   await app.register(activityRoutes);
   await app.register(agreementsRoutes);
@@ -33,6 +38,7 @@ export async function registerApiRoutes(app: FastifyInstance): Promise<void> {
   await app.register(ingestionRoutes);
   await app.register(connectorsRoutes);
   await app.register(ksefRoutes);
+  await app.register(platformAdminRoutes);
   await app.register(zenboxRoutes);
   await app.register(workflowsRoutes);
   await app.register(webhooksRoutes);

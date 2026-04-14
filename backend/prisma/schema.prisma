@@ -228,6 +228,23 @@ enum AgreementStatus {
   FAILED
 }
 
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  SUSPENDED
+}
+
+enum SubscriptionProvider {
+  MANUAL
+  STRIPE
+}
+
+enum AuthProvider {
+  GOOGLE
+}
+
 // --- Core tenant / RBAC ---
 
 model Tenant {
@@ -259,6 +276,8 @@ model Tenant {
   accountingExports      AccountingExport[]
   sourceMessages         SourceMessage[]
   agreements             Agreement[]
+  subscriptions          Subscription[]
+  emailVerificationTokens EmailVerificationToken[]
 }
 
 model Permission {
@@ -309,7 +328,8 @@ model User {
   tenantId     String   @db.Uuid
   tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   email        String   @unique
-  passwordHash String
+  passwordHash String?
+  emailVerified Boolean @default(true)
   role         UserRole
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
@@ -321,8 +341,60 @@ model User {
   invoiceEvents   InvoiceEvent[]
   roleLinks       UserRoleLink[]
   auditLogs       AuditLog[]      @relation("AuditActor")
+  authIdentities  AuthIdentity[]
+  emailVerificationTokens EmailVerificationToken[]
 
   @@index([tenantId])
+}
+
+model Subscription {
+  id                  String               @id @default(uuid()) @db.Uuid
+  tenantId            String               @db.Uuid
+  tenant              Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  status              SubscriptionStatus
+  provider            SubscriptionProvider @default(MANUAL)
+  planCode            String               @default("starter")
+  providerCustomerId  String?
+  providerSubscriptionId String?
+  currentPeriodStart  DateTime?
+  currentPeriodEnd    DateTime?
+  trialEndsAt         DateTime?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+
+  @@index([tenantId, status])
+  @@map("subscriptions")
+}
+
+model EmailVerificationToken {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @db.Uuid
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId     String   @db.Uuid
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String   @unique
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime @default(now())
+
+  @@index([userId, expiresAt])
+  @@index([tenantId, expiresAt])
+  @@map("email_verification_tokens")
+}
+
+model AuthIdentity {
+  id             String       @id @default(uuid()) @db.Uuid
+  userId         String       @db.Uuid
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider       AuthProvider
+  providerUserId String
+  email          String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([provider, providerUserId])
+  @@index([userId])
+  @@map("auth_identities")
 }
 
 model RefreshToken {

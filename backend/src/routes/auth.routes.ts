@@ -2,10 +2,13 @@ import type { FastifyPluginAsync } from "fastify";
 import { loadConfig } from "../config.js";
 import { parseOrThrow } from "../lib/validate.js";
 import {
+  googleCallbackSchema,
+  googleStartSchema,
   loginSchema,
   logoutBodySchema,
   refreshSchema,
   registerSchema,
+  verifyEmailSchema,
 } from "../modules/auth/auth.schema.js";
 import * as authService from "../modules/auth/auth.service.js";
 
@@ -15,7 +18,7 @@ const authRoutes: FastifyPluginAsync = async (app) => {
     {
       schema: {
         tags: ["Auth"],
-        summary: "Bootstrap first tenant + owner",
+        summary: "Register tenant account (owner)",
         body: {
           type: "object",
           required: ["tenantName", "email", "password"],
@@ -30,8 +33,32 @@ const authRoutes: FastifyPluginAsync = async (app) => {
     },
     async (request, reply) => {
       const body = parseOrThrow(registerSchema, request.body);
-      const result = await authService.registerBootstrap(app.prisma, body);
+      const result = await authService.registerTenantAccount(app.prisma, body);
       return reply.status(201).send(result);
+    },
+  );
+
+  app.post(
+    "/auth/verify-email",
+    {
+      schema: { tags: ["Auth"], summary: "Verify email with token" },
+    },
+    async (request, reply) => {
+      const body = parseOrThrow(verifyEmailSchema, request.body);
+      const result = await authService.verifyEmail(app.prisma, body.token);
+      return reply.send(result);
+    },
+  );
+
+  app.post(
+    "/auth/resend-verification",
+    {
+      schema: { tags: ["Auth"], summary: "Resend email verification token" },
+    },
+    async (request, reply) => {
+      const body = parseOrThrow(loginSchema.pick({ email: true }), request.body);
+      const result = await authService.resendEmailVerification(app.prisma, body.email);
+      return reply.send(result);
     },
   );
 
@@ -92,6 +119,24 @@ const authRoutes: FastifyPluginAsync = async (app) => {
       const parsed = parseOrThrow(logoutBodySchema, request.body ?? {});
       await authService.logout(app.prisma, userId, parsed.refreshToken);
       return reply.status(204).send();
+    },
+  );
+
+  app.get(
+    "/auth/google/start",
+    { schema: { tags: ["Auth"], summary: "Google OAuth start" } },
+    async (request) => {
+      const q = parseOrThrow(googleStartSchema, request.query ?? {});
+      return { url: authService.buildGoogleAuthUrl(q.mode) };
+    },
+  );
+
+  app.get(
+    "/auth/google/callback",
+    { schema: { tags: ["Auth"], summary: "Google OAuth callback" } },
+    async (request) => {
+      const q = parseOrThrow(googleCallbackSchema, request.query ?? {});
+      return authService.loginWithGoogleCode(app.prisma, q.code, q.state);
     },
   );
 

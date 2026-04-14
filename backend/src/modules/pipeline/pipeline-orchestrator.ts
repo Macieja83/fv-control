@@ -17,7 +17,11 @@ import { pipelineJobsTotal } from "../../lib/metrics.js";
 import { classifyDocumentType } from "../compliance/compliance-engine.js";
 import { refreshInvoiceCompliance } from "../compliance/compliance.service.js";
 import { findContractorByNormalizedNip, polishNipDigits10 } from "../contractors/contractor-resolve.js";
-import { tryExtractDraftFromKsefFaXml } from "../ksef/ksef-fa-xml-extract.js";
+import {
+  mergeExtractedPaymentFields,
+  tryExtractDraftFromKsefFaXml,
+  tryExtractPaymentFieldsFromKsefFaXml,
+} from "../ksef/ksef-fa-xml-extract.js";
 import { draftFromKsefDocumentMetadata, issueYmdEmbeddedInKsefNumber } from "../ksef/ksef-metadata-draft.js";
 import { promoteKsefXmlPrimaryToSummaryPdf } from "../ksef/ksef-primary-visual-document.service.js";
 import { extractVendorNipFromNormalizedPayload } from "../invoices/invoice-vendor-nip.js";
@@ -171,6 +175,11 @@ export async function runPipelineJob(prisma: PrismaClient, processingJobId: stri
       }
     }
 
+    const payAugment = tryExtractPaymentFieldsFromKsefFaXml(documentBuffer, document.mimeType ?? "");
+    if (payAugment) {
+      extractedDraft = mergeExtractedPaymentFields(extractedDraft, payAugment);
+    }
+
     workingDraft = extractedDraft;
     await prisma.extractionRun.create({
       data: {
@@ -194,6 +203,13 @@ export async function runPipelineJob(prisma: PrismaClient, processingJobId: stri
 
     const draft = workingDraft;
     const invoiceNumber = draft.number!;
+    const dueFromDraft = (() => {
+      const s = draft.dueDate?.trim();
+      if (!s || s.length < 10 || !/^\d{4}-\d{2}-\d{2}/.test(s)) return undefined;
+      const ymd = s.slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return undefined;
+      return parseInvoiceDate(ymd);
+    })();
 
     /**
      * KSeF: portal MF filtruje Issue po dacie z metadanych API — trzymamy ją na dokumencie (`metadata.issueDate`).
@@ -213,6 +229,7 @@ export async function runPipelineJob(prisma: PrismaClient, processingJobId: stri
           : draft.issueDate
             ? parseIssueDateCalendarYmd(draft.issueDate, invoice.issueDate)
             : invoice.issueDate;
+    const dueDate = dueFromDraft ?? invoice.dueDate ?? issueDate;
     const net = new Prisma.Decimal(String(draft.netTotal ?? "0"));
     const vat = new Prisma.Decimal(String(draft.vatTotal ?? "0"));
     const gross = new Prisma.Decimal(String(draft.grossTotal ?? "0"));
@@ -284,6 +301,7 @@ export async function runPipelineJob(prisma: PrismaClient, processingJobId: stri
         data: {
           number: finalNumber,
           issueDate,
+          dueDate,
           currency,
           netTotal: net,
           vatTotal: vat,

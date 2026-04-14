@@ -1,0 +1,44 @@
+export type SubscriptionRow = {
+  id: string
+  status: string
+  provider: string
+  planCode: string
+  currentPeriodEnd?: string | null
+  trialEndsAt?: string | null
+}
+
+function authHeader(token: string) {
+  return { Authorization: `Bearer ${token}` }
+}
+
+export async function fetchCurrentSubscription(token: string): Promise<SubscriptionRow | null> {
+  const res = await fetch('/api/v1/billing/subscription', { headers: authHeader(token) })
+  const body = (await res.json()) as { data?: SubscriptionRow | null; error?: { message?: string } }
+  if (!res.ok) throw new Error(body.error?.message ?? `Nie udało się pobrać subskrypcji (${res.status})`)
+  return body.data ?? null
+}
+
+export async function createSubscriptionCheckout(
+  token: string,
+  input: { provider: 'STRIPE' | 'P24'; planCode: 'starter' | 'pro'; successUrl: string; cancelUrl: string },
+): Promise<{ checkoutUrl: string }> {
+  const res = await fetch('/api/v1/billing/subscription/checkout', {
+    method: 'POST',
+    headers: { ...authHeader(token), 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+  const body = (await res.json()) as { checkoutUrl?: string; error?: { message?: string } }
+  if (!res.ok || !body.checkoutUrl) throw new Error(body.error?.message ?? `Nie udało się utworzyć checkout (${res.status})`)
+  return { checkoutUrl: body.checkoutUrl }
+}
+
+export async function createBillingPortalSession(token: string, returnUrl: string): Promise<{ portalUrl: string }> {
+  const res = await fetch('/api/v1/billing/subscription/portal', {
+    method: 'POST',
+    headers: { ...authHeader(token), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ returnUrl }),
+  })
+  const body = (await res.json()) as { portalUrl?: string; error?: { message?: string } }
+  if (!res.ok || !body.portalUrl) throw new Error(body.error?.message ?? `Nie udało się utworzyć portalu billing (${res.status})`)
+  return { portalUrl: body.portalUrl }
+}

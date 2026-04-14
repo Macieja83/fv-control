@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { tryExtractDraftFromKsefFaXml } from "./ksef-fa-xml-extract.js";
+import {
+  tryExtractDraftFromKsefFaXml,
+  tryExtractPaymentFieldsFromKsefFaXml,
+} from "./ksef-fa-xml-extract.js";
 
 const SAMPLE_FA = `<?xml version="1.0" encoding="UTF-8"?>
 <Faktura xmlns="http://crd.gov.pl/wzor/2023/06/29/12648/">
@@ -10,6 +13,16 @@ const SAMPLE_FA = `<?xml version="1.0" encoding="UTF-8"?>
     <P_13_1>437.25</P_13_1>
     <P_14_1>100.56</P_14_1>
     <P_15>537.81</P_15>
+    <Platnosc>
+      <FormaPlatnosci>6</FormaPlatnosci>
+      <TerminPlatnosci><Termin>2026-05-20</Termin></TerminPlatnosci>
+      <RachunekBankowy>
+        <NrRB>12 3456 7890 1234 5678 9012 3456</NrRB>
+        <NazwaBanku>Test Bank</NazwaBanku>
+        <SWIFT>TESTPLPW</SWIFT>
+      </RachunekBankowy>
+      <OpisRachunku>fv/2026/test</OpisRachunku>
+    </Platnosc>
     <Podmiot1>
       <DaneIdentyfikacyjne>
         <NIP>5555555555</NIP>
@@ -29,6 +42,13 @@ describe("tryExtractDraftFromKsefFaXml", () => {
     expect(r!.draft.contractorNip).toBe("5555555555");
     expect(r!.draft.contractorName).toContain("DAKAR");
     expect(r!.confidence).toBeGreaterThanOrEqual(0.99);
+    expect(r!.draft.dueDate).toBe("2026-05-20");
+    expect(r!.draft.paymentForm).toBe("Przelew");
+    expect(r!.draft.paymentFormCode).toBe("6");
+    expect(r!.draft.bankAccount).toBe("12345678901234567890123456");
+    expect(r!.draft.bankName).toBe("Test Bank");
+    expect(r!.draft.swift).toBe("TESTPLPW");
+    expect(r!.draft.paymentDescription).toBe("fv/2026/test");
   });
 
   it("returns null for non-XML", () => {
@@ -70,5 +90,24 @@ describe("tryExtractDraftFromKsefFaXml", () => {
     expect(r!.draft.contractorNip).toBe("1234567890");
     expect(r!.draft.contractorName).toContain("SPRZEDAWCA");
     expect(r!.draft.grossTotal).toBe("61.50");
+  });
+
+  it("tryExtractPaymentFieldsFromKsefFaXml reads Platnosc even when P_2 is missing", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<Faktura xmlns="http://crd.gov.pl/wzor/2023/06/29/12648/">
+  <Fa>
+    <Platnosc>
+      <FormaPlatnosci>6</FormaPlatnosci>
+      <TerminPlatnosci><Termin>2026-06-01</Termin></TerminPlatnosci>
+      <RachunekBankowy><NrRB>11112222333344445555666666</NrRB></RachunekBankowy>
+    </Platnosc>
+  </Fa>
+</Faktura>`;
+    expect(tryExtractDraftFromKsefFaXml(Buffer.from(xml, "utf8"), "application/xml")).toBeNull();
+    const pay = tryExtractPaymentFieldsFromKsefFaXml(Buffer.from(xml, "utf8"), "application/xml");
+    expect(pay).not.toBeNull();
+    expect(pay!.dueDate).toBe("2026-06-01");
+    expect(pay!.bankAccount).toBe("11112222333344445555666666");
+    expect(pay!.paymentForm).toBe("Przelew");
   });
 });

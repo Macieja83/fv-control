@@ -6,6 +6,17 @@ import { XMLParser } from "fast-xml-parser";
 import type { ExtractedInvoiceDraft } from "../../adapters/ai/ai-invoice.adapter.js";
 import { polishNipDigits10 } from "../contractors/contractor-resolve.js";
 
+/** Zgodnie z KSeF / UI — mapowanie kodu FormaPlatnosci */
+const PAYMENT_FORM_LABELS: Record<string, string> = {
+  "1": "Gotówka",
+  "2": "Karta",
+  "3": "Bon",
+  "4": "Czek",
+  "5": "Kredyt",
+  "6": "Przelew",
+  "7": "Płatność mobilna",
+};
+
 function isXmlMime(mime: string): boolean {
   const m = (mime ?? "").toLowerCase();
   return m.includes("xml") || m === "text/plain";
@@ -60,6 +71,23 @@ function deepFindFaBlock(node: unknown, depth = 0): Record<string, unknown> | nu
   return null;
 }
 
+/** Gdy `deepFindFaBlock` nie znajdzie bloku, szukamy węzła z sekcją Płatność (np. nietypowy układ numeru faktury). */
+function deepFindRecordContainingKey(node: unknown, key: string, depth = 0): Record<string, unknown> | null {
+  if (depth > 40) return null;
+  const o = asRecord(node);
+  if (!o) return null;
+  if (key in o && o[key] != null) return o;
+  for (const v of Object.values(o)) {
+    if (v == null || typeof v === "string" || typeof v === "number" || typeof v === "boolean") continue;
+    const arr = Array.isArray(v) ? v : [v];
+    for (const item of arr) {
+      const found = deepFindRecordContainingKey(item, key, depth + 1);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
 /** Sprzedawca z bloku Podmiot1 (FA(2)/FA(3) — często na poziomie Faktura, nie wewnątrz Fa). */
 function extractSellerFromPodmiot1(pod1: Record<string, unknown> | null): {
   contractorNip: string | null;
@@ -90,6 +118,163 @@ function extractSellerFromPodmiot1(pod1: Record<string, unknown> | null): {
   return { contractorNip, contractorName };
 }
 
+function extractPaymentFromFaBlock(fa: Record<string, unknown>): Partial<
+  Pick<
+    ExtractedInvoiceDraft,
+    | "dueDate"
+    | "paymentForm"
+    | "paymentFormCode"
+    | "bankAccount"
+    | "bankName"
+    | "swift"
+    | "paymentDescription"
+  >
+> {
+  const plat = asRecord(oneOrFirst(fa.Platnosc as Record<string, unknown> | Record<string, unknown>[] | undefined));
+  if (!plat) return {};
+
+  const out: Partial<
+    Pick<
+      ExtractedInvoiceDraft,
+      | "dueDate"
+      | "paymentForm"
+      | "paymentFormCode"
+      | "bankAccount"
+      | "bankName"
+      | "swift"
+      | "paymentDescription"
+    >
+  > = {};
+
+  const formaRaw = pickText(plat.FormaPlatnosci);
+  if (formaRaw) {
+    out.paymentFormCode = formaRaw;
+    out.paymentForm = PAYMENT_FORM_LABELS[formaRaw] ?? formaRaw;
+  }
+
+  const terminBlock = asRecord(
+    oneOrFirst(plat.TerminPlatnosci as Record<string, unknown> | Record<string, unknown>[] | undefined),
+  );
+  if (terminBlock) {
+    const term = pickText(terminBlock.Termin);
+    if (term.length >= 10 && /^\d{4}-\d{2}-\d{2}/.test(term)) {
+      out.dueDate = term.slice(0, 10);
+    }
+  }
+  if (!out.dueDate) {
+    const t = pickText(plat.Termin);
+    if (t.length >= 10 && /^\d{4}-\d{2}-\d{2}/.test(t)) {
+      out.dueDate = t.slice(0, 10);
+    }
+  }
+
+  const rachRows = plat.RachunekBankowy;
+  const rachList = rachRows == null ? [] : Array.isArray(rachRows) ? rachRows : [rachRows];
+  for (const row of rachList) {
+    const rach = asRecord(row);
+    if (!rach) continue;
+    const nr = pickText(rach.NrRB).replace(/\s/g, "");
+    if (nr.length > 0) {
+      out.bankAccount = nr;
+      const bn = pickText(rach.NazwaBanku);
+      if (bn) out.bankName = bn;
+      const sw = pickText(rach.SWIFT);
+      if (sw) out.swift = sw;
+      break;
+    }
+  }
+
+  const desc = pickText(plat.OpisRachunku) || pickText(plat.OpisPlatnosciInnej);
+  if (desc) out.paymentDescription = desc;
+
+  return out;
+}
+
+type PaymentDraftFields = Pick<
+  ExtractedInvoiceDraft,
+  | "dueDate"
+  | "paymentForm"
+  | "paymentFormCode"
+  | "bankAccount"
+  | "bankName"
+  | "swift"
+  | "paymentDescription"
+>;
+
+/** Uzupełnia brakujące pola płatności z drugiego odczytu XML (np. przy fallback z metadanych KSeF). */
+export function mergeExtractedPaymentFields(
+  base: ExtractedInvoiceDraft,
+  extra: Partial<PaymentDraftFields>,
+): ExtractedInvoiceDraft {
+  const out: ExtractedInvoiceDraft = { ...base };
+  const take = <K extends keyof PaymentDraftFields>(k: K) => {
+    const v = out[k];
+    const empty = v == null || (typeof v === "string" && v.trim() === "");
+    if (empty && extra[k] != null && String(extra[k]).trim() !== "") {
+      (out as Record<string, unknown>)[k] = extra[k];
+    }
+  };
+  take("dueDate");
+  take("paymentForm");
+  take("paymentFormCode");
+  take("bankAccount");
+  take("bankName");
+  take("swift");
+  take("paymentDescription");
+  return out;
+}
+
+function tryParseInvoiceXmlTree(buffer: Buffer, mimeType: string): unknown | null {
+  if (!buffer.length) return null;
+  if (!isXmlMime(mimeType) && !looksLikeXml(buffer)) return null;
+  let xml: string;
+  try {
+    xml = buffer.toString("utf8");
+  } catch {
+    return null;
+  }
+  const parser = new XMLParser({
+    ignoreAttributes: false,
+    removeNSPrefix: true,
+    trimValues: true,
+    /** false: NrRB i inne długie ciągi cyfr muszą zostać stringiem (inaczej tracą precyzję jako number). */
+    parseTagValue: false,
+  });
+  try {
+    return parser.parse(xml);
+  } catch {
+    return null;
+  }
+}
+
+function resolveFaRecordForPayment(parsed: unknown): Record<string, unknown> | null {
+  const docRoot = asRecord(parsed);
+  const fakturaNode = asRecord(docRoot?.Faktura) ?? docRoot;
+  const faFromRoot =
+    fakturaNode?.Fa != null
+      ? asRecord(oneOrFirst(fakturaNode.Fa as Record<string, unknown> | Record<string, unknown>[] | undefined))
+      : null;
+  let fa = faFromRoot ?? deepFindFaBlock(parsed);
+  if (!fa) fa = deepFindFaBlock(parsed);
+  if (fa) return fa;
+  return deepFindRecordContainingKey(parsed, "Platnosc");
+}
+
+/**
+ * Pola płatności z FA XML — gdy pełny ekstrakt nie przejdzie, nadal można wyciągnąć termin i rachunek.
+ */
+export function tryExtractPaymentFieldsFromKsefFaXml(
+  buffer: Buffer,
+  mimeType: string,
+): Partial<PaymentDraftFields> | null {
+  const parsed = tryParseInvoiceXmlTree(buffer, mimeType);
+  if (parsed == null) return null;
+  const fa = resolveFaRecordForPayment(parsed);
+  if (!fa) return null;
+  const p = extractPaymentFromFaBlock(fa);
+  return Object.keys(p).length > 0 ? p : null;
+}
+
 function normalizeMoneyStr(raw: string): string {
   let s = raw.replace(/\s/g, "");
   if (!s) return "0.00";
@@ -112,34 +297,15 @@ export function tryExtractDraftFromKsefFaXml(
   buffer: Buffer,
   mimeType: string,
 ): { draft: ExtractedInvoiceDraft; confidence: number } | null {
-  if (!buffer.length) return null;
-  if (!isXmlMime(mimeType) && !looksLikeXml(buffer)) return null;
-
-  let xml: string;
-  try {
-    xml = buffer.toString("utf8");
-  } catch {
-    return null;
-  }
-
-  const parser = new XMLParser({
-    ignoreAttributes: false,
-    removeNSPrefix: true,
-    trimValues: true,
-    parseTagValue: true,
-  });
-
-  let parsed: unknown;
-  try {
-    parsed = parser.parse(xml);
-  } catch {
-    return null;
-  }
+  const parsed = tryParseInvoiceXmlTree(buffer, mimeType);
+  if (parsed == null) return null;
 
   const docRoot = asRecord(parsed);
   const fakturaNode = asRecord(docRoot?.Faktura) ?? docRoot;
   const faFromRoot =
-    fakturaNode?.Fa != null ? asRecord(oneOrFirst(fakturaNode.Fa as unknown[])) : null;
+    fakturaNode?.Fa != null
+      ? asRecord(oneOrFirst(fakturaNode.Fa as Record<string, unknown> | Record<string, unknown>[] | undefined))
+      : null;
   let fa = faFromRoot ?? deepFindFaBlock(parsed);
   if (!fa) fa = deepFindFaBlock(parsed);
   if (!fa) return null;
@@ -163,10 +329,14 @@ export function tryExtractDraftFromKsefFaXml(
 
   const currency = pickText(fa.KodWaluty) || "PLN";
 
-  const pod1InsideFa = asRecord(oneOrFirst(fa.Podmiot1 as unknown[]));
+  const pod1InsideFa = asRecord(
+    oneOrFirst(fa.Podmiot1 as Record<string, unknown> | Record<string, unknown>[] | undefined),
+  );
   const pod1AtFaktura =
     fakturaNode?.Podmiot1 != null
-      ? asRecord(oneOrFirst(fakturaNode.Podmiot1 as unknown[]))
+      ? asRecord(
+          oneOrFirst(fakturaNode.Podmiot1 as Record<string, unknown> | Record<string, unknown>[] | undefined),
+        )
       : null;
   let { contractorNip, contractorName } = extractSellerFromPodmiot1(pod1InsideFa);
   if (!contractorNip) {
@@ -220,6 +390,8 @@ export function tryExtractDraftFromKsefFaXml(
     }
   }
 
+  const paymentFields = extractPaymentFromFaBlock(fa);
+
   const draft: ExtractedInvoiceDraft = {
     number: num,
     issueDate,
@@ -230,6 +402,7 @@ export function tryExtractDraftFromKsefFaXml(
     contractorNip,
     contractorName,
     lineItems: lineItems.length > 0 ? lineItems : undefined,
+    ...paymentFields,
   };
 
   return { draft, confidence: 0.99 };

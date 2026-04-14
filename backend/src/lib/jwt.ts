@@ -6,6 +6,7 @@ export type AccessPayload = {
   sub: string;
   tid: string;
   role: UserRole;
+  impBy?: string;
   typ: "access";
 };
 

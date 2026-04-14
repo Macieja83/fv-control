@@ -1,16 +1,21 @@
+import crypto from "node:crypto";
+import jwt from "jsonwebtoken";
 import type { PrismaClient, UserRole } from "@prisma/client";
-import { loadConfig } from "../../config.js";
+import { isSuperAdminEmail, loadConfig } from "../../config.js";
 import { AppError } from "../../lib/errors.js";
 import { signAccessToken } from "../../lib/jwt.js";
 import { hashPassword, verifyPassword } from "../../lib/password.js";
 import { generateRefreshToken, hashOpaqueToken } from "../../lib/token-hash.js";
 import type { LoginInput, RegisterInput } from "./auth.schema.js";
 
-export async function registerBootstrap(prisma: PrismaClient, input: RegisterInput) {
-  const count = await prisma.user.count();
-  if (count > 0) {
-    throw AppError.bootstrapClosed();
-  }
+type GoogleStatePayload = {
+  typ: "google_state";
+  nonce: string;
+};
+
+export async function registerTenantAccount(prisma: PrismaClient, input: RegisterInput) {
+  const exists = await prisma.user.findUnique({ where: { email: input.email.toLowerCase() } });
+  if (exists) throw AppError.conflict("Email already exists");
 
   const passwordHash = await hashPassword(input.password);
 
@@ -28,17 +33,29 @@ export async function registerBootstrap(prisma: PrismaClient, input: RegisterInp
         passwordHash,
         role: "OWNER",
         isActive: true,
+        emailVerified: false,
+      },
+    });
+    await tx.subscription.create({
+      data: {
+        tenantId: tenant.id,
+        status: "TRIALING",
+        provider: "MANUAL",
+        planCode: "starter",
+        currentPeriodStart: new Date(),
+        trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
       },
     });
     return { tenant, user };
   });
 
-  const tokens = await issueTokens(prisma, result.user.id, result.user.tenantId, result.user.role);
+  const verificationToken = await issueEmailVerificationToken(prisma, result.user.id, result.user.tenantId);
 
   return {
     tenant: { id: result.tenant.id, name: result.tenant.name, nip: result.tenant.nip },
     user: sanitizeUser(result.user),
-    ...tokens,
+    needsEmailVerification: true,
+    ...(loadConfig().NODE_ENV !== "production" ? { verificationToken } : {}),
   };
 }
 
@@ -50,9 +67,15 @@ export async function login(prisma: PrismaClient, input: LoginInput) {
     if (!user?.isActive) {
       throw AppError.unauthorized("Invalid credentials");
     }
+    if (!user.passwordHash) {
+      throw AppError.unauthorized("Use Google sign-in for this account");
+    }
     const ok = await verifyPassword(input.password, user.passwordHash);
     if (!ok) {
       throw AppError.unauthorized("Invalid credentials");
+    }
+    if (!user.emailVerified) {
+      throw AppError.forbidden("Email not verified");
     }
     const tokens = await issueTokens(prisma, user.id, user.tenantId, user.role);
     return { user: sanitizeUser(user), ...tokens };
@@ -79,6 +102,9 @@ export async function refreshSession(prisma: PrismaClient, refreshToken: string)
   }
   if (!row.user.isActive) {
     throw AppError.unauthorized("User inactive");
+  }
+  if (!row.user.emailVerified) {
+    throw AppError.forbidden("Email not verified");
   }
 
   const cfg = loadConfig();
@@ -134,6 +160,207 @@ export async function getMe(prisma: PrismaClient, userId: string) {
   return sanitizeUser(user);
 }
 
+export async function verifyEmail(prisma: PrismaClient, token: string) {
+  const tokenHash = hashOpaqueToken(token);
+  const row = await prisma.emailVerificationToken.findUnique({
+    where: { tokenHash },
+    include: { user: true },
+  });
+  if (!row || row.consumedAt || row.expiresAt < new Date()) {
+    throw AppError.validation("Invalid or expired verification token");
+  }
+  await prisma.$transaction([
+    prisma.user.update({
+      where: { id: row.userId },
+      data: { emailVerified: true },
+    }),
+    prisma.emailVerificationToken.update({
+      where: { id: row.id },
+      data: { consumedAt: new Date() },
+    }),
+  ]);
+  const tokens = await issueTokens(prisma, row.user.id, row.user.tenantId, row.user.role);
+  return { user: sanitizeUser({ ...row.user, emailVerified: true }), ...tokens };
+}
+
+export async function resendEmailVerification(prisma: PrismaClient, email: string) {
+  const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
+  if (!user) return { sent: true };
+  if (user.emailVerified) return { sent: true };
+  const token = await issueEmailVerificationToken(prisma, user.id, user.tenantId);
+  return { sent: true, ...(loadConfig().NODE_ENV !== "production" ? { verificationToken: token } : {}) };
+}
+
+export function buildGoogleAuthUrl(mode: "login" | "register"): string {
+  const cfg = loadConfig();
+  if (!cfg.GOOGLE_CLIENT_ID || !cfg.GOOGLE_CLIENT_SECRET || !cfg.GOOGLE_OAUTH_REDIRECT_URI) {
+    throw AppError.unavailable("Google OAuth is not configured");
+  }
+  const state = jwt.sign(
+    { typ: "google_state", nonce: crypto.randomUUID(), mode } as GoogleStatePayload & { mode: string },
+    cfg.JWT_ACCESS_SECRET,
+    { expiresIn: "10m", algorithm: "HS256" },
+  );
+  const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+  url.searchParams.set("client_id", cfg.GOOGLE_CLIENT_ID);
+  url.searchParams.set("redirect_uri", cfg.GOOGLE_OAUTH_REDIRECT_URI);
+  url.searchParams.set("response_type", "code");
+  url.searchParams.set("scope", "openid email profile");
+  url.searchParams.set("state", state);
+  url.searchParams.set("prompt", "select_account");
+  return url.toString();
+}
+
+export async function loginWithGoogleCode(prisma: PrismaClient, code: string, state: string) {
+  const cfg = loadConfig();
+  if (!cfg.GOOGLE_CLIENT_ID || !cfg.GOOGLE_CLIENT_SECRET || !cfg.GOOGLE_OAUTH_REDIRECT_URI) {
+    throw AppError.unavailable("Google OAuth is not configured");
+  }
+  try {
+    const decoded = jwt.verify(state, cfg.JWT_ACCESS_SECRET, { algorithms: ["HS256"] }) as Record<string, unknown>;
+    if (decoded.typ !== "google_state") throw new Error("bad state");
+  } catch {
+    throw AppError.validation("Invalid OAuth state");
+  }
+
+  const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      code,
+      client_id: cfg.GOOGLE_CLIENT_ID,
+      client_secret: cfg.GOOGLE_CLIENT_SECRET,
+      redirect_uri: cfg.GOOGLE_OAUTH_REDIRECT_URI,
+      grant_type: "authorization_code",
+    }),
+  });
+  if (!tokenRes.ok) throw AppError.unauthorized("Google OAuth token exchange failed");
+  const tokenBody = (await tokenRes.json()) as { access_token?: string };
+  if (!tokenBody.access_token) throw AppError.unauthorized("Google OAuth missing access token");
+
+  const userInfoRes = await fetch("https://openidconnect.googleapis.com/v1/userinfo", {
+    headers: { authorization: `Bearer ${tokenBody.access_token}` },
+  });
+  if (!userInfoRes.ok) throw AppError.unauthorized("Google OAuth userinfo failed");
+  const userInfo = (await userInfoRes.json()) as {
+    sub?: string;
+    email?: string;
+    email_verified?: boolean;
+    name?: string;
+  };
+  if (!userInfo.sub || !userInfo.email || userInfo.email_verified !== true) {
+    throw AppError.unauthorized("Google account must have verified email");
+  }
+
+  const providerUserId = userInfo.sub;
+  const email = userInfo.email.toLowerCase();
+  let identity = await prisma.authIdentity.findUnique({
+    where: { provider_providerUserId: { provider: "GOOGLE", providerUserId } },
+    include: { user: true },
+  });
+
+  if (!identity) {
+    const existing = await prisma.user.findUnique({ where: { email } });
+    if (existing) {
+      identity = await prisma.authIdentity.create({
+        data: {
+          userId: existing.id,
+          provider: "GOOGLE",
+          providerUserId,
+          email,
+        },
+        include: { user: true },
+      });
+      await prisma.user.update({ where: { id: existing.id }, data: { emailVerified: true } });
+    } else {
+      const tenantBase = (userInfo.name?.trim() || email.split("@")[0] || "Nowa firma").slice(0, 180);
+      const created = await prisma.$transaction(async (tx) => {
+        const tenant = await tx.tenant.create({ data: { name: tenantBase } });
+        const user = await tx.user.create({
+          data: {
+            tenantId: tenant.id,
+            email,
+            passwordHash: null,
+            role: "OWNER",
+            isActive: true,
+            emailVerified: true,
+          },
+        });
+        await tx.subscription.create({
+          data: {
+            tenantId: tenant.id,
+            status: "TRIALING",
+            provider: "MANUAL",
+            planCode: "starter",
+            currentPeriodStart: new Date(),
+            trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+          },
+        });
+        return tx.authIdentity.create({
+          data: {
+            userId: user.id,
+            provider: "GOOGLE",
+            providerUserId,
+            email,
+          },
+          include: { user: true },
+        });
+      });
+      identity = await prisma.authIdentity.findUnique({
+        where: { id: created.id },
+        include: { user: true },
+      });
+    }
+  }
+
+  if (!identity) throw AppError.internal("Google identity not found after login flow");
+  if (!identity.user.isActive) throw AppError.unauthorized("User inactive");
+  const tokens = await issueTokens(prisma, identity.user.id, identity.user.tenantId, identity.user.role);
+  return { user: sanitizeUser(identity.user), ...tokens };
+}
+
+export async function listTenantsForSuperAdmin(prisma: PrismaClient, limit = 200) {
+  const rows = await prisma.tenant.findMany({
+    take: Math.max(1, Math.min(500, limit)),
+    orderBy: { createdAt: "desc" },
+    include: {
+      _count: { select: { users: true, invoices: true } },
+      subscriptions: { orderBy: { createdAt: "desc" }, take: 1 },
+    },
+  });
+  return rows.map((t) => ({
+    id: t.id,
+    name: t.name,
+    nip: t.nip,
+    createdAt: t.createdAt,
+    userCount: t._count.users,
+    invoiceCount: t._count.invoices,
+    subscription: t.subscriptions[0] ?? null,
+  }));
+}
+
+export async function issueTenantImpersonationAccessToken(
+  prisma: PrismaClient,
+  superAdminUserId: string,
+  targetTenantId: string,
+) {
+  const user = await prisma.user.findUnique({ where: { id: superAdminUserId } });
+  if (!user?.isActive || !isSuperAdminEmail(user.email)) {
+    throw AppError.forbidden("Super admin required");
+  }
+  const tenant = await prisma.tenant.findUnique({ where: { id: targetTenantId } });
+  if (!tenant) throw AppError.notFound("Tenant not found");
+  const cfg = loadConfig();
+  return {
+    accessToken: signAccessToken(
+      { sub: user.id, tid: targetTenantId, role: user.role, impBy: user.id },
+      cfg.JWT_ACCESS_SECRET,
+      cfg.JWT_ACCESS_TTL_MIN,
+    ),
+    expiresIn: cfg.JWT_ACCESS_TTL_MIN * 60,
+  };
+}
+
 async function issueTokens(
   prisma: PrismaClient,
   userId: string,
@@ -164,6 +391,7 @@ function sanitizeUser(user: {
   tenantId: string;
   email: string;
   role: UserRole;
+  emailVerified: boolean;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -173,8 +401,25 @@ function sanitizeUser(user: {
     tenantId: user.tenantId,
     email: user.email,
     role: user.role,
+    emailVerified: user.emailVerified,
+    isSuperAdmin: isSuperAdminEmail(user.email),
     isActive: user.isActive,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
   };
+}
+
+async function issueEmailVerificationToken(prisma: PrismaClient, userId: string, tenantId: string): Promise<string> {
+  const token = generateRefreshToken();
+  const tokenHash = hashOpaqueToken(token);
+  const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
+  await prisma.emailVerificationToken.create({
+    data: {
+      userId,
+      tenantId,
+      tokenHash,
+      expiresAt,
+    },
+  });
+  return token;
 }

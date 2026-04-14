@@ -49,15 +49,17 @@ export async function intakeInvoice(
     });
 
   const inv = await prisma.$transaction(async (tx) => {
+    const issueDate = parseInvoiceDate(String(input.issueDate));
+    const dueDate = input.dueDate ? parseInvoiceDate(String(input.dueDate)) : issueDate;
     const created = await tx.invoice.create({
       data: {
         tenantId,
         ledgerKind: input.ledgerKind ?? "PURCHASE",
         contractorId: input.contractorId,
         number: input.number,
-        issueDate: parseInvoiceDate(String(input.issueDate)),
+        issueDate,
         saleDate: input.saleDate ? parseInvoiceDate(String(input.saleDate)) : null,
-        dueDate: input.dueDate ? parseInvoiceDate(String(input.dueDate)) : null,
+        dueDate,
         currency: input.currency ?? "PLN",
         netTotal,
         vatTotal,

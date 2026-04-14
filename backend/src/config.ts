@@ -52,6 +52,20 @@ const envSchema = z.object({
 
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
+  GOOGLE_OAUTH_REDIRECT_URI: z.string().url().optional(),
+  WEB_APP_URL: z.string().url().default("http://localhost:5173"),
+  SUPER_ADMIN_EMAILS: z.string().default(""),
+  STRIPE_SECRET_KEY: z.string().optional(),
+  STRIPE_PRICE_ID_STARTER: z.string().optional(),
+  STRIPE_PRICE_ID_PRO: z.string().optional(),
+  STRIPE_BILLING_WEBHOOK_SECRET: z.preprocess(
+    (v) => (v === "" || v === undefined ? undefined : v),
+    z.string().min(16).optional(),
+  ),
+  P24_BILLING_WEBHOOK_SECRET: z.preprocess(
+    (v) => (v === "" || v === undefined ? undefined : v),
+    z.string().min(16).optional(),
+  ),
   KSEF_ENV: z.enum(["sandbox", "production", "mock"]).default("mock"),
   /** KSeF authorization token — raw string or base64-encoded PKCS#5 encrypted blob from the portal. */
   KSEF_TOKEN: z.string().optional(),
@@ -214,4 +228,17 @@ export function loadConfig(): AppConfig {
 
 export function getCorsOriginList(): string[] {
   return parseCorsOrigins(loadConfig().CORS_ORIGINS);
+}
+
+export function getSuperAdminEmails(): string[] {
+  return loadConfig()
+    .SUPER_ADMIN_EMAILS
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+export function isSuperAdminEmail(email: string): boolean {
+  const e = email.trim().toLowerCase();
+  return getSuperAdminEmails().includes(e);
 }
