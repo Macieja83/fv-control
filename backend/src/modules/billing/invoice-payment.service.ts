@@ -43,8 +43,16 @@ export async function createInvoicePaymentCheckoutSession(
   const unitAmount = toMinorUnits(invoice.grossTotal.toString());
   const currency = invoice.currency.toLowerCase();
 
+  // Stripe: BLIK jest tylko dla PLN — inaczej brak poprawnego flow (kod / push z banku).
+  if (input.paymentMethod === "BLIK" && currency !== "pln") {
+    throw AppError.validation(
+      "BLIK w Stripe działa wyłącznie dla faktur w PLN. Użyj karty / portfela albo zmień walutę faktury.",
+    );
+  }
+
   const params = new URLSearchParams({
     mode: "payment",
+    locale: "pl",
     success_url: input.successUrl,
     cancel_url: input.cancelUrl,
     "line_items[0][quantity]": "1",
@@ -55,6 +63,7 @@ export async function createInvoicePaymentCheckoutSession(
     "metadata[invoiceId]": invoice.id,
     "metadata[billingFlow]": "invoice_payment",
     "client_reference_id": invoice.id,
+    "payment_intent_data[description]": `FV ${invoice.number}`.slice(0, 120),
   });
 
   if (input.paymentMethod === "BLIK") {

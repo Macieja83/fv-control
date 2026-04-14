@@ -240,14 +240,6 @@ export function SettingsPanel() {
                 type="button"
                 className="btn-ghost"
                 disabled={checkoutLoadingMethod !== null}
-                onClick={() => void onCheckout('pro', 'BLIK')}
-              >
-                {checkoutLoadingMethod === 'BLIK' ? 'Przekierowanie…' : 'PRO - BLIK'}
-              </button>
-              <button
-                type="button"
-                className="btn-ghost"
-                disabled={checkoutLoadingMethod !== null}
                 onClick={() => void onCheckout('pro', 'GOOGLE_PAY')}
               >
                 {checkoutLoadingMethod === 'GOOGLE_PAY' ? 'Przekierowanie…' : 'PRO - Google Pay'}

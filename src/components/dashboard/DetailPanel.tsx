@@ -351,15 +351,27 @@ export function DetailPanel({
                 <div className="action-grid action-grid--modal">
                   {onPayOnline && row.payment_status !== 'paid' && (
                     <>
-                      <button type="button" className="btn btn--primary" onClick={() => void onPayOnline(row.id, 'BLIK')}>
-                        Zapłać BLIK
-                      </button>
+                      {row.currency === 'PLN' && (
+                        <button type="button" className="btn btn--primary" onClick={() => void onPayOnline(row.id, 'BLIK')}>
+                          Zapłać BLIK
+                        </button>
+                      )}
                       <button type="button" className="btn" onClick={() => void onPayOnline(row.id, 'GOOGLE_PAY')}>
                         Zapłać Google Pay
                       </button>
                       <button type="button" className="btn" onClick={() => void onPayOnline(row.id, 'APPLE_PAY')}>
                         Zapłać Apple Pay
                       </button>
+                      {row.currency === 'PLN' ? (
+                        <p className="workspace-panel__muted" style={{ gridColumn: '1 / -1', margin: 0 }}>
+                          BLIK: w aplikacji banku wygeneruj <strong>6-cyfrowy kod</strong>, wpisz go na stronie Stripe — potem zatwierdź powiadomienie w banku (do ~60 s). W{' '}
+                          <strong>trybie test Stripe</strong> zamiast banku wpisz np. <span className="mono">123456</span>.
+                        </p>
+                      ) : (
+                        <p className="workspace-panel__muted" style={{ gridColumn: '1 / -1', margin: 0 }}>
+                          BLIK jest dostępny tylko dla faktur w PLN — ta faktura jest w {row.currency}; użyj karty / portfela.
+                        </p>
+                      )}
                     </>
                   )}
                   <button type="button" className="btn btn--primary" onClick={() => onPaid(row.id)}>Oznacz zapłaconą</button>

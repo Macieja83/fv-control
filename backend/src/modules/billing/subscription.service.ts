@@ -39,6 +39,12 @@ export async function createCheckoutSession(
   if (input.provider === "P24") {
     throw AppError.unavailable("P24 checkout session endpoint is not configured yet");
   }
+  // Stripe: BLIK nie jest obsługiwany w Checkout w trybie subscription (tylko one-time payment).
+  if (input.paymentMethod === "BLIK") {
+    throw AppError.validation(
+      "BLIK nie jest dostępny dla subskrypcji w Stripe — wybierz kartę / Google Pay / Apple Pay albo skonfiguruj inną bramkę.",
+    );
+  }
 
   const cfg = loadConfig();
   if (!cfg.STRIPE_SECRET_KEY) throw AppError.unavailable("Missing STRIPE_SECRET_KEY");
@@ -54,6 +60,7 @@ export async function createCheckoutSession(
 
   const params = new URLSearchParams({
     mode: "subscription",
+    locale: "pl",
     "line_items[0][price]": priceId,
     "line_items[0][quantity]": "1",
     success_url: input.successUrl,
@@ -62,12 +69,8 @@ export async function createCheckoutSession(
     "subscription_data[metadata][tenantId]": tenantId,
     "client_reference_id": tenantId,
   });
-  if (input.paymentMethod === "BLIK") {
-    params.append("payment_method_types[]", "blik");
-  } else {
-    // Stripe Checkout renders Google Pay / Apple Pay in the card wallet sheet when eligible.
-    params.append("payment_method_types[]", "card");
-  }
+  // Stripe Checkout renders Google Pay / Apple Pay in the card wallet sheet when eligible.
+  params.append("payment_method_types[]", "card");
   if (current?.providerCustomerId) params.set("customer", current.providerCustomerId);
   if (tenant.nip) params.set("customer_email", `${tenantId.slice(0, 8)}+${tenant.nip}@example.invalid`);
 
