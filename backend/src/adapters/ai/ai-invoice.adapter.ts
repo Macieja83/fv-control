@@ -1,6 +1,8 @@
 export type ExtractedInvoiceDraft = {
   number?: string;
   issueDate?: string;
+  /** Termin płatności (YYYY-MM-DD) z sekcji Płatność / FA XML */
+  dueDate?: string;
   currency?: string;
   netTotal?: string;
   vatTotal?: string;
@@ -8,6 +10,16 @@ export type ExtractedInvoiceDraft = {
   /** Nazwa sprzedawcy (Sprzedawca) — nie Nabywca */
   contractorName?: string | null;
   contractorNip?: string | null;
+  /** Kod FormaPlatnosci z FA (np. "6") — opcjonalnie */
+  paymentFormCode?: string | null;
+  /** Czytelna forma płatności (np. „Przelew”) */
+  paymentForm?: string | null;
+  /** Nr rachunku (NrRB) bez spacji */
+  bankAccount?: string | null;
+  bankName?: string | null;
+  swift?: string | null;
+  /** Opis rachunku / innej płatności z FA */
+  paymentDescription?: string | null;
   lineItems?: Array<{
     name: string;
     quantity: string;

@@ -13,12 +13,16 @@ Required JSON structure:
 {
   "number": "invoice number (numer faktury)",
   "issueDate": "YYYY-MM-DD",
+  "dueDate": "YYYY-MM-DD payment due date (termin płatności) or null",
   "currency": "PLN/EUR/USD/GBP",
   "netTotal": "0.00",
   "vatTotal": "0.00",
   "grossTotal": "0.00",
   "contractorName": "legal name of seller (Sprzedawca) or null",
   "contractorNip": "exactly 10 digits, no dashes/spaces, or null",
+  "paymentForm": "payment method in plain language (e.g. Przelew, Gotówka) or null",
+  "bankAccount": "seller bank account / IBAN digits only, no spaces, or null",
+  "paymentDescription": "transfer title / opis płatności or null",
   "lineItems": [
     {
       "name": "item description",
@@ -38,6 +42,7 @@ Rules:
 - If multiple NIPs appear, use only Sprzedawca's NIP
 - contractorName: include full name as on document (firma, spółka, imię i nazwisko)
 - confidence: 0.0 to 1.0 reflecting extraction certainty
+- dueDate / paymentForm / bankAccount / paymentDescription: only if clearly visible on the document
 - Omit or set to null any unknown fields
 - Return ONLY valid JSON, no markdown fences`;
 
@@ -117,17 +122,32 @@ function pickContractorName(raw: Record<string, unknown>): string | null {
   return null;
 }
 
+function trimOrUndef(s: unknown): string | undefined {
+  if (typeof s !== "string") return undefined;
+  const t = s.trim();
+  return t.length > 0 ? t : undefined;
+}
+
 function mapResponseToDraft(raw: Record<string, unknown>): ExtractedInvoiceDraft {
   const nip = pickNipFromObject(raw);
+  const dueRaw = trimOrUndef(raw.dueDate);
+  const dueDate =
+    dueRaw && dueRaw.length >= 10 && /^\d{4}-\d{2}-\d{2}/.test(dueRaw) ? dueRaw.slice(0, 10) : undefined;
+  const bankRaw = trimOrUndef(raw.bankAccount);
+  const bankAccount = bankRaw ? bankRaw.replace(/\s/g, "") : undefined;
   return {
     number: typeof raw.number === "string" ? raw.number : undefined,
     issueDate: typeof raw.issueDate === "string" ? raw.issueDate : undefined,
+    dueDate,
     currency: typeof raw.currency === "string" ? raw.currency : undefined,
     netTotal: toMoneyStr(raw.netTotal, "0"),
     vatTotal: toMoneyStr(raw.vatTotal, "0"),
     grossTotal: toMoneyStr(raw.grossTotal, "0"),
     contractorName: pickContractorName(raw),
     contractorNip: nip,
+    paymentForm: trimOrUndef(raw.paymentForm) ?? null,
+    bankAccount: bankAccount ?? null,
+    paymentDescription: trimOrUndef(raw.paymentDescription) ?? null,
     lineItems: Array.isArray(raw.lineItems)
       ? raw.lineItems.map((li: Record<string, unknown>) => ({
           name: toStr(li.name, ""),
