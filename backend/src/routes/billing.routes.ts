@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
+import { loadConfig } from "../config.js";
 import { AppError } from "../lib/errors.js";
 import { assertCanManageIntegrations } from "../lib/roles.js";
 import { parseOrThrow } from "../lib/validate.js";
@@ -27,6 +28,30 @@ const switchPlanSchema = z.object({
 });
 
 const billingRoutes: FastifyPluginAsync = async (app) => {
+  app.get(
+    "/billing/stripe-public",
+    {
+      preHandler: [app.authenticate],
+      schema: { tags: ["Billing"], summary: "Stripe mode hint for UI (no secrets)" },
+    },
+    async () => {
+      const cfg = loadConfig();
+      const sk = cfg.STRIPE_SECRET_KEY ?? "";
+      const mode: "live" | "test" | "unset" = sk.startsWith("sk_live")
+        ? "live"
+        : sk.startsWith("sk_test")
+          ? "test"
+          : "unset";
+      return {
+        data: {
+          mode,
+          /** True when real BLIK bank-app confirmation is NOT wired (test key or missing key). */
+          blikRealBankConfirmationOnlyInLive: mode !== "live",
+        },
+      };
+    },
+  );
+
   app.get(
     "/billing/subscription",
     { preHandler: [app.authenticate], schema: { tags: ["Billing"], summary: "Current tenant subscription" } },

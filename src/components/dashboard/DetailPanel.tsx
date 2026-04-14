@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { InvoiceRecord } from '../../types/invoice'
 import { DuplicateBadge, PaymentBadge, ScopeBadge, SourceBadge } from './Badges'
 import { InvoiceDocumentPreview } from './InvoiceDocumentPreview'
+import { fetchBillingStripePublic } from '../../api/billingApi'
 import { fetchInvoiceEvents, type InvoiceEventRow } from '../../api/invoicesApi'
 import { getStoredToken } from '../../auth/session'
 
@@ -71,6 +72,8 @@ export function DetailPanel({
   const [adoptBusy, setAdoptBusy] = useState(false)
   const [paymentEvents, setPaymentEvents] = useState<InvoiceEventRow[]>([])
   const [paymentEventsLoading, setPaymentEventsLoading] = useState(false)
+  /** Z API: czy BLIK wymaga trybu Live Stripe, żeby bank wysłał prawdziwe potwierdzenie. */
+  const [stripeBlikNeedsLive, setStripeBlikNeedsLive] = useState<boolean | null>(null)
   const overlayRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -85,6 +88,21 @@ export function DetailPanel({
     setAdoptNip(digits.slice(0, 10))
     setAdoptName('')
   }, [row?.id])
+
+  useEffect(() => {
+    if (!onPayOnline || !row) {
+      setStripeBlikNeedsLive(null)
+      return
+    }
+    const token = getStoredToken()
+    if (!token) {
+      setStripeBlikNeedsLive(null)
+      return
+    }
+    void fetchBillingStripePublic(token)
+      .then((d) => setStripeBlikNeedsLive(d.blikRealBankConfirmationOnlyInLive))
+      .catch(() => setStripeBlikNeedsLive(null))
+  }, [row?.id, onPayOnline])
 
   useEffect(() => {
     if (!row) {
@@ -351,6 +369,16 @@ export function DetailPanel({
                 <div className="action-grid action-grid--modal">
                   {onPayOnline && row.payment_status !== 'paid' && (
                     <>
+                      {stripeBlikNeedsLive === true && row.currency === 'PLN' && (
+                        <div className="detail-alert" role="status" style={{ gridColumn: '1 / -1' }}>
+                          <strong>Tryb test Stripe (klucz sk_test)</strong> — sieć BLIK <strong>nie łączy się</strong> z prawdziwą
+                          aplikacją banku. Nie dostaniesz tam normalnego potwierdzenia: na stronie Stripe wpisz dowolny 6-cyfrowy kod
+                          (np. <span className="mono">123456</span>). <strong>Prawdziwy BLIK</strong> (kod z banku + push) działa
+                          dopiero po przełączeniu na <strong>Live</strong> w Stripe: klucze <span className="mono">sk_live_…</span>,
+                          osobny webhook (<span className="mono">whsec_…</span>) i te same zmienne w{' '}
+                          <span className="mono">backend/.env</span> na serwerze.
+                        </div>
+                      )}
                       {row.currency === 'PLN' && (
                         <button type="button" className="btn btn--primary" onClick={() => void onPayOnline(row.id, 'BLIK')}>
                           Zapłać BLIK
@@ -364,8 +392,8 @@ export function DetailPanel({
                       </button>
                       {row.currency === 'PLN' ? (
                         <p className="workspace-panel__muted" style={{ gridColumn: '1 / -1', margin: 0 }}>
-                          BLIK: w aplikacji banku wygeneruj <strong>6-cyfrowy kod</strong>, wpisz go na stronie Stripe — potem zatwierdź powiadomienie w banku (do ~60 s). W{' '}
-                          <strong>trybie test Stripe</strong> zamiast banku wpisz np. <span className="mono">123456</span>.
+                          BLIK (produkcja): kod z aplikacji banku → wpisujesz go na stronie Stripe → potem zatwierdzasz powiadomienie w
+                          banku (~60 s).
                         </p>
                       ) : (
                         <p className="workspace-panel__muted" style={{ gridColumn: '1 / -1', margin: 0 }}>

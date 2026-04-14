@@ -11,6 +11,20 @@ function authHeader(token: string) {
   return { Authorization: `Bearer ${token}` }
 }
 
+export type BillingStripePublic = {
+  mode: 'live' | 'test' | 'unset'
+  blikRealBankConfirmationOnlyInLive: boolean
+}
+
+export async function fetchBillingStripePublic(token: string): Promise<BillingStripePublic> {
+  const res = await fetch('/api/v1/billing/stripe-public', { headers: authHeader(token) })
+  const body = (await res.json()) as { data?: BillingStripePublic; error?: { message?: string } }
+  if (!res.ok || !body.data) {
+    throw new Error(body.error?.message ?? `Nie udało się pobrać trybu Stripe (${res.status})`)
+  }
+  return body.data
+}
+
 export async function fetchCurrentSubscription(token: string): Promise<SubscriptionRow | null> {
   const res = await fetch('/api/v1/billing/subscription', { headers: authHeader(token) })
   const body = (await res.json()) as { data?: SubscriptionRow | null; error?: { message?: string } }
