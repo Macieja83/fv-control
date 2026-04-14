@@ -7,13 +7,21 @@ export type SubscriptionRow = {
   trialEndsAt?: string | null
 }
 
+export type WorkspaceUsage = {
+  used: number
+  limit: number | null
+  planCode: string
+  hasProEntitlement: boolean
+}
+
 function authHeader(token: string) {
   return { Authorization: `Bearer ${token}` }
 }
 
 export type BillingStripePublic = {
   mode: 'live' | 'test' | 'unset'
-  blikRealBankConfirmationOnlyInLive: boolean
+  /** true gdy sk_test — checkout PRO używa danych testowych Stripe */
+  subscriptionCheckoutUsesTestData: boolean
 }
 
 export async function fetchBillingStripePublic(token: string): Promise<BillingStripePublic> {
@@ -25,11 +33,19 @@ export async function fetchBillingStripePublic(token: string): Promise<BillingSt
   return body.data
 }
 
-export async function fetchCurrentSubscription(token: string): Promise<SubscriptionRow | null> {
+export async function fetchBillingSubscriptionState(token: string): Promise<{
+  subscription: SubscriptionRow | null
+  workspace: WorkspaceUsage
+}> {
   const res = await fetch('/api/v1/billing/subscription', { headers: authHeader(token) })
-  const body = (await res.json()) as { data?: SubscriptionRow | null; error?: { message?: string } }
-  if (!res.ok) throw new Error(body.error?.message ?? `Nie udało się pobrać subskrypcji (${res.status})`)
-  return body.data ?? null
+  const body = (await res.json()) as {
+    data?: { subscription: SubscriptionRow | null; workspace: WorkspaceUsage }
+    error?: { message?: string }
+  }
+  if (!res.ok || !body.data) {
+    throw new Error(body.error?.message ?? `Nie udało się pobrać subskrypcji (${res.status})`)
+  }
+  return body.data
 }
 
 export async function createSubscriptionCheckout(
@@ -39,7 +55,7 @@ export async function createSubscriptionCheckout(
     planCode: 'free' | 'pro'
     successUrl: string
     cancelUrl: string
-    paymentMethod?: 'CARD' | 'BLIK' | 'GOOGLE_PAY' | 'APPLE_PAY'
+    paymentMethod?: 'CARD' | 'GOOGLE_PAY' | 'APPLE_PAY'
   },
 ): Promise<{ checkoutUrl: string }> {
   const res = await fetch('/api/v1/billing/subscription/checkout', {

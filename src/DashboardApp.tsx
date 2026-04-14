@@ -68,7 +68,6 @@ export default function DashboardApp() {
     adoptInvoiceVendor,
     sendInvoiceToKsef,
     createSalesInvoice,
-    payInvoiceOnline,
   } = useInvoiceDashboard()
 
   useEffect(() => {
@@ -197,7 +196,6 @@ export default function DashboardApp() {
           onDeleteInvoice={(id) => void deleteInvoice(id)}
           onSendToKsef={(id) => void sendInvoiceToKsef(id)}
           onAdoptVendor={(id, body) => void adoptInvoiceVendor(id, body)}
-          onPayOnline={(id, method) => void payInvoiceOnline(id, method)}
         />
       )}
       <ActivityDrawer open={activityOpen} onClose={() => setActivityOpen(false)} />

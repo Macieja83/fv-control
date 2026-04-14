@@ -77,5 +77,6 @@ export function mapApiInvoiceRowToRecord(row: ApiInvoiceListRow): InvoiceRecord 
     ledger_kind: row.ledgerKind === 'SALE' ? 'sale' : 'purchase',
     ksef_status: row.ksefStatus ?? undefined,
     ksef_required: row.ksefRequired === true,
+    transfer: row.transfer,
   }
 }

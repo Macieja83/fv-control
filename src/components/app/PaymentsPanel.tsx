@@ -84,8 +84,9 @@ export function PaymentsPanel() {
         <div>
           <h2 className="workspace-panel__title">Płatności</h2>
           <p className="workspace-panel__lead">
-            Zapis stanu połączenia z bankiem (MVP — bez PSD2). Pełna integracja wymaga rejestracji aplikacji u
-            dostawcy usług płatniczych.
+            Płatności <strong>za faktury do kontrahentów</strong> to przelew na konto z faktury (szczegóły faktury) lub przyszła
+            integracja <strong>PISP</strong> (inicjacja w banku). Subskrypcja PRO aplikacji jest w <strong>Ustawieniach</strong>{' '}
+            (Stripe).
           </p>
         </div>
       </header>

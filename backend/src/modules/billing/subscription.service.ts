@@ -2,6 +2,8 @@ import type { PrismaClient } from "@prisma/client";
 import { loadConfig } from "../../config.js";
 import { AppError } from "../../lib/errors.js";
 
+/** PRO w Stripe: produkt / cena **99 PLN / mies.** (`STRIPE_PRICE_ID_PRO` w Dashboard). */
+
 type CheckoutProvider = "STRIPE" | "P24";
 type CheckoutPaymentMethod = "CARD" | "BLIK" | "GOOGLE_PAY" | "APPLE_PAY";
 

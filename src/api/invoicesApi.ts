@@ -35,6 +35,14 @@ export type ApiInvoiceListRow = {
   ksefRequired?: boolean
   needsContractorVerification?: boolean
   extractedVendorNip?: string | null
+  transfer?: {
+    transferRecipient: string | null
+    transferBankAccount: string | null
+    transferBankName: string | null
+    transferTitle: string | null
+    transferAmount: string
+    transferCurrency: string
+  }
 }
 
 export type InvoicesListResponse = {
@@ -245,28 +253,6 @@ export async function postRetryInvoiceExtraction(
   return (await res.json()) as RetryExtractionResponse
 }
 
-export async function createInvoicePaymentCheckout(
-  token: string,
-  invoiceId: string,
-  body: {
-    successUrl: string
-    cancelUrl: string
-    paymentMethod?: 'CARD' | 'BLIK' | 'GOOGLE_PAY' | 'APPLE_PAY'
-  },
-): Promise<{ checkoutUrl: string }> {
-  const res = await fetch(`${API}/invoices/${encodeURIComponent(invoiceId)}/payment/checkout`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-  })
-  const json = (await res.json()) as { checkoutUrl?: string; error?: { message?: string } }
-  if (!res.ok || !json.checkoutUrl) throw new Error(json.error?.message ?? `Nie udało się utworzyć checkout (${res.status})`)
-  return { checkoutUrl: json.checkoutUrl }
-}
-
 export async function fetchInvoiceEvents(token: string, invoiceId: string): Promise<InvoiceEventRow[]> {
   const res = await fetch(`${API}/invoices/${encodeURIComponent(invoiceId)}/events`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -274,6 +260,25 @@ export async function fetchInvoiceEvents(token: string, invoiceId: string): Prom
   if (res.status === 401) throw new Error('Sesja wygasła — zaloguj się ponownie.')
   if (!res.ok) throw new Error(await readErrorMessage(res))
   return (await res.json()) as InvoiceEventRow[]
+}
+
+export type InvoicePispPaymentState = {
+  enabled: boolean
+  reason: 'not_configured' | 'integration_pending' | 'already_paid'
+  message: string
+  transfer: ApiInvoiceListRow['transfer'] | null
+}
+
+export async function fetchInvoicePispPaymentState(
+  token: string,
+  invoiceId: string,
+): Promise<InvoicePispPaymentState> {
+  const res = await fetch(`${API}/invoices/${encodeURIComponent(invoiceId)}/payment/pisp`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (res.status === 401) throw new Error('Sesja wygasła — zaloguj się ponownie.')
+  if (!res.ok) throw new Error(await readErrorMessage(res))
+  return (await res.json()) as InvoicePispPaymentState
 }
 
 export type AdoptVendorResponse = { contractorId: string; created: boolean }

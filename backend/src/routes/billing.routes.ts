@@ -10,13 +10,14 @@ import {
   getCurrentSubscription,
   switchToFreePlan,
 } from "../modules/billing/subscription.service.js";
+import { getWorkspaceUsage } from "../modules/billing/subscription-plans.js";
 
 const checkoutSchema = z.object({
   provider: z.enum(["STRIPE", "P24"]).default("STRIPE"),
   planCode: z.enum(["free", "pro"]),
   successUrl: z.string().url(),
   cancelUrl: z.string().url(),
-  paymentMethod: z.enum(["CARD", "BLIK", "GOOGLE_PAY", "APPLE_PAY"]).optional(),
+  paymentMethod: z.enum(["CARD", "GOOGLE_PAY", "APPLE_PAY"]).optional(),
 });
 
 const portalSchema = z.object({
@@ -32,7 +33,7 @@ const billingRoutes: FastifyPluginAsync = async (app) => {
     "/billing/stripe-public",
     {
       preHandler: [app.authenticate],
-      schema: { tags: ["Billing"], summary: "Stripe mode hint for UI (no secrets)" },
+      schema: { tags: ["Billing"], summary: "Stripe mode for subscription checkout only (no secrets)" },
     },
     async () => {
       const cfg = loadConfig();
@@ -45,8 +46,8 @@ const billingRoutes: FastifyPluginAsync = async (app) => {
       return {
         data: {
           mode,
-          /** True when real BLIK bank-app confirmation is NOT wired (test key or missing key). */
-          blikRealBankConfirmationOnlyInLive: mode !== "live",
+          /** Płatności za faktury nie idą przez Stripe — tylko subskrypcja PRO. */
+          subscriptionCheckoutUsesTestData: mode === "test",
         },
       };
     },
@@ -56,8 +57,10 @@ const billingRoutes: FastifyPluginAsync = async (app) => {
     "/billing/subscription",
     { preHandler: [app.authenticate], schema: { tags: ["Billing"], summary: "Current tenant subscription" } },
     async (request) => {
-      const row = await getCurrentSubscription(app.prisma, request.authUser!.tenantId);
-      return { data: row };
+      const tenantId = request.authUser!.tenantId;
+      const row = await getCurrentSubscription(app.prisma, tenantId);
+      const workspace = await getWorkspaceUsage(app.prisma, tenantId);
+      return { data: { subscription: row, workspace } };
     },
   );
 

@@ -1,9 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import QRCode from 'react-qr-code'
+import { buildEpcSctQrPayload } from '../../lib/epcTransferQr'
 import type { InvoiceRecord } from '../../types/invoice'
 import { DuplicateBadge, PaymentBadge, ScopeBadge, SourceBadge } from './Badges'
 import { InvoiceDocumentPreview } from './InvoiceDocumentPreview'
-import { fetchBillingStripePublic } from '../../api/billingApi'
-import { fetchInvoiceEvents, type InvoiceEventRow } from '../../api/invoicesApi'
+import {
+  fetchInvoiceEvents,
+  fetchInvoicePispPaymentState,
+  type InvoiceEventRow,
+  type InvoicePispPaymentState,
+} from '../../api/invoicesApi'
 import { getStoredToken } from '../../auth/session'
 
 const money = (amount: number, c: InvoiceRecord['currency']) =>
@@ -37,8 +43,6 @@ type Props = {
   onSendToKsef?: (id: string) => void | Promise<void>
   /** Utwórz / dopnij kontrahenta po NIP i przypisz do faktury kosztowej. */
   onAdoptVendor?: (id: string, body?: { nip?: string; name?: string }) => void | Promise<void>
-  /** Płatność online wybranej faktury przez checkout. */
-  onPayOnline?: (id: string, method: 'CARD' | 'BLIK' | 'GOOGLE_PAY' | 'APPLE_PAY') => void | Promise<void>
 }
 
 export function DetailPanel({
@@ -62,7 +66,6 @@ export function DetailPanel({
   onDeleteInvoice,
   onSendToKsef,
   onAdoptVendor,
-  onPayOnline,
 }: Props) {
   const [draftNotes, setDraftNotes] = useState('')
   const [ocrBusy, setOcrBusy] = useState(false)
@@ -72,8 +75,8 @@ export function DetailPanel({
   const [adoptBusy, setAdoptBusy] = useState(false)
   const [paymentEvents, setPaymentEvents] = useState<InvoiceEventRow[]>([])
   const [paymentEventsLoading, setPaymentEventsLoading] = useState(false)
-  /** Z API: czy BLIK wymaga trybu Live Stripe, żeby bank wysłał prawdziwe potwierdzenie. */
-  const [stripeBlikNeedsLive, setStripeBlikNeedsLive] = useState<boolean | null>(null)
+  const [pispState, setPispState] = useState<InvoicePispPaymentState | null>(null)
+  const [pispLoading, setPispLoading] = useState(false)
   const overlayRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -89,20 +92,24 @@ export function DetailPanel({
     setAdoptName('')
   }, [row?.id])
 
-  useEffect(() => {
-    if (!onPayOnline || !row) {
-      setStripeBlikNeedsLive(null)
-      return
-    }
-    const token = getStoredToken()
-    if (!token) {
-      setStripeBlikNeedsLive(null)
-      return
-    }
-    void fetchBillingStripePublic(token)
-      .then((d) => setStripeBlikNeedsLive(d.blikRealBankConfirmationOnlyInLive))
-      .catch(() => setStripeBlikNeedsLive(null))
-  }, [row?.id, onPayOnline])
+  const epcQrPayload = useMemo(() => {
+    if (!row?.transfer?.transferBankAccount) return null
+    return buildEpcSctQrPayload({
+      beneficiaryName: row.transfer.transferRecipient?.trim() || 'Odbiorca',
+      accountRaw: row.transfer.transferBankAccount,
+      amount: row.transfer.transferAmount,
+      currency: row.transfer.transferCurrency,
+      remittance: row.transfer.transferTitle?.trim() || row.invoice_number,
+    })
+  }, [
+    row?.id,
+    row?.invoice_number,
+    row?.transfer?.transferBankAccount,
+    row?.transfer?.transferAmount,
+    row?.transfer?.transferCurrency,
+    row?.transfer?.transferRecipient,
+    row?.transfer?.transferTitle,
+  ])
 
   useEffect(() => {
     if (!row) {
@@ -130,6 +137,23 @@ export function DetailPanel({
       })
       .finally(() => setPaymentEventsLoading(false))
   }, [row?.id])
+
+  useEffect(() => {
+    if (!row || row.ledger_kind !== 'purchase' || row.payment_status === 'paid') {
+      setPispState(null)
+      return
+    }
+    const token = getStoredToken()
+    if (!token) {
+      setPispState(null)
+      return
+    }
+    setPispLoading(true)
+    void fetchInvoicePispPaymentState(token, row.id)
+      .then(setPispState)
+      .catch(() => setPispState(null))
+      .finally(() => setPispLoading(false))
+  }, [row?.id, row?.ledger_kind, row?.payment_status])
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -366,42 +390,112 @@ export function DetailPanel({
 
               <section className="detail-section">
                 <h3>Akcje operatora</h3>
-                <div className="action-grid action-grid--modal">
-                  {onPayOnline && row.payment_status !== 'paid' && (
-                    <>
-                      {stripeBlikNeedsLive === true && row.currency === 'PLN' && (
-                        <div className="detail-alert" role="status" style={{ gridColumn: '1 / -1' }}>
-                          <strong>Tryb test Stripe (klucz sk_test)</strong> — sieć BLIK <strong>nie łączy się</strong> z prawdziwą
-                          aplikacją banku. Nie dostaniesz tam normalnego potwierdzenia: na stronie Stripe wpisz dowolny 6-cyfrowy kod
-                          (np. <span className="mono">123456</span>). <strong>Prawdziwy BLIK</strong> (kod z banku + push) działa
-                          dopiero po przełączeniu na <strong>Live</strong> w Stripe: klucze <span className="mono">sk_live_…</span>,
-                          osobny webhook (<span className="mono">whsec_…</span>) i te same zmienne w{' '}
-                          <span className="mono">backend/.env</span> na serwerze.
+                {row.ledger_kind === 'purchase' && row.payment_status !== 'paid' && (
+                  <div className="detail-section detail-section--nested" style={{ marginBottom: '1rem' }}>
+                    <h4 style={{ margin: '0 0 0.5rem', fontSize: '0.95rem' }}>Płatność przelewem do wystawcy</h4>
+                    <p className="workspace-panel__muted" style={{ margin: '0 0 0.75rem' }}>
+                      Środki idą <strong>bezpośrednio na konto kontrahenta</strong> z faktury. Możesz zeskanować{' '}
+                      <strong>kod QR (standard EPC)</strong> w aplikacji banku albo skopiować pola ręcznie.{' '}
+                      <strong>PISP</strong> (przelew z aplikacji przez bank) — po podłączeniu dostawcy open banking; status poniżej.
+                    </p>
+                    {row.transfer?.transferBankAccount ? (
+                      <dl className="detail-dl">
+                        <dt>Odbiorca</dt>
+                        <dd>{row.transfer.transferRecipient ?? '—'}</dd>
+                        <dt>Bank</dt>
+                        <dd>{row.transfer.transferBankName ?? '—'}</dd>
+                        <dt>Numer rachunku</dt>
+                        <dd className="mono wrap">
+                          {row.transfer.transferBankAccount}{' '}
+                          <button
+                            type="button"
+                            className="btn-ghost"
+                            onClick={() => void navigator.clipboard.writeText(row.transfer!.transferBankAccount!)}
+                          >
+                            Kopiuj
+                          </button>
+                        </dd>
+                        <dt>Tytuł</dt>
+                        <dd className="mono wrap">
+                          {row.transfer.transferTitle ?? '—'}{' '}
+                          {row.transfer.transferTitle ? (
+                            <button
+                              type="button"
+                              className="btn-ghost"
+                              onClick={() => void navigator.clipboard.writeText(row.transfer!.transferTitle!)}
+                            >
+                              Kopiuj
+                            </button>
+                          ) : null}
+                        </dd>
+                        <dt>Kwota</dt>
+                        <dd>
+                          {money(Number.parseFloat(row.transfer.transferAmount) || 0, row.currency)}{' '}
+                          <button
+                            type="button"
+                            className="btn-ghost"
+                            onClick={() =>
+                              void navigator.clipboard.writeText(
+                                `${row.transfer!.transferAmount} ${row.transfer!.transferCurrency}`,
+                              )
+                            }
+                          >
+                            Kopiuj
+                          </button>
+                        </dd>
+                      </dl>
+                    ) : null}
+                    {row.transfer?.transferBankAccount && epcQrPayload ? (
+                      <div style={{ marginTop: '1rem' }}>
+                        <p className="workspace-panel__muted" style={{ margin: '0 0 0.5rem' }}>
+                          <strong>Kod QR przelewu</strong> (EPC / SEPA) — zeskanuj w banku (np. „Płatności”, „Przelew z kodu”).
+                          Obsługuje <strong>PLN</strong> i <strong>EUR</strong>. Gdy bank nie czyta QR, użyj pól powyżej.
+                        </p>
+                        <div
+                          style={{
+                            display: 'inline-block',
+                            padding: 12,
+                            background: '#fff',
+                            borderRadius: 8,
+                            border: '1px solid var(--color-border, #ddd)',
+                          }}
+                        >
+                          <QRCode value={epcQrPayload} size={200} level="M" />
                         </div>
-                      )}
-                      {row.currency === 'PLN' && (
-                        <button type="button" className="btn btn--primary" onClick={() => void onPayOnline(row.id, 'BLIK')}>
-                          Zapłać BLIK
-                        </button>
-                      )}
-                      <button type="button" className="btn" onClick={() => void onPayOnline(row.id, 'GOOGLE_PAY')}>
-                        Zapłać Google Pay
-                      </button>
-                      <button type="button" className="btn" onClick={() => void onPayOnline(row.id, 'APPLE_PAY')}>
-                        Zapłać Apple Pay
-                      </button>
-                      {row.currency === 'PLN' ? (
-                        <p className="workspace-panel__muted" style={{ gridColumn: '1 / -1', margin: 0 }}>
-                          BLIK (produkcja): kod z aplikacji banku → wpisujesz go na stronie Stripe → potem zatwierdzasz powiadomienie w
-                          banku (~60 s).
-                        </p>
-                      ) : (
-                        <p className="workspace-panel__muted" style={{ gridColumn: '1 / -1', margin: 0 }}>
-                          BLIK jest dostępny tylko dla faktur w PLN — ta faktura jest w {row.currency}; użyj karty / portfela.
-                        </p>
-                      )}
-                    </>
-                  )}
+                      </div>
+                    ) : row.transfer?.transferBankAccount &&
+                      row.currency !== 'PLN' &&
+                      row.currency !== 'EUR' ? (
+                      <p className="workspace-panel__muted" style={{ marginTop: '0.75rem' }} role="status">
+                        Kod QR EPC jest dostępny dla walut PLN i EUR — ta faktura jest w {row.currency}; użyj danych do przelewu
+                        ręcznie.
+                      </p>
+                    ) : null}
+                    {row.transfer?.transferBankAccount &&
+                    !epcQrPayload &&
+                    (row.currency === 'PLN' || row.currency === 'EUR') ? (
+                      <p className="workspace-panel__muted" style={{ marginTop: '0.5rem' }} role="status">
+                        Nie udało się złożyć poprawnego IBAN z numeru rachunku — kod QR jest niedostępny. Sprawdź cyfry lub wykonaj
+                        przelew ręcznie z pól powyżej.
+                      </p>
+                    ) : null}
+                    {!row.transfer?.transferBankAccount ? (
+                      <p className="workspace-panel__muted" role="status">
+                        Brak numeru rachunku w danych faktury — sprawdź dokument lub ponów ekstrakcję (OCR).
+                      </p>
+                    ) : null}
+                    {pispLoading ? (
+                      <p className="workspace-panel__muted" style={{ marginTop: '0.75rem' }} role="status">
+                        Sprawdzanie statusu PISP…
+                      </p>
+                    ) : pispState ? (
+                      <p className="workspace-panel__muted" style={{ marginTop: '0.75rem' }} role="status">
+                        <strong>PISP:</strong> {pispState.message}
+                      </p>
+                    ) : null}
+                  </div>
+                )}
+                <div className="action-grid action-grid--modal">
                   <button type="button" className="btn btn--primary" onClick={() => onPaid(row.id)}>Oznacz zapłaconą</button>
                   <button type="button" className="btn" onClick={() => onUnpaid(row.id)}>Oznacz niezapłaconą</button>
                   <button type="button" className="btn" onClick={() => onNeedsReview(row.id)}>Do sprawdzenia</button>

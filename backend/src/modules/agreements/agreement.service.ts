@@ -4,6 +4,7 @@ import type { PrismaClient } from "@prisma/client";
 import { createObjectStorage } from "../../adapters/storage/create-storage.js";
 import { extractAgreementWithOpenAI } from "../../adapters/ai/openai-agreement.extract.js";
 import { AppError } from "../../lib/errors.js";
+import { assertAgreementCreationAllowed } from "../billing/subscription-plans.js";
 import { parseInvoiceDate } from "../invoices/invoice-dates.js";
 import type { AgreementPatchInput } from "./agreement.schema.js";
 
@@ -89,6 +90,7 @@ export async function uploadAgreement(
     mimeType: string;
   },
 ) {
+  await assertAgreementCreationAllowed(prisma, params.tenantId);
   const sha = sha256Buffer(params.buffer);
   const storage = createObjectStorage();
   const objectKey = `agreements/${sha}-${params.filename.replace(/[^a-zA-Z0-9._-]/g, "_")}`;

@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client";
+import { buildInvoiceTransferHints } from "./invoice-transfer-hints.js";
 
 export type InvoiceDetailPayload = Prisma.InvoiceGetPayload<{
   include: {
@@ -9,6 +10,12 @@ export type InvoiceDetailPayload = Prisma.InvoiceGetPayload<{
 }>;
 
 export function serializeInvoiceDetail(inv: InvoiceDetailPayload) {
+  const transfer = buildInvoiceTransferHints(inv.normalizedPayload, {
+    number: inv.number,
+    grossTotal: inv.grossTotal,
+    currency: inv.currency,
+    contractor: inv.contractor ? { name: inv.contractor.name, nip: inv.contractor.nip } : null,
+  });
   return {
     ...inv,
     netTotal: inv.netTotal.toString(),
@@ -25,5 +32,6 @@ export function serializeInvoiceDetail(inv: InvoiceDetailPayload) {
       grossValue: i.grossValue.toString(),
     })),
     files: inv.files.map((f) => ({ ...f })),
+    transfer,
   };
 }

@@ -1,31 +1,62 @@
 import type { PrismaClient, SubscriptionStatus } from "@prisma/client";
 import { AppError } from "../../lib/errors.js";
 
+/** Plan Free: łączna liczba faktur + umów (bez PRO). */
+export const FREE_WORKSPACE_SLOT_LIMIT = 15;
+
 export const BILLING_PLANS = {
   free: {
     code: "free",
     name: "Free",
-    monthlyInvoiceLimit: 15,
+    workspaceSlotLimit: FREE_WORKSPACE_SLOT_LIMIT,
   },
   pro: {
     code: "pro",
     name: "Pro",
-    monthlyInvoiceLimit: null,
+    workspaceSlotLimit: null as number | null,
   },
 } as const;
 
 export type BillingPlanCode = keyof typeof BILLING_PLANS;
 
-const CAPPED_PLAN_CODES = new Set<string>(["free", "starter"]);
-const ACTIVE_SUBSCRIPTION_STATUSES = new Set<SubscriptionStatus>(["ACTIVE", "TRIALING"]);
+const PRO_SUBSCRIPTION_STATUSES = new Set<SubscriptionStatus>(["ACTIVE", "TRIALING", "PAST_DUE"]);
 
-export function getMonthlyInvoiceLimitForPlan(planCode: string | null | undefined): number | null {
-  if (!planCode) return BILLING_PLANS.free.monthlyInvoiceLimit;
-  if (planCode === "pro") return BILLING_PLANS.pro.monthlyInvoiceLimit;
-  if (CAPPED_PLAN_CODES.has(planCode)) return BILLING_PLANS.free.monthlyInvoiceLimit;
-  return BILLING_PLANS.free.monthlyInvoiceLimit;
+export function tenantHasProEntitlement(planCode: string | null | undefined, status: SubscriptionStatus): boolean {
+  if (planCode !== "pro") return false;
+  return PRO_SUBSCRIPTION_STATUSES.has(status);
 }
 
+export async function countWorkspaceSlots(prisma: PrismaClient, tenantId: string): Promise<number> {
+  const [invoiceCount, agreementCount] = await Promise.all([
+    prisma.invoice.count({ where: { tenantId } }),
+    prisma.agreement.count({ where: { tenantId } }),
+  ]);
+  return invoiceCount + agreementCount;
+}
+
+export async function getWorkspaceUsage(prisma: PrismaClient, tenantId: string) {
+  const sub = await prisma.subscription.findFirst({
+    where: { tenantId },
+    orderBy: { updatedAt: "desc" },
+    select: { planCode: true, status: true },
+  });
+
+  const used = await countWorkspaceSlots(prisma, tenantId);
+  const pro = sub ? tenantHasProEntitlement(sub.planCode, sub.status) : false;
+  const limit = pro ? null : FREE_WORKSPACE_SLOT_LIMIT;
+
+  return {
+    used,
+    limit,
+    planCode: sub?.planCode ?? "free",
+    hasProEntitlement: pro,
+  };
+}
+
+/**
+ * Blokuje tworzenie nowej faktury (dowolna ścieżka), gdy Free ma już 15 slotów (faktury + umowy).
+ * Brak wiersza subskrypcji = Free.
+ */
 export async function assertInvoiceCreationAllowed(prisma: PrismaClient, tenantId: string): Promise<void> {
   const sub = await prisma.subscription.findFirst({
     where: { tenantId },
@@ -33,31 +64,17 @@ export async function assertInvoiceCreationAllowed(prisma: PrismaClient, tenantI
     select: { planCode: true, status: true },
   });
 
-  if (!sub) return;
-  if (!ACTIVE_SUBSCRIPTION_STATUSES.has(sub.status)) {
-    throw AppError.forbidden("Subscription inactive");
-  }
+  if (sub && tenantHasProEntitlement(sub.planCode, sub.status)) return;
 
-  const monthlyLimit = getMonthlyInvoiceLimitForPlan(sub.planCode);
-  if (monthlyLimit == null) return;
-
-  const now = new Date();
-  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0));
-  const nextMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 0, 0, 0, 0));
-
-  const count = await prisma.invoice.count({
-    where: {
-      tenantId,
-      createdAt: {
-        gte: monthStart,
-        lt: nextMonthStart,
-      },
-    },
-  });
-
-  if (count >= monthlyLimit) {
+  const used = await countWorkspaceSlots(prisma, tenantId);
+  if (used >= FREE_WORKSPACE_SLOT_LIMIT) {
     throw AppError.forbidden(
-      `Limit planu FREE został osiągnięty (${monthlyLimit} faktur w tym miesiącu). Przejdź na plan PRO, aby dodać kolejne faktury.`,
+      `Limit planu Free został osiągnięty (${FREE_WORKSPACE_SLOT_LIMIT} dokumentów: faktury + umowy). Wykup PRO (99 zł / mies.), aby mieć nielimitowany dostęp.`,
     );
   }
+}
+
+/** Nowa umowa = +1 slot w limicie Free. */
+export async function assertAgreementCreationAllowed(prisma: PrismaClient, tenantId: string): Promise<void> {
+  await assertInvoiceCreationAllowed(prisma, tenantId);
 }

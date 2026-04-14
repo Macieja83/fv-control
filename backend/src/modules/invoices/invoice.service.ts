@@ -11,6 +11,7 @@ import type {
   InvoiceListQuery,
   InvoiceUpdateInput,
 } from "./invoice.schema.js";
+import { buildInvoiceTransferHints } from "./invoice-transfer-hints.js";
 import { extractVendorNipFromNormalizedPayload } from "./invoice-vendor-nip.js";
 import { serializeInvoiceDetail } from "./invoice-serialize.js";
 import { itemRowFromInput, sumTotalsFromItems } from "./invoice-totals.js";
@@ -81,6 +82,12 @@ export async function listInvoices(prisma: PrismaClient, tenantId: string, q: In
       } = r;
       const extractedVendorNip = extractVendorNipFromNormalizedPayload(normalizedPayload);
       const needsContractorVerification = r.contractorId === null && r.status !== "INGESTING";
+      const transfer = buildInvoiceTransferHints(normalizedPayload, {
+        number: r.number,
+        grossTotal: r.grossTotal,
+        currency: r.currency,
+        contractor: r.contractor ? { name: r.contractor.name, nip: r.contractor.nip } : null,
+      });
       return {
         ...rest,
         netTotal: r.netTotal.toString(),
@@ -92,6 +99,7 @@ export async function listInvoices(prisma: PrismaClient, tenantId: string, q: In
         duplicateCanonicalNumber: duplicatesAsA[0]?.canonical?.number ?? null,
         extractedVendorNip,
         needsContractorVerification,
+        transfer,
       };
     }),
     meta: { total, page: q.page, limit: q.limit, totalPages: Math.ceil(total / q.limit) },

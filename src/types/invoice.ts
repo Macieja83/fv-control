@@ -68,6 +68,15 @@ export interface InvoiceRecord {
   /** Z API: TO_ISSUE, PENDING, SENT, RECEIVED, … */
   ksef_status?: string
   ksef_required?: boolean
+  /** Dane do przelewu na konto wystawcy (z OCR / payloadu). */
+  transfer?: {
+    transferRecipient: string | null
+    transferBankAccount: string | null
+    transferBankName: string | null
+    transferTitle: string | null
+    transferAmount: string
+    transferCurrency: string
+  }
 }
 
 export interface InvoiceFilters {

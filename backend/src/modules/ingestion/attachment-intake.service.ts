@@ -56,7 +56,6 @@ export async function ingestAttachmentAndEnqueue(
   prisma: PrismaClient,
   params: IngestAttachmentParams,
 ): Promise<IngestAttachmentResult> {
-  await assertInvoiceCreationAllowed(prisma, params.tenantId);
   const cfg = loadConfig();
   const sha = sha256Buffer(params.buffer);
 
@@ -81,6 +80,8 @@ export async function ingestAttachmentAndEnqueue(
       };
     }
   }
+
+  await assertInvoiceCreationAllowed(prisma, params.tenantId);
 
   const storage = createObjectStorage();
   const objectKey = `${sha}-${params.filename.replace(/[^a-zA-Z0-9._-]/g, "_")}`;

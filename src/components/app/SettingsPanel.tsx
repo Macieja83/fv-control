@@ -4,9 +4,10 @@ import { fetchPlatformTenants, issueImpersonationToken, type PlatformTenantRow }
 import {
   createBillingPortalSession,
   createSubscriptionCheckout,
-  fetchCurrentSubscription,
+  fetchBillingSubscriptionState,
   switchSubscriptionPlan,
   type SubscriptionRow,
+  type WorkspaceUsage,
 } from '../../api/billingApi'
 import { useAuth } from '../../auth/AuthContext'
 import { getStoredToken, setStoredToken } from '../../auth/session'
@@ -22,9 +23,10 @@ export function SettingsPanel() {
   const [platformTenants, setPlatformTenants] = useState<PlatformTenantRow[]>([])
   const [platformLoading, setPlatformLoading] = useState(false)
   const [subscription, setSubscription] = useState<SubscriptionRow | null>(null)
+  const [workspace, setWorkspace] = useState<WorkspaceUsage | null>(null)
   const [subLoading, setSubLoading] = useState(false)
   const [checkoutLoadingMethod, setCheckoutLoadingMethod] = useState<
-    'CARD' | 'BLIK' | 'GOOGLE_PAY' | 'APPLE_PAY' | null
+    'CARD' | 'GOOGLE_PAY' | 'APPLE_PAY' | null
   >(null)
 
   const load = useCallback(async () => {
@@ -75,8 +77,9 @@ export function SettingsPanel() {
     if (!token) return
     setSubLoading(true)
     try {
-      const row = await fetchCurrentSubscription(token)
+      const { subscription: row, workspace: ws } = await fetchBillingSubscriptionState(token)
       setSubscription(row)
+      setWorkspace(ws)
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : String(e))
     } finally {
@@ -86,6 +89,14 @@ export function SettingsPanel() {
 
   useEffect(() => {
     void loadSubscription()
+  }, [loadSubscription])
+
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search)
+    if (q.get('billing') === 'success') {
+      void loadSubscription()
+      window.history.replaceState({}, '', window.location.pathname + window.location.hash)
+    }
   }, [loadSubscription])
 
   const onSave = async (e: React.FormEvent) => {
@@ -123,7 +134,7 @@ export function SettingsPanel() {
 
   const onCheckout = async (
     planCode: 'pro',
-    paymentMethod: 'CARD' | 'BLIK' | 'GOOGLE_PAY' | 'APPLE_PAY',
+    paymentMethod: 'CARD' | 'GOOGLE_PAY' | 'APPLE_PAY',
   ) => {
     const token = getStoredToken()
     if (!token) return
@@ -151,6 +162,8 @@ export function SettingsPanel() {
     try {
       const updated = await switchSubscriptionPlan(token, 'free')
       setSubscription(updated)
+      const next = await fetchBillingSubscriptionState(token)
+      setWorkspace(next.workspace)
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : String(e))
     }
@@ -216,10 +229,28 @@ export function SettingsPanel() {
               Status: <strong>{subscription?.status ?? 'BRAK'}</strong> · Plan: <strong>{subscription?.planCode ?? 'free'}</strong> ·
               Provider: <strong>{subscription?.provider ?? '—'}</strong>
             </p>
-            <p className="workspace-panel__muted">Free: do 15 faktur / miesiąc · Pro: bez limitu, 99 zł / miesiąc</p>
+            {workspace && (
+              <p className="workspace-panel__muted">
+                Dokumenty (faktury + umowy): <strong>{workspace.used}</strong>
+                {workspace.limit != null ? (
+                  <>
+                    {' '}
+                    / <strong>{workspace.limit}</strong> na planie Free
+                  </>
+                ) : (
+                  <> — bez limitu (PRO)</>
+                )}
+                .
+              </p>
+            )}
             <p className="workspace-panel__muted">
-              Płatność <strong>za faktury</strong> (BLIK / portfele) jest w szczegółach faktury — osobna od subskrypcji. Poniżej: opłata za plan aplikacji (wymaga{' '}
-              <span className="mono">STRIPE_PRICE_ID_PRO</span> na serwerze).
+              <strong>Free</strong>: do 15 dokumentów (faktury + umowy). <strong>PRO</strong>: bez limitu — <strong>99 zł / mies.</strong>{' '}
+              przez Stripe (karta / Google Pay / Apple Pay). Płatności <em>za faktury do dostawców</em> to przelew na konto z faktury,
+              nie ta subskrypcja.
+            </p>
+            <p className="workspace-panel__muted">
+              Wymaga ustawionego <span className="mono">STRIPE_PRICE_ID_PRO</span> (cena 99 PLN miesięcznie) w{' '}
+              <span className="mono">backend/.env</span>.
             </p>
             <div className="settings-form__actions">
               <button type="button" className="btn-ghost" onClick={() => void onOpenBillingPortal()}>

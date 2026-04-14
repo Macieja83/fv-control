@@ -62,6 +62,12 @@ const envSchema = z.object({
     (v) => (v === "" || v === undefined ? undefined : v),
     z.string().min(16).optional(),
   ),
+  /** Bazowy URL API dostawcy PISP (np. Tink, Salt Edge) — bez ukończenia integracji endpoint zwraca status „wyłączone”. */
+  PISP_PROVIDER_BASE_URL: z.preprocess(
+    (v) => (v === "" || v === undefined ? undefined : v),
+    z.string().url().optional(),
+  ),
+  PISP_API_KEY: z.preprocess((v) => (v === "" || v === undefined ? undefined : v), z.string().optional()),
   P24_BILLING_WEBHOOK_SECRET: z.preprocess(
     (v) => (v === "" || v === undefined ? undefined : v),
     z.string().min(16).optional(),
