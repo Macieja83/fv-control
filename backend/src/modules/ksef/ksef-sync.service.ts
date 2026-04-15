@@ -29,6 +29,8 @@ import {
 import { parseInvoiceDate } from "../invoices/invoice-dates.js";
 import { createObjectStorage } from "../../adapters/storage/create-storage.js";
 import { loadConfig } from "../../config.js";
+import { getEffectiveKsefApiEnv, KSEF_INGESTION_SOURCE_LABEL } from "./ksef-effective-env.js";
+import { loadKsefClientForTenant } from "./ksef-tenant-credentials.service.js";
 
 export type KsefSyncJobData = {
   tenantId: string;
@@ -53,11 +55,32 @@ export type KsefSyncResult = {
   newHwmDate: string | null;
 };
 
+/** Telemetria ostatniego przebiegu joba sync (JSON w `IngestionSource.metadata`). */
+export type KsefSyncRunTelemetryPatch = {
+  runAt: string;
+  ok: boolean;
+  phase: "skipped_no_credentials" | "completed" | "failed";
+  skippedReason?: string;
+  stats?: {
+    fetched: number;
+    ingested: number;
+    skippedDuplicate: number;
+    refetched: number;
+    errorCount: number;
+  };
+  errorPreview?: string | null;
+  /** Id joba BullMQ — deduplikacja wpisu audytu przy retry tego samego joba. */
+  queueJobId?: string | null;
+};
+
+/** Kontekst wywołania z workera (opcjonalnie). */
+export type KsefSyncJobRunContext = {
+  queueJobId?: string | null;
+};
+
 const KSEF_SYNC_ACTOR_ID = "00000000-0000-0000-0000-000000000000";
 const PAGE_SIZE = 100;
 const MAX_RETRY_QUEUE_SIZE = 500;
-const DEFAULT_KSEF_INGESTION_LABEL = "KSeF API";
-
 type KsefSyncState = {
   hwmDate: string | null;
   retryKsefNumbers: string[];
@@ -116,27 +139,29 @@ function resolveSyncFrom(opts: {
 export async function runKsefSyncJob(
   prisma: PrismaClient,
   data: KsefSyncJobData,
+  ctx?: KsefSyncJobRunContext,
 ): Promise<KsefSyncResult> {
   const cfg = loadConfig();
+  const syncRunAt = () => new Date().toISOString();
 
-  if (cfg.KSEF_ENV === "mock" || !cfg.KSEF_TOKEN || !cfg.KSEF_NIP) {
-    console.warn("KSeF sync skipped: KSEF_ENV=mock or missing KSEF_TOKEN/KSEF_NIP.");
+  const client = await loadKsefClientForTenant(prisma, data.tenantId);
+  if (!client) {
+    console.warn(
+      "KSeF sync skipped: brak realnego API (mock / brak nadpisania środowiska) lub brak poświadczeń (Płatności / KSeF albo KSEF_TOKEN+KSEF_NIP w .env).",
+    );
+    await mergeKsefSyncRunTelemetry(prisma, data.tenantId, {
+      runAt: syncRunAt(),
+      ok: false,
+      phase: "skipped_no_credentials",
+      skippedReason: "missing_credentials",
+      errorPreview: null,
+    });
     return { fetched: 0, ingested: 0, skippedDuplicate: 0, refetched: 0, errors: [], newHwmDate: null };
   }
 
-  const env = cfg.KSEF_ENV;
-  let client: KsefClient;
-  if (cfg.KSEF_CERT && cfg.KSEF_TOKEN_PASSWORD) {
-    client = KsefClient.fromEncryptedCertificate(
-      env, cfg.KSEF_TOKEN, cfg.KSEF_TOKEN_PASSWORD, cfg.KSEF_CERT, cfg.KSEF_NIP,
-    );
-  } else if (cfg.KSEF_TOKEN_PASSWORD) {
-    client = KsefClient.fromEncryptedToken(env, cfg.KSEF_TOKEN, cfg.KSEF_TOKEN_PASSWORD, cfg.KSEF_NIP);
-  } else {
-    client = new KsefClient(env, cfg.KSEF_NIP, { kind: "token", ksefToken: cfg.KSEF_TOKEN });
-  }
-
-  console.info(`[KSeF sync] Authenticating (env=${env}, NIP=${cfg.KSEF_NIP})…`);
+  try {
+  const apiEnv = await getEffectiveKsefApiEnv(prisma, data.tenantId);
+  console.info(`[KSeF sync] Authenticating (env=${apiEnv}, tenant=${data.tenantId})…`);
   await client.authenticate();
   console.info("[KSeF sync] Authenticated.");
 
@@ -300,10 +325,34 @@ export async function runKsefSyncJob(
       `[KSeF sync] Retry queue przycięta do ${MAX_RETRY_QUEUE_SIZE} pozycji (było ${retryQueue.size}).`,
     );
   }
-  await saveKsefSyncState(prisma, data.tenantId, {
-    hwmDate: persistedHwm,
-    retryKsefNumbers: retryToPersist,
-  });
+  const errPreview =
+    result.errors.length > 0
+      ? result.errors
+          .slice(0, 3)
+          .join(" | ")
+          .slice(0, 480)
+      : null;
+  await saveKsefSyncState(
+    prisma,
+    data.tenantId,
+    {
+      hwmDate: persistedHwm,
+      retryKsefNumbers: retryToPersist,
+    },
+    {
+      runAt: syncRunAt(),
+      ok: true,
+      phase: "completed",
+      stats: {
+        fetched: result.fetched,
+        ingested: result.ingested,
+        skippedDuplicate: result.skippedDuplicate,
+        refetched: result.refetched,
+        errorCount: result.errors.length,
+      },
+      errorPreview: errPreview,
+    },
+  );
   if (retryToPersist.length > 0) {
     console.warn(
       `[KSeF sync] Pozostawiono ${retryToPersist.length} numerów KSeF w retry queue (ponowienie w kolejnych sync).`,
@@ -314,6 +363,17 @@ export async function runKsefSyncJob(
     `[KSeF sync] Done: fetched=${result.fetched}, ingested=${result.ingested}, refetched=${result.refetched}, dupes=${result.skippedDuplicate}, errors=${result.errors.length}`,
   );
   return result;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    await mergeKsefSyncRunTelemetry(prisma, data.tenantId, {
+      runAt: syncRunAt(),
+      ok: false,
+      phase: "failed",
+      errorPreview: msg.slice(0, 500),
+      queueJobId: ctx?.queueJobId ?? null,
+    });
+    throw e;
+  }
 }
 
 type ProcessOutcome = "ingested" | "refetched" | "skipped" | "linked" | "resumed";
@@ -637,7 +697,12 @@ async function getKsefSyncState(prisma: PrismaClient, tenantId: string): Promise
   };
 }
 
-async function saveKsefSyncState(prisma: PrismaClient, tenantId: string, state: KsefSyncState): Promise<void> {
+async function saveKsefSyncState(
+  prisma: PrismaClient,
+  tenantId: string,
+  state: KsefSyncState,
+  telemetry?: KsefSyncRunTelemetryPatch,
+): Promise<void> {
   const source = await prisma.ingestionSource.findFirst({
     where: { tenantId, kind: "KSEF" },
     orderBy: { updatedAt: "desc" },
@@ -646,11 +711,22 @@ async function saveKsefSyncState(prisma: PrismaClient, tenantId: string, state: 
   const base = source?.metadata && typeof source.metadata === "object"
     ? (source.metadata as Record<string, unknown>)
     : {};
-  const metadata: Prisma.InputJsonObject = {
+  const metaCore: Record<string, unknown> = {
     ...base,
     hwmDate: state.hwmDate,
     retryKsefNumbers: state.retryKsefNumbers,
   };
+  const metadata: Prisma.InputJsonObject = telemetry
+    ? {
+        ...metaCore,
+        lastSyncRunAt: telemetry.runAt,
+        lastSyncOk: telemetry.ok,
+        lastSyncPhase: telemetry.phase,
+        ...(telemetry.skippedReason !== undefined ? { lastSyncSkippedReason: telemetry.skippedReason } : {}),
+        ...(telemetry.stats ? { lastSyncStats: telemetry.stats as object } : {}),
+        ...(telemetry.errorPreview !== undefined ? { lastSyncErrorPreview: telemetry.errorPreview } : {}),
+      }
+    : (metaCore as Prisma.InputJsonObject);
   if (source) {
     await prisma.ingestionSource.update({
       where: { id: source.id },
@@ -662,9 +738,84 @@ async function saveKsefSyncState(prisma: PrismaClient, tenantId: string, state: 
     data: {
       tenantId,
       kind: "KSEF",
-      label: DEFAULT_KSEF_INGESTION_LABEL,
+      label: KSEF_INGESTION_SOURCE_LABEL,
       isEnabled: true,
       metadata,
     },
   });
+}
+
+/** Zapis telemetrii bez zmiany HWM/retry (np. brak credów, wyjątek przed zapisem stanu). */
+export async function mergeKsefSyncRunTelemetry(
+  prisma: PrismaClient,
+  tenantId: string,
+  patch: KsefSyncRunTelemetryPatch,
+): Promise<void> {
+  const source = await prisma.ingestionSource.findFirst({
+    where: { tenantId, kind: "KSEF" },
+    orderBy: { updatedAt: "desc" },
+    select: { id: true, metadata: true, label: true },
+  });
+  const base =
+    source?.metadata && typeof source.metadata === "object"
+      ? ({ ...(source.metadata as Record<string, unknown>) } as Record<string, unknown>)
+      : {};
+
+  const queueJobIdStr = patch.queueJobId != null ? String(patch.queueJobId) : "";
+  const prevFailureAudited =
+    typeof base.lastSyncFailureAuditedQueueJobId === "string" ? base.lastSyncFailureAuditedQueueJobId : "";
+  const duplicateFailureAudit =
+    patch.phase === "failed" &&
+    patch.ok === false &&
+    queueJobIdStr.length > 0 &&
+    prevFailureAudited === queueJobIdStr;
+
+  const failureAuditMarker: Record<string, unknown> = {};
+  if (patch.phase === "failed" && !patch.ok && queueJobIdStr.length > 0 && !duplicateFailureAudit) {
+    failureAuditMarker.lastSyncFailureAuditedQueueJobId = queueJobIdStr;
+  }
+
+  const metadata: Prisma.InputJsonObject = {
+    ...base,
+    lastSyncRunAt: patch.runAt,
+    lastSyncOk: patch.ok,
+    lastSyncPhase: patch.phase,
+    ...(patch.skippedReason !== undefined ? { lastSyncSkippedReason: patch.skippedReason } : {}),
+    ...(patch.stats ? { lastSyncStats: patch.stats as object } : {}),
+    ...(patch.errorPreview !== undefined ? { lastSyncErrorPreview: patch.errorPreview } : {}),
+    ...failureAuditMarker,
+  };
+  if (source) {
+    await prisma.ingestionSource.update({ where: { id: source.id }, data: { metadata } });
+  } else {
+    await prisma.ingestionSource.create({
+      data: {
+        tenantId,
+        kind: "KSEF",
+        label: KSEF_INGESTION_SOURCE_LABEL,
+        isEnabled: true,
+        metadata: {
+          hwmDate: null,
+          retryKsefNumbers: [],
+          ...metadata,
+        },
+      },
+    });
+  }
+
+  if (patch.phase === "failed" && !patch.ok && !duplicateFailureAudit) {
+    await prisma.auditLog.create({
+      data: {
+        tenantId,
+        actorId: null,
+        action: "KSEF_SYNC_RUN_FAILED",
+        entityType: "INTEGRATION",
+        entityId: tenantId,
+        metadata: {
+          queueJobId: patch.queueJobId ?? null,
+          errorPreview: patch.errorPreview ?? null,
+        } as object,
+      },
+    });
+  }
 }

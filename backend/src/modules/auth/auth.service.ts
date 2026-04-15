@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import jwt from "jsonwebtoken";
 import type { PrismaClient, UserRole } from "@prisma/client";
-import { isSuperAdminEmail, loadConfig } from "../../config.js";
+import { isPlatformAdminEmail, loadConfig } from "../../config.js";
 import { AppError } from "../../lib/errors.js";
 import { signAccessToken } from "../../lib/jwt.js";
 import { hashPassword, verifyPassword } from "../../lib/password.js";
@@ -337,7 +337,15 @@ export async function listTenantsForSuperAdmin(prisma: PrismaClient, limit = 200
     createdAt: t.createdAt,
     userCount: t._count.users,
     invoiceCount: t._count.invoices,
-    subscription: t.subscriptions[0] ?? null,
+    subscription: (() => {
+      const s = t.subscriptions[0];
+      if (!s) return null;
+      return {
+        status: s.status,
+        planCode: s.planCode,
+        provider: s.provider,
+      };
+    })(),
   }));
 }
 
@@ -347,8 +355,8 @@ export async function issueTenantImpersonationAccessToken(
   targetTenantId: string,
 ) {
   const user = await prisma.user.findUnique({ where: { id: superAdminUserId } });
-  if (!user?.isActive || !isSuperAdminEmail(user.email)) {
-    throw AppError.forbidden("Super admin required");
+  if (!user?.isActive || !isPlatformAdminEmail(user.email)) {
+    throw AppError.forbidden("Platform admin required");
   }
   const tenant = await prisma.tenant.findUnique({ where: { id: targetTenantId } });
   if (!tenant) throw AppError.notFound("Tenant not found");
@@ -404,7 +412,7 @@ function sanitizeUser(user: {
     email: user.email,
     role: user.role,
     emailVerified: user.emailVerified,
-    isSuperAdmin: isSuperAdminEmail(user.email),
+    isPlatformAdmin: isPlatformAdminEmail(user.email),
     isActive: user.isActive,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,

@@ -17,7 +17,10 @@ import type { ImapZenboxSyncJobData } from "./lib/imap-sync-queue.js";
 import { runZenboxImapSyncJob } from "./modules/zenbox/zenbox-imap-sync.service.js";
 import { ZenboxImapPermanentError } from "./modules/zenbox/zenbox-imap-errors.js";
 import { enqueueKsefSync } from "./lib/ksef-sync-queue.js";
+import { mergeKsefQueueTelemetry } from "./modules/ksef/ksef-queue-telemetry.service.js";
+import { getEffectiveKsefApiEnv } from "./modules/ksef/ksef-effective-env.js";
 import { runKsefSyncJob, type KsefSyncJobData } from "./modules/ksef/ksef-sync.service.js";
+import { tenantCanRunKsefSync } from "./modules/ksef/ksef-tenant-credentials.service.js";
 
 type PipelineJobData = { processingJobId: string };
 
@@ -59,10 +62,41 @@ const KSEF_SYNC_LOCK_MS = 3_600_000;
 const ksefWorker = new Worker<KsefSyncJobData>(
   KSEF_SYNC_QUEUE_NAME,
   async (job: Job<KsefSyncJobData>) => {
-    await runKsefSyncJob(prisma, job.data);
+    await runKsefSyncJob(prisma, job.data, {
+      queueJobId: job.id != null ? String(job.id) : null,
+    });
   },
   { connection, prefix: cfg.BULLMQ_PREFIX, concurrency: 1, lockDuration: KSEF_SYNC_LOCK_MS },
 );
+
+ksefWorker.on("completed", (job: Job<KsefSyncJobData>) => {
+  void mergeKsefQueueTelemetry(prisma, job.data.tenantId, {
+    lastQueueJobId: job.id != null ? String(job.id) : null,
+    lastQueueJobState: "completed",
+    lastQueueFinishedAt: new Date().toISOString(),
+    lastQueueAttempts: job.attemptsMade,
+    lastQueueMaxAttempts: job.opts.attempts ?? 3,
+    lastQueueError: null,
+    lastQueueFinalFailure: false,
+  });
+});
+
+ksefWorker.on("failed", (job: Job<KsefSyncJobData> | undefined, err: unknown) => {
+  if (!job?.data?.tenantId) return;
+  const max = job.opts.attempts ?? 3;
+  const attempts = job.attemptsMade;
+  const willRetry = attempts < max;
+  const msg = err instanceof Error ? err.message : String(err);
+  void mergeKsefQueueTelemetry(prisma, job.data.tenantId, {
+    lastQueueJobId: job.id != null ? String(job.id) : null,
+    lastQueueJobState: willRetry ? "retrying" : "failed",
+    lastQueueFinishedAt: new Date().toISOString(),
+    lastQueueAttempts: attempts,
+    lastQueueMaxAttempts: max,
+    lastQueueError: msg.slice(0, 600),
+    lastQueueFinalFailure: !willRetry,
+  });
+});
 
 worker.on("failed", (job, err) => {
   void (async () => {
@@ -130,10 +164,13 @@ if (cfg.IMAP_AUTO_SYNC_INTERVAL_MS > 0) {
 }
 
 async function autoScheduleKsefSync(): Promise<void> {
-  if (!cfg.KSEF_TOKEN || !cfg.KSEF_NIP || cfg.KSEF_ENV === "mock") return;
   try {
     const tenants = await prisma.tenant.findMany({ select: { id: true } });
     for (const t of tenants) {
+      const effective = await getEffectiveKsefApiEnv(prisma, t.id);
+      if (effective === "mock") continue;
+      const can = await tenantCanRunKsefSync(prisma, t.id);
+      if (!can) continue;
       try {
         const r = await enqueueKsefSync({ tenantId: t.id }, { autoDedupe: true });
         if (r.skipped) {

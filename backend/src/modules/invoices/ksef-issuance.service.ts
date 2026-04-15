@@ -1,28 +1,9 @@
 import type { PrismaClient } from "@prisma/client";
 import { loadConfig } from "../../config.js";
 import { AppError } from "../../lib/errors.js";
-import { KsefClient } from "../ksef/ksef-client.js";
+import { loadKsefClientForTenant } from "../ksef/ksef-tenant-credentials.service.js";
 import { buildFa3InvoiceXml, sha256HexUtf8, type Fa3LineInput } from "./ksef-fa3-xml.js";
 import { serializeInvoiceDetail } from "./invoice-serialize.js";
-
-function createKsefClientFromConfig(): KsefClient | null {
-  const cfg = loadConfig();
-  if (cfg.KSEF_ENV === "mock" || !cfg.KSEF_TOKEN || !cfg.KSEF_NIP) return null;
-  const env = cfg.KSEF_ENV as "production" | "sandbox";
-  if (cfg.KSEF_CERT && cfg.KSEF_TOKEN_PASSWORD) {
-    return KsefClient.fromEncryptedCertificate(
-      env,
-      cfg.KSEF_TOKEN,
-      cfg.KSEF_TOKEN_PASSWORD,
-      cfg.KSEF_CERT,
-      cfg.KSEF_NIP,
-    );
-  }
-  if (cfg.KSEF_TOKEN_PASSWORD) {
-    return KsefClient.fromEncryptedToken(env, cfg.KSEF_TOKEN, cfg.KSEF_TOKEN_PASSWORD, cfg.KSEF_NIP);
-  }
-  return new KsefClient(env, cfg.KSEF_NIP, { kind: "token", ksefToken: cfg.KSEF_TOKEN });
-}
 
 async function applyKsefSubmitStub(prisma: PrismaClient, tenantId: string, invoiceId: string, payload: object) {
   await prisma.$transaction(async (tx) => {
@@ -73,7 +54,7 @@ export async function submitInvoiceToKsef(prisma: PrismaClient, tenantId: string
     throw AppError.validation("Kanał prawny inny niż KSeF — sprawdź klasyfikację dokumentu.");
   }
 
-  const client = createKsefClientFromConfig();
+  const client = await loadKsefClientForTenant(prisma, tenantId);
   const useLive = cfg.KSEF_ISSUANCE_MODE === "live" && client !== null;
 
   if (!useLive) {

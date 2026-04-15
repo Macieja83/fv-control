@@ -1,3 +1,9 @@
+function readIsPlatformAdmin(u: { isPlatformAdmin?: boolean; isSuperAdmin?: boolean } | undefined): boolean {
+  if (!u) return false
+  if (u.isPlatformAdmin === true) return true
+  return u.isSuperAdmin === true
+}
+
 export type LoginSuccess = {
   accessToken: string
   expiresIn: number
@@ -5,7 +11,7 @@ export type LoginSuccess = {
     email: string
     tenantId: string
     emailVerified: boolean
-    isSuperAdmin: boolean
+    isPlatformAdmin: boolean
   }
 }
 
@@ -73,7 +79,7 @@ export async function loginRequest(email: string, password: string): Promise<Log
       email: resolvedEmail,
       tenantId: typeof data.user?.tenantId === 'string' ? data.user.tenantId : '',
       emailVerified: data.user?.emailVerified === true,
-      isSuperAdmin: data.user?.isSuperAdmin === true,
+      isPlatformAdmin: readIsPlatformAdmin(data.user),
     },
   }
 }
@@ -84,7 +90,7 @@ export async function sessionRequest(token: string): Promise<{
     email: string
     tenantId: string
     emailVerified: boolean
-    isSuperAdmin: boolean
+    isPlatformAdmin: boolean
   }
 }> {
   const res = await fetch('/api/v1/auth/me', {
@@ -96,6 +102,7 @@ export async function sessionRequest(token: string): Promise<{
     email?: string
     tenantId?: string
     emailVerified?: boolean
+    isPlatformAdmin?: boolean
     isSuperAdmin?: boolean
   }
   if (typeof data.email === 'string') {
@@ -105,7 +112,7 @@ export async function sessionRequest(token: string): Promise<{
         email: data.email,
         tenantId: typeof data.tenantId === 'string' ? data.tenantId : '',
         emailVerified: data.emailVerified === true,
-        isSuperAdmin: data.isSuperAdmin === true,
+        isPlatformAdmin: readIsPlatformAdmin(data),
       },
     }
   }
@@ -164,7 +171,7 @@ export async function verifyEmailRequest(token: string): Promise<LoginSuccess> {
       email: body.user.email,
       tenantId: typeof body.user.tenantId === 'string' ? body.user.tenantId : '',
       emailVerified: body.user.emailVerified === true,
-      isSuperAdmin: body.user.isSuperAdmin === true,
+      isPlatformAdmin: readIsPlatformAdmin(body.user),
     },
   }
 }

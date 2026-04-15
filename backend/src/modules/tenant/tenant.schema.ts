@@ -22,3 +22,22 @@ export const portalIntegrationsPatchSchema = z.object({
 });
 
 export type PortalIntegrationsPatchInput = z.infer<typeof portalIntegrationsPatchSchema>;
+
+export const tenantKsefUpsertSchema = z
+  .object({
+    ksefTokenOrEncryptedBlob: z.string().min(1).max(600_000),
+    tokenPassword: z.string().max(256).optional().nullable(),
+    certPemOrDerBase64: z.string().max(600_000).optional().nullable(),
+  })
+  .superRefine((data, ctx) => {
+    const cert = data.certPemOrDerBase64?.trim();
+    if (cert && !(data.tokenPassword?.trim())) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Przy certyfikacie wymagane jest hasło / PIN do klucza prywatnego.",
+        path: ["tokenPassword"],
+      });
+    }
+  });
+
+export type TenantKsefUpsertInput = z.infer<typeof tenantKsefUpsertSchema>;

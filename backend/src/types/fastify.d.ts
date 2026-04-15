@@ -7,7 +7,7 @@ export type AuthUser = {
   tenantId: string;
   email: string;
   role: UserRole;
-  isSuperAdmin: boolean;
+  isPlatformAdmin: boolean;
   impersonatedByUserId?: string;
 };
 

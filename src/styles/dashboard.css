@@ -1314,13 +1314,23 @@ html[data-theme='dark'] .upload-bar__status--error { color: #f87171; }
 }
 
 .contractor-form input,
-.settings-form input {
+.settings-form input,
+.settings-form textarea,
+.settings-form select {
   padding: 0.45rem 0.5rem;
   border-radius: var(--radius-xs);
   border: 1px solid var(--border);
   background: var(--surface-0);
   color: var(--text);
   font-size: 0.88rem;
+}
+
+.settings-form__textarea {
+  width: 100%;
+  min-height: 4.5rem;
+  resize: vertical;
+  font-family: ui-monospace, monospace;
+  line-height: 1.35;
 }
 
 .btn-primary {

@@ -5,24 +5,7 @@ import { loadConfig } from "../../config.js";
 import { AppError } from "../../lib/errors.js";
 import { getPipelineQueue } from "../../lib/pipeline-queue.js";
 import { PIPELINE_QUEUE_NAME } from "../../lib/queue-constants.js";
-import { KsefClient } from "./ksef-client.js";
-
-function buildKsefClient(cfg: ReturnType<typeof loadConfig>): KsefClient {
-  const env = cfg.KSEF_ENV as "production" | "sandbox";
-  if (cfg.KSEF_CERT && cfg.KSEF_TOKEN_PASSWORD) {
-    return KsefClient.fromEncryptedCertificate(
-      env,
-      cfg.KSEF_TOKEN!,
-      cfg.KSEF_TOKEN_PASSWORD,
-      cfg.KSEF_CERT,
-      cfg.KSEF_NIP!,
-    );
-  }
-  if (cfg.KSEF_TOKEN_PASSWORD) {
-    return KsefClient.fromEncryptedToken(env, cfg.KSEF_TOKEN!, cfg.KSEF_TOKEN_PASSWORD, cfg.KSEF_NIP!);
-  }
-  return new KsefClient(env, cfg.KSEF_NIP!, { kind: "token", ksefToken: cfg.KSEF_TOKEN! });
-}
+import { loadKsefClientForTenant } from "./ksef-tenant-credentials.service.js";
 
 export type RehydrateKsefInvoiceResult = {
   invoiceId: string;
@@ -43,9 +26,6 @@ export async function rehydrateKsefInvoiceFromApi(
   invoiceId: string,
 ): Promise<RehydrateKsefInvoiceResult> {
   const cfg = loadConfig();
-  if (cfg.KSEF_ENV === "mock" || !cfg.KSEF_TOKEN || !cfg.KSEF_NIP) {
-    throw AppError.validation("KSeF nie jest skonfigurowany (KSEF_ENV / token / NIP).");
-  }
 
   const invoice = await prisma.invoice.findFirst({
     where: { id: invoiceId, tenantId },
@@ -109,7 +89,12 @@ export async function rehydrateKsefInvoiceFromApi(
     );
   }
 
-  const client = buildKsefClient(cfg);
+  const client = await loadKsefClientForTenant(prisma, tenantId);
+  if (!client) {
+    throw AppError.validation(
+      "KSeF nie jest skonfigurowany: ustaw poświadczenia w Płatnościach (KSeF) lub zmienne KSEF_TOKEN i KSEF_NIP na serwerze.",
+    );
+  }
   await client.authenticate();
 
   const xml = await client.fetchInvoiceXml(ksefNum);

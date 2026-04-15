@@ -54,6 +54,15 @@ const envSchema = z.object({
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   GOOGLE_OAUTH_REDIRECT_URI: z.string().url().optional(),
   WEB_APP_URL: z.string().url().default("http://localhost:5173"),
+  /**
+   * Jedno konto operatora platformy (lista tenantów, impersonacja, /platform-admin/*).
+   * Produkcja: ustaw na adres operatora (np. kontakt@tuttopizza.pl).
+   */
+  PLATFORM_ADMIN_EMAIL: z.preprocess(
+    (v) => (v === "" || v === undefined || v === null ? undefined : String(v).trim().toLowerCase()),
+    z.string().email().optional(),
+  ),
+  /** @deprecated Użyj PLATFORM_ADMIN_EMAIL; pozostawione dla istniejących wdrożeń (lista po przecinku). */
   SUPER_ADMIN_EMAILS: z.string().default(""),
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_PRICE_ID_STARTER: z.string().optional(),
@@ -86,6 +95,11 @@ const envSchema = z.object({
    * Domyślnie 5 min; kolizje z limitami MF ogranicza deduplikacja jobów (`auto-ksef:<tenantId>`) + odstępy między zapytaniami.
    */
   KSEF_AUTO_SYNC_INTERVAL_MS: z.coerce.number().int().min(0).default(300_000),
+  /**
+   * Cache procesowy dla `getKsefQueueSnapshotForTenant` (status KSeF w API). 0 = wyłączony.
+   * Krótki TTL ogranicza serie `getJobs` do Redis przy częstym odświeżaniu UI.
+   */
+  KSEF_QUEUE_SNAPSHOT_CACHE_MS: z.coerce.number().int().min(0).max(60_000).default(2_500),
   /** Min delay (ms) between KSeF GET invoice XML calls (MF limit ~16/min). 0 = no delay. */
   KSEF_INVOICE_FETCH_MIN_INTERVAL_MS: z.coerce.number().int().min(0).default(4_500),
   /**
@@ -236,15 +250,17 @@ export function getCorsOriginList(): string[] {
   return parseCorsOrigins(loadConfig().CORS_ORIGINS);
 }
 
-export function getSuperAdminEmails(): string[] {
-  return loadConfig()
-    .SUPER_ADMIN_EMAILS
-    .split(",")
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean);
+/** E-maile z uprawnieniami operatora platformy (zakładka Admin + API platform-admin). */
+export function getPlatformAdminEmails(): string[] {
+  const cfg = loadConfig();
+  if (cfg.PLATFORM_ADMIN_EMAIL) return [cfg.PLATFORM_ADMIN_EMAIL];
+  const legacy = cfg.SUPER_ADMIN_EMAILS.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+  if (legacy.length) return [...new Set(legacy)];
+  if (cfg.NODE_ENV !== "production") return ["kontakt@tuttopizza.pl"];
+  return [];
 }
 
-export function isSuperAdminEmail(email: string): boolean {
+export function isPlatformAdminEmail(email: string): boolean {
   const e = email.trim().toLowerCase();
-  return getSuperAdminEmails().includes(e);
+  return getPlatformAdminEmails().includes(e);
 }

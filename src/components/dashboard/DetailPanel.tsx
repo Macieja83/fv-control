@@ -383,10 +383,10 @@ export function DetailPanel({
                   )}
                   {ksefEligible && (
                     <p className="workspace-panel__muted" style={{ marginBottom: 10 }}>
-                      Wysyła strukturalną FA do API KSeF. Na serwerze ustaw m.in. <span className="mono">KSEF_TOKEN</span>
-                      , <span className="mono">KSEF_NIP</span>, <span className="mono">KSEF_ENV</span> (sandbox lub
-                      production) oraz <span className="mono">KSEF_ISSUANCE_MODE=live</span> — w przeciwnym razie
-                      zapisany zostanie tylko stub (status PENDING bez wywołania MF).
+                      Wysyła strukturalną FA do API KSeF. Poświadczenia zapisujesz w <strong>Płatnościach</strong> (sekcja
+                      KSeF) albo na serwerze w <span className="mono">KSEF_*</span>. Wymagane: NIP firmy w{' '}
+                      <strong>Firma</strong>, <span className="mono">KSEF_ISSUANCE_MODE=live</span> oraz środowisko inne
+                      niż mock — inaczej zapisany zostanie tylko stub (PENDING).
                     </p>
                   )}
                   <button

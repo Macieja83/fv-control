@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from './auth/AuthContext'
 import { ActivityDrawer } from './components/app/ActivityDrawer'
-import type { AppNavKey } from './components/app/appNav'
+import { AdminPanel } from './components/app/AdminPanel'
+import {
+  APP_NAV_ITEMS,
+  PLATFORM_ADMIN_NAV_ITEM,
+  type AppNavKey,
+} from './components/app/appNav'
 import { ContractorsPanel } from './components/app/ContractorsPanel'
 import { DocumentsPanel } from './components/app/DocumentsPanel'
 import { PaymentsPanel } from './components/app/PaymentsPanel'
@@ -17,9 +22,27 @@ import { SalesInvoiceDialog } from './components/dashboard/SalesInvoiceDialog'
 import { useInvoiceDashboard } from './hooks/useInvoiceDashboard'
 import './styles/dashboard.css'
 
+function readNavFromLocation(): AppNavKey {
+  if (typeof window === 'undefined') return 'invoices'
+  const q = new URLSearchParams(window.location.search)
+  const raw = q.get('nav')
+  if (raw === 'plan') return 'settings'
+  const keys: AppNavKey[] = [
+    'invoices',
+    'documents',
+    'payments',
+    'contractors',
+    'settings',
+    'admin',
+  ]
+  if (raw && (keys as string[]).includes(raw)) return raw as AppNavKey
+  if (q.get('billing')) return 'settings'
+  return 'invoices'
+}
+
 export default function DashboardApp() {
   const { logout, user } = useAuth()
-  const [nav, setNav] = useState<AppNavKey>('invoices')
+  const [nav, setNav] = useState<AppNavKey>(() => readNavFromLocation())
   const [activityOpen, setActivityOpen] = useState(false)
   const [salesDialogOpen, setSalesDialogOpen] = useState(false)
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
@@ -75,6 +98,24 @@ export default function DashboardApp() {
     if (nav !== 'invoices') setSelectedId(null)
   }, [nav, setSelectedId])
 
+  const topNavTabs = useMemo(
+    () => (user?.isPlatformAdmin ? [...APP_NAV_ITEMS, PLATFORM_ADMIN_NAV_ITEM] : APP_NAV_ITEMS),
+    [user?.isPlatformAdmin],
+  )
+
+  useEffect(() => {
+    if (nav === 'admin' && !user?.isPlatformAdmin) setNav('invoices')
+  }, [nav, user?.isPlatformAdmin])
+
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search)
+    if (!q.has('billing') && !q.has('nav')) return
+    q.delete('billing')
+    q.delete('nav')
+    const s = q.toString()
+    window.history.replaceState({}, '', `${window.location.pathname}${s ? `?${s}` : ''}${window.location.hash}`)
+  }, [])
+
   const linkedRow = useMemo(() => {
     if (!selected?.duplicate_of_id) return null
     return invoices.find((r) => r.id === selected.duplicate_of_id) ?? null
@@ -103,6 +144,7 @@ export default function DashboardApp() {
         activityUnread={activityBadge}
         nav={nav}
         onNavChange={setNav}
+        navTabs={topNavTabs}
       />
       {nav === 'invoices' && (
         <main className="main-content">
@@ -172,6 +214,11 @@ export default function DashboardApp() {
       {nav === 'settings' && (
         <main className="main-content main-content--padded">
           <SettingsPanel />
+        </main>
+      )}
+      {nav === 'admin' && user?.isPlatformAdmin && (
+        <main className="main-content main-content--padded">
+          <AdminPanel />
         </main>
       )}
       {nav === 'invoices' && (

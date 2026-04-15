@@ -6,6 +6,7 @@ import {
   issueTenantImpersonationAccessToken,
   listTenantsForSuperAdmin,
 } from "../modules/auth/auth.service.js";
+import { listKsefOverviewForPlatformAdmin } from "../modules/ksef/ksef-platform-admin.service.js";
 
 const listQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(500).default(200),
@@ -20,9 +21,22 @@ const platformAdminRoutes: FastifyPluginAsync = async (app) => {
     "/platform-admin/tenants",
     { preHandler: [app.authenticate], schema: { tags: ["PlatformAdmin"], summary: "List SaaS tenants" } },
     async (request) => {
-      if (!request.authUser?.isSuperAdmin) throw AppError.forbidden("Super admin required");
+      if (!request.authUser?.isPlatformAdmin) throw AppError.forbidden("Platform admin required");
       const q = parseOrThrow(listQuerySchema, request.query ?? {});
       return { data: await listTenantsForSuperAdmin(app.prisma, q.limit) };
+    },
+  );
+
+  app.get(
+    "/platform-admin/ksef-overview",
+    {
+      preHandler: [app.authenticate],
+      schema: { tags: ["PlatformAdmin"], summary: "KSeF status per tenant (no secrets)" },
+    },
+    async (request) => {
+      if (!request.authUser?.isPlatformAdmin) throw AppError.forbidden("Platform admin required");
+      const q = parseOrThrow(listQuerySchema, request.query ?? {});
+      return { data: await listKsefOverviewForPlatformAdmin(app.prisma, q.limit) };
     },
   );
 
@@ -30,7 +44,7 @@ const platformAdminRoutes: FastifyPluginAsync = async (app) => {
     "/platform-admin/impersonate",
     { preHandler: [app.authenticate], schema: { tags: ["PlatformAdmin"], summary: "Issue tenant impersonation token" } },
     async (request) => {
-      if (!request.authUser?.isSuperAdmin) throw AppError.forbidden("Super admin required");
+      if (!request.authUser?.isPlatformAdmin) throw AppError.forbidden("Platform admin required");
       const body = parseOrThrow(impersonateSchema, request.body);
       return issueTenantImpersonationAccessToken(app.prisma, request.authUser.id, body.tenantId);
     },

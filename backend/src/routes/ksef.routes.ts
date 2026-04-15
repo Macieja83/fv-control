@@ -1,7 +1,17 @@
 import type { FastifyPluginAsync } from "fastify";
+import { z } from "zod";
 import { loadConfig } from "../config.js";
-import { assertCanMutate } from "../lib/roles.js";
-import { enqueueKsefSync } from "../lib/ksef-sync-queue.js";
+import { assertCanManageIntegrations, assertCanMutate } from "../lib/roles.js";
+import { parseOrThrow } from "../lib/validate.js";
+import { enqueueKsefSync, getKsefQueueSnapshotForTenant } from "../lib/ksef-sync-queue.js";
+import { getEffectiveKsefApiEnv, readKsefEnvOverrideFromMetadata } from "../modules/ksef/ksef-effective-env.js";
+import { setTenantKsefApiEnvOverride } from "../modules/ksef/ksef-ingestion-settings.service.js";
+import { loadKsefClientForTenant, resolveKsefCredentialSource } from "../modules/ksef/ksef-tenant-credentials.service.js";
+
+const ksefEnvPatchSchema = z.object({
+  /** `null` — usuń nadpisanie, użyj KSEF_ENV serwera. */
+  ksefApiEnv: z.enum(["sandbox", "production"]).nullable(),
+});
 
 const ksefRoutes: FastifyPluginAsync = async (app) => {
   app.get(
@@ -17,18 +27,34 @@ const ksefRoutes: FastifyPluginAsync = async (app) => {
         where: { tenantId, kind: "KSEF" },
         select: { metadata: true, updatedAt: true },
       });
-      const hwmDate = source?.metadata
-        ? (source.metadata as Record<string, unknown>).hwmDate ?? null
+      const meta = source?.metadata && typeof source.metadata === "object"
+        ? (source.metadata as Record<string, unknown>)
         : null;
+      const hwmDate = meta ? (meta.hwmDate ?? null) : null;
       const ksefInvoiceCount = await app.prisma.invoice.count({
         where: { tenantId, intakeSourceType: "KSEF_API" },
       });
-      const credentialsOk = Boolean(cfg.KSEF_TOKEN && cfg.KSEF_NIP);
-      const issuanceLiveReady =
-        cfg.KSEF_ISSUANCE_MODE === "live" && cfg.KSEF_ENV !== "mock" && credentialsOk;
+      const effective = await getEffectiveKsefApiEnv(app.prisma, tenantId);
+      const { source: credentialSource, client } = await resolveKsefCredentialSource(app.prisma, tenantId);
+      const credentialsOk = client !== null;
+      const issuanceLiveReady = cfg.KSEF_ISSUANCE_MODE === "live" && effective !== "mock" && credentialsOk;
+
+      let queueLive: Awaited<ReturnType<typeof getKsefQueueSnapshotForTenant>> | null = null;
+      try {
+        queueLive = await getKsefQueueSnapshotForTenant(tenantId);
+      } catch (err) {
+        app.log.warn({ err, tenantId }, "KSeF queue snapshot unavailable (Redis?)");
+      }
+
+      const ksefEnvOverride = readKsefEnvOverrideFromMetadata(meta);
+
       return {
-        environment: cfg.KSEF_ENV,
+        /** Rzeczywiste środowisko API dla tego tenanta (nadpisanie lub KSEF_ENV). */
+        environment: effective,
+        serverEnvironment: cfg.KSEF_ENV,
+        ksefEnvOverride,
         configured: credentialsOk,
+        credentialSource,
         /** Role MF w `query/metadata` (zakres domyślny: Subject2 + Subject1). */
         syncSubjectTypes: cfg.KSEF_SYNC_SUBJECT_TYPES,
         /** Typy dat w zapytaniu (domyślnie PermanentStorage + Issue). */
@@ -41,9 +67,84 @@ const ksefRoutes: FastifyPluginAsync = async (app) => {
         issuanceLiveReady,
         autoSyncIntervalMs: cfg.KSEF_AUTO_SYNC_INTERVAL_MS,
         lastSyncHwmDate: hwmDate,
+        /** Czas ostatniej aktualizacji rekordu źródła (np. po sync). */
         lastSyncAt: source?.updatedAt ?? null,
+        lastSyncRunAt: meta && typeof meta.lastSyncRunAt === "string" ? meta.lastSyncRunAt : null,
+        lastSyncOk: meta && typeof meta.lastSyncOk === "boolean" ? meta.lastSyncOk : null,
+        lastSyncPhase: meta && typeof meta.lastSyncPhase === "string" ? meta.lastSyncPhase : null,
+        lastSyncSkippedReason:
+          meta && typeof meta.lastSyncSkippedReason === "string" ? meta.lastSyncSkippedReason : null,
+        lastSyncStats:
+          meta && meta.lastSyncStats !== null && typeof meta.lastSyncStats === "object"
+            ? (meta.lastSyncStats as Record<string, unknown>)
+            : null,
+        lastSyncErrorPreview:
+          meta && typeof meta.lastSyncErrorPreview === "string" ? meta.lastSyncErrorPreview : null,
         invoiceCount: ksefInvoiceCount,
+        queue: {
+          redisAvailable: queueLive !== null,
+          autoDedupeJobId: queueLive?.autoDedupeJobId ?? `auto-ksef-${tenantId}`,
+          autoJobState: queueLive?.autoJobState ?? null,
+          pendingOrActiveOtherJobs: queueLive?.pendingOrActiveOtherJobs ?? 0,
+          lastJobId: meta && typeof meta.lastQueueJobId === "string" ? meta.lastQueueJobId : null,
+          lastJobState:
+            meta &&
+            (meta.lastQueueJobState === "completed" ||
+              meta.lastQueueJobState === "failed" ||
+              meta.lastQueueJobState === "retrying")
+              ? meta.lastQueueJobState
+              : null,
+          lastJobFinishedAt:
+            meta && typeof meta.lastQueueFinishedAt === "string" ? meta.lastQueueFinishedAt : null,
+          lastJobError: meta && typeof meta.lastQueueError === "string" ? meta.lastQueueError : null,
+          lastJobAttempts: meta && typeof meta.lastQueueAttempts === "number" ? meta.lastQueueAttempts : null,
+          lastJobMaxAttempts:
+            meta && typeof meta.lastQueueMaxAttempts === "number" ? meta.lastQueueMaxAttempts : null,
+          lastJobFinalFailure:
+            meta && typeof meta.lastQueueFinalFailure === "boolean" ? meta.lastQueueFinalFailure : null,
+        },
       };
+    },
+  );
+
+  app.patch<{
+    Body: { ksefApiEnv?: "sandbox" | "production" | null };
+  }>(
+    "/connectors/ksef/settings",
+    {
+      preHandler: [app.authenticate, app.checkIdempotency],
+      schema: {
+        tags: ["KSeF"],
+        summary: "Ustaw środowisko API KSeF (sandbox/produkcja) dla tenanta",
+        body: {
+          type: "object",
+          required: ["ksefApiEnv"],
+          properties: {
+            ksefApiEnv: {
+              type: ["string", "null"],
+              enum: ["sandbox", "production", null],
+              description: "null = zgodnie z KSEF_ENV serwera",
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      assertCanManageIntegrations(request.authUser!.role);
+      const body = parseOrThrow(ksefEnvPatchSchema, request.body);
+      const tenantId = request.authUser!.tenantId;
+      await setTenantKsefApiEnvOverride(app.prisma, tenantId, body.ksefApiEnv);
+      await app.prisma.auditLog.create({
+        data: {
+          tenantId,
+          actorId: request.authUser!.id,
+          action: "KSEF_API_ENV_UPDATED",
+          entityType: "INTEGRATION",
+          entityId: tenantId,
+          metadata: { ksefApiEnv: body.ksefApiEnv } as object,
+        },
+      });
+      return reply.send({ ok: true });
     },
   );
 
@@ -72,10 +173,22 @@ const ksefRoutes: FastifyPluginAsync = async (app) => {
     },
     async (request, reply) => {
       assertCanMutate(request.authUser!.role);
-      const cfg = loadConfig();
-      if (cfg.KSEF_ENV === "mock" || !cfg.KSEF_TOKEN || !cfg.KSEF_NIP) {
+      const effective = await getEffectiveKsefApiEnv(app.prisma, request.authUser!.tenantId);
+      if (effective === "mock") {
         return reply.status(400).send({
-          error: { message: "KSeF not configured. Set KSEF_ENV, KSEF_TOKEN, and KSEF_NIP." },
+          error: {
+            message:
+              "KSeF bez realnego API: ustaw środowisko sandbox lub produkcja w ustawieniach KSeF albo zmień KSEF_ENV na serwerze.",
+          },
+        });
+      }
+      const client = await loadKsefClientForTenant(app.prisma, request.authUser!.tenantId);
+      if (!client) {
+        return reply.status(400).send({
+          error: {
+            message:
+              "KSeF nie jest skonfigurowany: zapisz poświadczenia w Płatnościach (sekcja KSeF) lub ustaw KSEF_TOKEN i KSEF_NIP w .env serwera.",
+          },
         });
       }
       const body = (request.body as { force?: boolean; fromDate?: string; toDate?: string }) ?? {};
@@ -85,7 +198,11 @@ const ksefRoutes: FastifyPluginAsync = async (app) => {
         fromDate: body.fromDate,
         toDate: body.toDate,
       });
-      return reply.status(202).send({ queued: true, jobId: result.jobId });
+      return reply.status(202).send({
+        queued: true,
+        jobId: result.jobId,
+        dedupeSkipped: result.skipped === true,
+      });
     },
   );
 };

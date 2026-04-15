@@ -686,7 +686,7 @@ export function SalesInvoiceDialog({ open, onClose, onSubmit }: Props) {
                     ? ' (API Ministerstwa Finansów)'
                     : ksefConnector.configured
                       ? ' (tryb stub — tylko status w aplikacji; ustaw KSEF_ISSUANCE_MODE=live dla MF)'
-                      : ' — skonfiguruj KSEF_TOKEN i KSEF_NIP na serwerze'}
+                      : ' — ustaw KSeF w Płatnościach lub KSEF_TOKEN+KSEF_NIP na serwerze'}
                 </span>
               </label>
             )}

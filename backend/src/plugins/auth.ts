@@ -1,6 +1,6 @@
 import fp from "fastify-plugin";
 import type { FastifyPluginAsync } from "fastify";
-import { isSuperAdminEmail, loadConfig } from "../config.js";
+import { isPlatformAdminEmail, loadConfig } from "../config.js";
 import { AppError } from "../lib/errors.js";
 import { verifyAccessToken } from "../lib/jwt.js";
 
@@ -25,11 +25,11 @@ const authPlugin: FastifyPluginAsync = async (app) => {
       if (!user) {
         throw AppError.unauthorized("User not found or inactive");
       }
-      const isSuperAdmin = isSuperAdminEmail(user.email);
-      if (payload.tid !== user.tenantId && !isSuperAdmin) {
+      const isPlatformAdmin = isPlatformAdminEmail(user.email);
+      if (payload.tid !== user.tenantId && !isPlatformAdmin) {
         throw AppError.unauthorized("Invalid tenant context");
       }
-      if (!isSuperAdmin) {
+      if (!isPlatformAdmin) {
         const latestSub = await app.prisma.subscription.findFirst({
           where: { tenantId: payload.tid },
           orderBy: { updatedAt: "desc" },
@@ -45,7 +45,7 @@ const authPlugin: FastifyPluginAsync = async (app) => {
       request.authUser = {
         ...user,
         tenantId: payload.tid,
-        isSuperAdmin,
+        isPlatformAdmin,
         ...(payload.impBy ? { impersonatedByUserId: payload.impBy } : {}),
       };
     },

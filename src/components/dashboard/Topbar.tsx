@@ -1,5 +1,4 @@
-import type { AppNavKey } from '../app/appNav'
-import { APP_NAV_ITEMS } from '../app/appNav'
+import type { AppNavItem, AppNavKey } from '../app/appNav'
 
 type Theme = 'light' | 'dark'
 
@@ -12,6 +11,7 @@ export function Topbar({
   activityUnread,
   nav,
   onNavChange,
+  navTabs,
 }: {
   theme: Theme
   onThemeChange: (t: Theme) => void
@@ -21,6 +21,8 @@ export function Topbar({
   activityUnread?: number
   nav: AppNavKey
   onNavChange: (k: AppNavKey) => void
+  /** Dynamiczna lista (np. doklejana zakładka Admin). */
+  navTabs: AppNavItem[]
 }) {
   return (
     <header className="topbar">
@@ -37,7 +39,7 @@ export function Topbar({
 
         <nav className="topbar__nav" aria-label="Moduły aplikacji">
           <div className="topbar__nav-track">
-            {APP_NAV_ITEMS.map((it) => (
+            {navTabs.map((it) => (
               <button
                 key={it.key}
                 type="button"

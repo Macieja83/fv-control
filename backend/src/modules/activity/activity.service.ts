@@ -16,6 +16,12 @@ function titleForAction(action: string): string {
       return "Zaktualizowano integracje";
     case "TENANT_PROFILE_UPDATED":
       return "Zaktualizowano dane firmy";
+    case "KSEF_API_ENV_UPDATED":
+      return "Zmieniono środowisko API KSeF";
+    case "KSEF_SYNC_JOB_EXHAUSTED":
+      return "KSeF sync — wyczerpane ponowienia (kolejka)";
+    case "KSEF_SYNC_RUN_FAILED":
+      return "KSeF sync — błąd przebiegu";
     default:
       return action.replace(/_/g, " ");
   }
