@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import QRCode from 'react-qr-code'
 import { buildEpcSctQrPayload } from '../../lib/epcTransferQr'
 import type { InvoiceRecord } from '../../types/invoice'
 import { DuplicateBadge, PaymentBadge, ScopeBadge, SourceBadge } from './Badges'
 import { InvoiceDocumentPreview } from './InvoiceDocumentPreview'
+import { SafeQrCode } from './safeQrCode'
 import {
   fetchInvoiceEvents,
   fetchInvoicePispPaymentState,
@@ -513,7 +513,7 @@ export function DetailPanel({
                             border: '1px solid var(--color-border, #ddd)',
                           }}
                         >
-                          <QRCode value={epcQrPayload} size={200} level="M" />
+                          <SafeQrCode value={epcQrPayload} size={200} level="M" />
                         </div>
                       </div>
                     ) : row.transfer?.transferBankAccount &&

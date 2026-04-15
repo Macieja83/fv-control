@@ -14,6 +14,9 @@ export default defineConfig(({ mode }) => {
   const apiUrl = (env.FV_RESTA_API_URL ?? '').trim().replace(/\/$/, '')
 
   return {
+    resolve: {
+      dedupe: ['react', 'react-dom'],
+    },
     plugins: [
       react(),
       ...(apiUrl
