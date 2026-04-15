@@ -1,11 +1,15 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useAuth } from './AuthContext'
 import { getGoogleStartUrl, registerRequest, resendVerificationRequest } from './authApi'
 import './login.css'
 
-export default function LoginPage() {
+type LoginPageProps = {
+  initialMode?: 'login' | 'register' | 'verify'
+}
+
+export default function LoginPage({ initialMode = 'login' }: LoginPageProps) {
   const { login, loginWithVerificationToken } = useAuth()
-  const [mode, setMode] = useState<'login' | 'register' | 'verify'>('login')
+  const [mode, setMode] = useState<'login' | 'register' | 'verify'>(initialMode)
   const [planCode, setPlanCode] = useState<'free' | 'pro'>('free')
   const [tenantName, setTenantName] = useState('')
   const [tenantNip, setTenantNip] = useState('')
@@ -16,6 +20,10 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null)
   const [ok, setOk] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    setMode(initialMode)
+  }, [initialMode])
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
