@@ -5,7 +5,8 @@
  * żeby zestawić się z portalem MF (data wystawienia vs trwały zapis).
  * Domyślnie odpytywane są **Subject2 i Subject1** (`KSEF_SYNC_SUBJECT_TYPES`).
  * `hwmDate` jest cofane o kilka dni (`KSEF_SYNC_HWN_OVERLAP_DAYS`) względem „teraz”, żeby ponownie objąć skrajne przypadki.
- * Przy **jakimkolwiek** błędzie ingestu w przebiegu **nie** zapisujemy `hwmDate` (żeby nie pominąć faktur na stałe).
+ * Przy błędach ingestu odkładamy numery KSeF do kolejki retry (`retryKsefNumbers`) i zapisujemy checkpoint,
+ * żeby kolejne przebiegi nie zaczynały od pełnego zakresu i nie przekraczały limitów MF.
  * For each new invoice found:
  *   1. Check if we already have this ksefNumber (dedup).
  *   2. Download the XML.
@@ -16,7 +17,7 @@
 
 import { createHash } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
-import type { PrismaClient } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
 import { KsefClient, type KsefInvoiceMetadata, type KsefMetadataPage } from "./ksef-client.js";
 import { polishNipDigits10 } from "../contractors/contractor-resolve.js";
 import { tryExtractDraftFromKsefFaXml } from "./ksef-fa-xml-extract.js";
@@ -54,6 +55,13 @@ export type KsefSyncResult = {
 
 const KSEF_SYNC_ACTOR_ID = "00000000-0000-0000-0000-000000000000";
 const PAGE_SIZE = 100;
+const MAX_RETRY_QUEUE_SIZE = 500;
+const DEFAULT_KSEF_INGESTION_LABEL = "KSeF API";
+
+type KsefSyncState = {
+  hwmDate: string | null;
+  retryKsefNumbers: string[];
+};
 
 /**
  * Gdy `hasMore && isTruncated`, MF wymaga zawężenia `dateRange.from` do „ostatniego rekordu”
@@ -132,7 +140,9 @@ export async function runKsefSyncJob(
   await client.authenticate();
   console.info("[KSeF sync] Authenticated.");
 
-  const hwmOnly = data.fromDate ? null : await getHighWaterMark(prisma, data.tenantId);
+  const state = await getKsefSyncState(prisma, data.tenantId);
+  const retryQueue = new Set(state.retryKsefNumbers);
+  const hwmOnly = data.fromDate ? null : state.hwmDate;
   const from = resolveSyncFrom({
     fromOverride: data.fromDate,
     hwm: hwmOnly,
@@ -154,6 +164,27 @@ export async function runKsefSyncJob(
 
   const result: KsefSyncResult = { fetched: 0, ingested: 0, skippedDuplicate: 0, refetched: 0, errors: [], newHwmDate: null };
   const beforeXmlFetch = createInvoiceXmlThrottle(cfg.KSEF_INVOICE_FETCH_MIN_INTERVAL_MS);
+
+  if (retryQueue.size > 0 && !force) {
+    console.info(`[KSeF sync] Retry queue: ${retryQueue.size} numerów KSeF do ponowienia przed nowymi metadanymi.`);
+    for (const kn of [...retryQueue]) {
+      try {
+        const outcome = await ingestKsefInvoiceXmlByKsefNumber(
+          prisma,
+          client,
+          data.tenantId,
+          kn,
+          beforeXmlFetch,
+        );
+        if (outcome === "ingested" || outcome === "linked" || outcome === "resumed") result.ingested++;
+        else result.skippedDuplicate++;
+        retryQueue.delete(kn);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        result.errors.push(`retry ${kn}: ${msg}`);
+      }
+    }
+  }
 
   function mergeHwm(a: string | null, b: string | null): string | null {
     if (!a) return b;
@@ -221,6 +252,7 @@ export async function runKsefSyncJob(
             const msg = err instanceof Error ? err.message : String(err);
             console.error(`[KSeF sync] Error processing ${inv.ksefNumber}: ${msg}`);
             result.errors.push(`${inv.ksefNumber}: ${msg}`);
+            retryQueue.add(inv.ksefNumber);
           }
         }
 
@@ -249,19 +281,33 @@ export async function runKsefSyncJob(
     }
   }
 
+  const persistedHwm = skipHwmPersistence
+    ? state.hwmDate
+    : (result.newHwmDate ?? state.hwmDate);
+
   if (skipHwmPersistence) {
-    console.info("[KSeF sync] Pomijam zapis hwmDate (ustawiono toDate — sync zawężony).");
+    console.info("[KSeF sync] Pomijam zmianę hwmDate (ustawiono toDate — sync zawężony).");
     result.newHwmDate = null;
-  } else if (result.errors.length === 0 && result.newHwmDate) {
-    await setHighWaterMark(prisma, data.tenantId, result.newHwmDate);
-    console.info(`[KSeF sync] Zaktualizowano hwmDate=${result.newHwmDate}`);
-  } else if (result.errors.length > 0) {
-    console.warn(
-      `[KSeF sync] Nie aktualizuję hwmDate (błędy: ${result.errors.length}) — przy następnym sync ponowi się ten sam zakres; napraw błędy lub użyj fromDate.`,
-    );
-    result.newHwmDate = null;
-  } else if (!result.newHwmDate) {
+  } else if (persistedHwm && persistedHwm !== state.hwmDate) {
+    console.info(`[KSeF sync] Zaktualizowano hwmDate=${persistedHwm}`);
+  } else if (!persistedHwm) {
     console.info("[KSeF sync] Brak permanentStorageHwmDate z API — hwmDate bez zmian.");
+  }
+
+  const retryToPersist = [...retryQueue].slice(0, MAX_RETRY_QUEUE_SIZE);
+  if (retryQueue.size > MAX_RETRY_QUEUE_SIZE) {
+    console.warn(
+      `[KSeF sync] Retry queue przycięta do ${MAX_RETRY_QUEUE_SIZE} pozycji (było ${retryQueue.size}).`,
+    );
+  }
+  await saveKsefSyncState(prisma, data.tenantId, {
+    hwmDate: persistedHwm,
+    retryKsefNumbers: retryToPersist,
+  });
+  if (retryToPersist.length > 0) {
+    console.warn(
+      `[KSeF sync] Pozostawiono ${retryToPersist.length} numerów KSeF w retry queue (ponowienie w kolejnych sync).`,
+    );
   }
 
   console.info(
@@ -573,19 +619,52 @@ function ksefMetadataPayload(meta: KsefInvoiceMetadata): Record<string, unknown>
   };
 }
 
-async function getHighWaterMark(prisma: PrismaClient, tenantId: string): Promise<string | null> {
+async function getKsefSyncState(prisma: PrismaClient, tenantId: string): Promise<KsefSyncState> {
   const source = await prisma.ingestionSource.findFirst({
     where: { tenantId, kind: "KSEF" },
     select: { metadata: true },
   });
-  if (!source?.metadata) return null;
+  if (!source?.metadata) return { hwmDate: null, retryKsefNumbers: [] };
   const data = source.metadata as Record<string, unknown>;
-  return typeof data.hwmDate === "string" ? data.hwmDate : null;
+  const retryRaw = Array.isArray(data.retryKsefNumbers) ? data.retryKsefNumbers : [];
+  const retryKsefNumbers = retryRaw
+    .filter((v): v is string => typeof v === "string")
+    .map((v) => v.trim())
+    .filter((v) => v.length > 0);
+  return {
+    hwmDate: typeof data.hwmDate === "string" ? data.hwmDate : null,
+    retryKsefNumbers,
+  };
 }
 
-async function setHighWaterMark(prisma: PrismaClient, tenantId: string, hwmDate: string): Promise<void> {
-  await prisma.ingestionSource.updateMany({
+async function saveKsefSyncState(prisma: PrismaClient, tenantId: string, state: KsefSyncState): Promise<void> {
+  const source = await prisma.ingestionSource.findFirst({
     where: { tenantId, kind: "KSEF" },
-    data: { metadata: { hwmDate } },
+    orderBy: { updatedAt: "desc" },
+    select: { id: true, metadata: true, label: true },
+  });
+  const base = source?.metadata && typeof source.metadata === "object"
+    ? (source.metadata as Record<string, unknown>)
+    : {};
+  const metadata: Prisma.InputJsonObject = {
+    ...base,
+    hwmDate: state.hwmDate,
+    retryKsefNumbers: state.retryKsefNumbers,
+  };
+  if (source) {
+    await prisma.ingestionSource.update({
+      where: { id: source.id },
+      data: { metadata },
+    });
+    return;
+  }
+  await prisma.ingestionSource.create({
+    data: {
+      tenantId,
+      kind: "KSEF",
+      label: DEFAULT_KSEF_INGESTION_LABEL,
+      isEnabled: true,
+      metadata,
+    },
   });
 }
