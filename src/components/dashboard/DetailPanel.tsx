@@ -36,8 +36,12 @@ type Props = {
   onNotes: (id: string, notes: string) => void
   onNeedsReview: (id: string) => void
   onClearReview: (id: string) => void
-  /** Ponowna kolejka przetwarzania / ekstrakcji (tylko tryb API; przy KSeF etykieta „Odśwież”). */
+  /** Ponowna kolejka OCR na istniejącym pliku (upload e-mail — nie KSeF). */
   onRetryExtraction?: (id: string) => void | Promise<void>
+  /** Pobranie XML z MF + pipeline (faktury z importu KSeF). */
+  onKsefSync?: (id: string) => void | Promise<void>
+  /** Odświeżenie listy z API (np. gdy status INGESTING — bez nowej kolejki). */
+  onRefreshList?: () => void | Promise<void>
   onDeleteInvoice: (id: string) => void
   /** Wysyłka do KSeF (faktury sprzedaży). */
   onSendToKsef?: (id: string) => void | Promise<void>
@@ -63,6 +67,8 @@ export function DetailPanel({
   onNeedsReview,
   onClearReview,
   onRetryExtraction,
+  onKsefSync,
+  onRefreshList,
   onDeleteInvoice,
   onSendToKsef,
   onAdoptVendor,
@@ -70,6 +76,8 @@ export function DetailPanel({
   const [draftNotes, setDraftNotes] = useState('')
   const [ocrBusy, setOcrBusy] = useState(false)
   const [ksefBusy, setKsefBusy] = useState(false)
+  const [ksefPullBusy, setKsefPullBusy] = useState(false)
+  const [docPreviewReloadKey, setDocPreviewReloadKey] = useState(0)
   const [adoptNip, setAdoptNip] = useState('')
   const [adoptName, setAdoptName] = useState('')
   const [adoptBusy, setAdoptBusy] = useState(false)
@@ -90,6 +98,10 @@ export function DetailPanel({
     const digits = (row.extracted_vendor_nip || row.supplier_nip || '').replace(/\D/g, '')
     setAdoptNip(digits.slice(0, 10))
     setAdoptName('')
+  }, [row?.id])
+
+  useEffect(() => {
+    setDocPreviewReloadKey(0)
   }, [row?.id])
 
   const epcQrPayload = useMemo(() => {
@@ -206,12 +218,47 @@ export function DetailPanel({
             <div className="modal-grid__left">
               <section className="detail-section">
                 <h3>Podgląd dokumentu</h3>
+                {row.source_type === 'ksef' && onKsefSync ? (
+                  <div className="detail-ksef-toolbar">
+                    <div className="detail-ksef-toolbar__row">
+                      <button
+                        type="button"
+                        className="btn btn--primary btn--sm"
+                        disabled={ksefPullBusy || row.invoice_status === 'INGESTING'}
+                        onClick={async () => {
+                          setKsefPullBusy(true)
+                          try {
+                            await onKsefSync(row.id)
+                            setDocPreviewReloadKey((n) => n + 1)
+                          } finally {
+                            setKsefPullBusy(false)
+                          }
+                        }}
+                      >
+                        {ksefPullBusy
+                          ? 'Pobieranie z KSeF…'
+                          : row.invoice_status === 'INGESTING'
+                            ? 'Przetwarzanie w tle…'
+                            : 'Pobierz z KSeF i przetwórz'}
+                      </button>
+                      {onRefreshList ? (
+                        <button type="button" className="btn btn--ghost btn--sm" onClick={() => void onRefreshList()}>
+                          Odśwież dane
+                        </button>
+                      ) : null}
+                    </div>
+                    <p className="detail-ksef-toolbar__hint workspace-panel__muted">
+                      Pobiera aktualny plik z KSeF i kolejkuje ekstrakcję. Jeśli widzisz „Przetwarzanie w tle…”, użyj
+                      „Odśwież dane”, żeby odświeżyć status bez ponownego pobierania.
+                    </p>
+                  </div>
+                ) : null}
                 <InvoiceDocumentPreview
                   key={row.id}
                   invoiceId={row.id}
                   ksefNumber={row.ksef_number}
-                  allowKsefRehydrate={row.source_type === 'ksef' || Boolean(row.ksef_number?.trim())}
                   preferKsefFaXml={row.source_type === 'ksef' || Boolean(row.ksef_number?.trim())}
+                  reloadExtra={docPreviewReloadKey}
                 />
               </section>
             </div>
@@ -540,7 +587,7 @@ export function DetailPanel({
                     </p>
                   )}
 
-                  {onRetryExtraction && (
+                  {onRetryExtraction && row.source_type !== 'ksef' && (
                     <button
                       type="button"
                       className="btn btn--warning"
@@ -556,17 +603,11 @@ export function DetailPanel({
                     >
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
                       {' '}
-                      {row.source_type === 'ksef'
-                        ? ocrBusy
-                          ? 'Odświeżanie…'
-                          : row.invoice_status === 'INGESTING'
-                            ? 'Odświeżanie w toku…'
-                            : 'Odśwież'
-                        : ocrBusy
-                          ? 'Kolejkowanie…'
-                          : row.invoice_status === 'INGESTING'
-                            ? 'OCR w toku…'
-                            : 'Ponów OCR / ekstrakcję'}
+                      {ocrBusy
+                        ? 'Kolejkowanie…'
+                        : row.invoice_status === 'INGESTING'
+                          ? 'OCR w toku…'
+                          : 'Ponów OCR / ekstrakcję'}
                     </button>
                   )}
                 </div>

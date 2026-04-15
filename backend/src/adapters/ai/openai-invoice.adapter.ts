@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { normalizeDueDateStringToYmd } from "../../modules/invoices/invoice-dates.js";
 import type { AiInvoiceAdapter, ExtractedInvoiceDraft } from "./ai-invoice.adapter.js";
 
 const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024;
@@ -13,7 +14,7 @@ Required JSON structure:
 {
   "number": "invoice number (numer faktury)",
   "issueDate": "YYYY-MM-DD",
-  "dueDate": "YYYY-MM-DD payment due date (termin płatności) or null",
+  "dueDate": "YYYY-MM-DD payment due date (termin płatności / data zapłaty) or null",
   "currency": "PLN/EUR/USD/GBP",
   "netTotal": "0.00",
   "vatTotal": "0.00",
@@ -42,6 +43,7 @@ Rules:
 - If multiple NIPs appear, use only Sprzedawca's NIP
 - contractorName: include full name as on document (firma, spółka, imię i nazwisko)
 - confidence: 0.0 to 1.0 reflecting extraction certainty
+- dueDate: Polish invoices often show \"Termin płatności\", \"Płatność do\", \"Zapłata do\" as DD.MM.RRRR — you MUST output dueDate as YYYY-MM-DD (convert day-first dates)
 - dueDate / paymentForm / bankAccount / paymentDescription: only if clearly visible on the document
 - Omit or set to null any unknown fields
 - Return ONLY valid JSON, no markdown fences`;
@@ -128,11 +130,37 @@ function trimOrUndef(s: unknown): string | undefined {
   return t.length > 0 ? t : undefined;
 }
 
+const DUE_DATE_KEYS = [
+  "dueDate",
+  "paymentDueDate",
+  "payment_due_date",
+  "terminPlatnosci",
+  "termin_platnosci",
+  "paymentDue",
+] as const;
+
+function pickDueDateRawString(raw: Record<string, unknown>): string | undefined {
+  for (const key of DUE_DATE_KEYS) {
+    const v = raw[key];
+    if (typeof v === "string" && v.trim().length > 0) return v.trim();
+  }
+  return undefined;
+}
+
+function resolveDueDateYmd(raw: Record<string, unknown>): string | undefined {
+  const direct = pickDueDateRawString(raw);
+  if (direct) {
+    const ymd = normalizeDueDateStringToYmd(direct);
+    if (ymd) return ymd;
+  }
+  const payDesc = trimOrUndef(raw.paymentDescription);
+  if (payDesc) return normalizeDueDateStringToYmd(payDesc);
+  return undefined;
+}
+
 function mapResponseToDraft(raw: Record<string, unknown>): ExtractedInvoiceDraft {
   const nip = pickNipFromObject(raw);
-  const dueRaw = trimOrUndef(raw.dueDate);
-  const dueDate =
-    dueRaw && dueRaw.length >= 10 && /^\d{4}-\d{2}-\d{2}/.test(dueRaw) ? dueRaw.slice(0, 10) : undefined;
+  const dueDate = resolveDueDateYmd(raw);
   const bankRaw = trimOrUndef(raw.bankAccount);
   const bankAccount = bankRaw ? bankRaw.replace(/\s/g, "") : undefined;
   return {

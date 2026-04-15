@@ -65,6 +65,7 @@ export default function DashboardApp() {
     categoryLocalOnly,
     refreshFromApi,
     retryInvoiceExtraction,
+    syncKsefInvoiceFromApi,
     adoptInvoiceVendor,
     sendInvoiceToKsef,
     createSalesInvoice,
@@ -193,6 +194,8 @@ export default function DashboardApp() {
           onNeedsReview={(id) => void setNeedsReview(id)}
           onClearReview={(id) => void clearReview(id)}
           onRetryExtraction={(id) => void retryInvoiceExtraction(id)}
+          onKsefSync={(id) => void syncKsefInvoiceFromApi(id)}
+          onRefreshList={() => void refreshFromApi()}
           onDeleteInvoice={(id) => void deleteInvoice(id)}
           onSendToKsef={(id) => void sendInvoiceToKsef(id)}
           onAdoptVendor={(id, body) => void adoptInvoiceVendor(id, body)}

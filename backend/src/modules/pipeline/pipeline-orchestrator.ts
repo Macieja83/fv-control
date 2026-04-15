@@ -25,7 +25,11 @@ import {
 import { draftFromKsefDocumentMetadata, issueYmdEmbeddedInKsefNumber } from "../ksef/ksef-metadata-draft.js";
 import { promoteKsefXmlPrimaryToSummaryPdf } from "../ksef/ksef-primary-visual-document.service.js";
 import { extractVendorNipFromNormalizedPayload } from "../invoices/invoice-vendor-nip.js";
-import { parseInvoiceDate, parseIssueDateCalendarYmd } from "../invoices/invoice-dates.js";
+import {
+  normalizeDueDateStringToYmd,
+  parseInvoiceDate,
+  parseIssueDateCalendarYmd,
+} from "../invoices/invoice-dates.js";
 
 async function streamToBuffer(stream: Readable): Promise<Buffer> {
   const chunks: Uint8Array[] = [];
@@ -205,9 +209,9 @@ export async function runPipelineJob(prisma: PrismaClient, processingJobId: stri
     const invoiceNumber = draft.number!;
     const dueFromDraft = (() => {
       const s = draft.dueDate?.trim();
-      if (!s || s.length < 10 || !/^\d{4}-\d{2}-\d{2}/.test(s)) return undefined;
-      const ymd = s.slice(0, 10);
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return undefined;
+      if (!s) return undefined;
+      const ymd = normalizeDueDateStringToYmd(s);
+      if (!ymd) return undefined;
       return parseInvoiceDate(ymd);
     })();
 

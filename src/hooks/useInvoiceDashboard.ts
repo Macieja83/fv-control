@@ -6,6 +6,7 @@ import {
   patchInvoiceStatus,
   postAdoptInvoiceVendor,
   postCreateInvoice,
+  postRehydrateKsefInvoice,
   postRetryInvoiceExtraction,
   postSendInvoiceToKsef,
 } from '../api/invoicesApi'
@@ -667,6 +668,25 @@ export function useInvoiceDashboard() {
     [refreshFromApi],
   )
 
+  /** Ponowne pobranie FA XML z MF, zapis w storage i kolejka pipeline (jedna akcja „synchronizuj KSeF”). */
+  const syncKsefInvoiceFromApi = useCallback(
+    async (id: string) => {
+      if (USE_MOCK_INVOICES) {
+        window.alert('W trybie demo synchronizacja KSeF jest wyłączona.')
+        return
+      }
+      const token = getStoredToken()
+      if (!token) return
+      try {
+        await postRehydrateKsefInvoice(token, id)
+        await refreshFromApi()
+      } catch (e) {
+        window.alert(e instanceof Error ? e.message : String(e))
+      }
+    },
+    [refreshFromApi],
+  )
+
   const deleteFollowerDuplicates = useCallback(async () => {
     if (USE_MOCK_INVOICES) {
       setSelectedId(null)
@@ -781,6 +801,7 @@ export function useInvoiceDashboard() {
     categoryLocalOnly: !USE_MOCK_INVOICES,
     refreshFromApi,
     retryInvoiceExtraction,
+    syncKsefInvoiceFromApi,
     adoptInvoiceVendor,
     sendInvoiceToKsef,
     createSalesInvoice,

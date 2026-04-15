@@ -922,6 +922,25 @@ html[data-theme='dark'] .btn-icon-del { color: #f87171; }
 
 /* ─── Document Preview ─── */
 
+.detail-ksef-toolbar {
+  margin-bottom: 0.75rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-1);
+}
+.detail-ksef-toolbar__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+.detail-ksef-toolbar__hint {
+  margin: 0.5rem 0 0;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
 .doc-preview { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2); overflow: hidden; }
 .doc-preview--loading, .doc-preview--error { padding: 1rem; color: var(--text-muted); font-size: 0.85rem; }
 .doc-preview--error { color: var(--text); }

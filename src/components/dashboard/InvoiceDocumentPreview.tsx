@@ -1,19 +1,20 @@
 import { useCallback, useEffect, useState } from 'react'
 import { getStoredToken } from '../../auth/session'
-import { postRehydrateKsefInvoice } from '../../api/invoicesApi'
 import { KsefInvoicePreview } from './KsefInvoicePreview'
+
+const PRIMARY_DOCUMENT_FETCH_TIMEOUT_MS = 120_000
 
 type Props = {
   invoiceId: string
   /** Z bazy — dokładniejszy niż numer z nazwy pliku XML. */
   ksefNumber?: string | null
-  /** Przycisk „Pobierz z KSeF” przy braku pliku w storage (np. 404). */
-  allowKsefRehydrate?: boolean
   /**
    * Dla faktur z KSeF: `GET …/primary-document?source=ksef-fa-xml` — pełny podgląd z FA XML
    * zamiast jednostronicowego PDF podsumowania po `primaryDoc` = PDF.
    */
   preferKsefFaXml?: boolean
+  /** Zwiększ po synchronizacji z KSeF w panelu — wymusza ponowne pobranie podglądu. */
+  reloadExtra?: number
 }
 
 function baseMime(ct: string | null): string {
@@ -83,7 +84,21 @@ async function fetchDocument(
   const q = new URLSearchParams({ disposition })
   if (opts?.ksefFaXml) q.set('source', 'ksef-fa-xml')
   const url = `/api/v1/invoices/${encodeURIComponent(invoiceId)}/primary-document?${q.toString()}`
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+  const controller = new AbortController()
+  const to = window.setTimeout(() => controller.abort(), PRIMARY_DOCUMENT_FETCH_TIMEOUT_MS)
+  let res: Response
+  try {
+    res = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, signal: controller.signal })
+  } catch (e) {
+    if (e instanceof Error && e.name === 'AbortError') {
+      throw new Error(
+        `Przekroczono czas oczekiwania (${PRIMARY_DOCUMENT_FETCH_TIMEOUT_MS / 1000} s) na pobranie dokumentu.`,
+      )
+    }
+    throw e
+  } finally {
+    window.clearTimeout(to)
+  }
   if (res.status === 401) {
     throw new Error('Sesja wygasła lub token jest nieprawidłowy — zaloguj się ponownie.')
   }
@@ -118,13 +133,12 @@ async function fetchDocument(
 export function InvoiceDocumentPreview({
   invoiceId,
   ksefNumber,
-  allowKsefRehydrate = false,
   preferKsefFaXml = false,
+  reloadExtra = 0,
 }: Props) {
   const [reloadNonce, setReloadNonce] = useState(0)
   const [phase, setPhase] = useState<'loading' | 'error' | 'ready'>('loading')
   const [message, setMessage] = useState('')
-  const [rehydrateBusy, setRehydrateBusy] = useState(false)
   const [blobUrl, setBlobUrl] = useState<string | null>(null)
   const [mime, setMime] = useState('')
   const [fileName, setFileName] = useState('dokument')
@@ -175,7 +189,7 @@ export function InvoiceDocumentPreview({
       cancelled = true
       if (urlToRevoke) URL.revokeObjectURL(urlToRevoke)
     }
-  }, [invoiceId, reloadNonce, preferKsefFaXml])
+  }, [invoiceId, reloadNonce, preferKsefFaXml, reloadExtra])
 
   const onDownload = useCallback(async () => {
     try {
@@ -211,37 +225,13 @@ export function InvoiceDocumentPreview({
     return <div className="doc-preview doc-preview--loading">Ładowanie podglądu dokumentu…</div>
   }
 
-  const showKsefRehydrate =
-    allowKsefRehydrate &&
-    (message.includes('404') ||
-      message.includes('nie jest dostępny') ||
-      message.includes('storage') ||
-      message.includes('magazynu'))
-
-  const handleRehydrateFromKsef = async () => {
-    const token = getStoredToken()
-    if (!token) {
-      setMessage('Brak sesji — zaloguj się ponownie.')
-      return
-    }
-    setRehydrateBusy(true)
-    try {
-      await postRehydrateKsefInvoice(token, invoiceId)
-      setPhase('loading')
-      setReloadNonce((n) => n + 1)
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : 'Nie udało się pobrać pliku z KSeF.')
-    } finally {
-      setRehydrateBusy(false)
-    }
-  }
-
   if (phase === 'error') {
     return (
       <div className="doc-preview doc-preview--error">
         <p role="alert">{message}</p>
         <p className="doc-preview__hint">
-          Jeśli faktura jest z KSeF i dopiero co została przetworzona, odśwież panel lub użyj „Spróbuj ponownie” — podgląd PDF tworzy się po zakończeniu pipeline na serwerze.
+          Przy fakturach z KSeF użyj przycisku „Pobierz z KSeF i przetwórz” nad podglądem. Tutaj możesz ponowić samo
+          pobranie pliku z serwera (np. po zakończeniu przetwarzania).
           {message.includes('Sesja wygasła') || message.includes('401')
             ? ' Błąd 401 oznacza wygasły token — wyloguj się i zaloguj ponownie.'
             : ''}
@@ -257,16 +247,6 @@ export function InvoiceDocumentPreview({
           >
             Spróbuj ponownie
           </button>
-          {showKsefRehydrate ? (
-            <button
-              type="button"
-              className="btn btn--primary btn--sm"
-              disabled={rehydrateBusy}
-              onClick={() => void handleRehydrateFromKsef()}
-            >
-              {rehydrateBusy ? 'Pobieranie z KSeF…' : 'Pobierz XML z KSeF (naprawa)'}
-            </button>
-          ) : null}
         </div>
       </div>
     )
