@@ -1,6 +1,7 @@
 import { AuthProvider, useAuth } from './auth/AuthContext'
 import LoginPage from './auth/LoginPage'
 import DashboardApp from './DashboardApp'
+import { AppErrorBoundary } from './components/app/AppErrorBoundary'
 import './index.css'
 
 function AuthGate() {
@@ -24,8 +25,10 @@ function AuthGate() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <AuthGate />
-    </AuthProvider>
+    <AppErrorBoundary>
+      <AuthProvider>
+        <AuthGate />
+      </AuthProvider>
+    </AppErrorBoundary>
   )
 }
