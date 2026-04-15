@@ -32,9 +32,18 @@ export function mapApiInvoiceRowToRecord(row: ApiInvoiceListRow): InvoiceRecord 
     row.status === 'FAILED_NEEDS_REVIEW' ||
     row.reviewStatus === 'NEEDS_REVIEW'
 
+  const primaryDocMeta =
+    row.primaryDoc?.metadata && typeof row.primaryDoc.metadata === 'object'
+      ? (row.primaryDoc.metadata as Record<string, unknown>)
+      : null
+  const primaryDocKind =
+    primaryDocMeta && typeof primaryDocMeta.kind === 'string' ? primaryDocMeta.kind : null
+
   return {
     id: row.id,
     primary_document_id: row.primaryDoc?.id ?? null,
+    primary_document_mime: row.primaryDoc?.mimeType ?? null,
+    primary_document_kind: primaryDocKind,
     invoice_status: row.status,
     source_type: mapIntakeToSource(row.intakeSourceType),
     source_account: row.sourceAccount?.trim() || '—',

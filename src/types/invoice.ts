@@ -28,6 +28,10 @@ export interface InvoiceRecord {
   id: string
   /** UUID dokumentu głównego w API (różny od `id` faktury). */
   primary_document_id?: string | null
+  /** MIME dokumentu głównego (używane do wyboru podglądu PDF/XML). */
+  primary_document_mime?: string | null
+  /** Techniczny typ dokumentu z metadata (np. `ksef_summary_pdf`). */
+  primary_document_kind?: string | null
   /** Status z API (`Invoice.status`), np. INGESTING podczas OCR. */
   invoice_status?: string
   source_type: SourceType

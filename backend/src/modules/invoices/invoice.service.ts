@@ -56,7 +56,7 @@ export async function listInvoices(prisma: PrismaClient, tenantId: string, q: In
       include: {
         contractor: { select: { id: true, name: true, nip: true } },
         tenant: { select: { name: true } },
-        primaryDoc: { select: { id: true, sha256: true } },
+        primaryDoc: { select: { id: true, sha256: true, mimeType: true, metadata: true } },
         duplicatesAsA: {
           where: { resolution: "OPEN" },
           orderBy: { confidence: "desc" },

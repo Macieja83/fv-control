@@ -27,7 +27,12 @@ export type ApiInvoiceListRow = {
   updatedAt: string
   contractor: { id: string; name: string; nip: string | null } | null
   tenant: { name: string }
-  primaryDoc: { id: string; sha256: string } | null
+  primaryDoc: {
+    id: string
+    sha256: string
+    mimeType: string | null
+    metadata?: unknown
+  } | null
   _count: { items: number; files: number }
   documentKind?: string
   ledgerKind?: string

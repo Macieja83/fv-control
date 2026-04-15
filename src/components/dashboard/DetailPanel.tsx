@@ -192,6 +192,12 @@ export function DetailPanel({
     row.ksef_status === 'SENT' ||
     row.ksef_status === 'RECEIVED' ||
     row.ksef_status === 'PENDING'
+  const primaryMime = (row.primary_document_mime ?? '').toLowerCase()
+  const primaryLooksLikeXml =
+    primaryMime.includes('xml') || primaryMime.startsWith('text/')
+  const shouldPreferKsefFaXmlPreview =
+    row.source_type === 'ksef' &&
+    (primaryLooksLikeXml || row.primary_document_kind === 'ksef_summary_pdf')
 
   const handleOverlayClick = (e: React.MouseEvent) => {
     if (e.target === overlayRef.current) onClose()
@@ -257,7 +263,7 @@ export function DetailPanel({
                   key={row.id}
                   invoiceId={row.id}
                   ksefNumber={row.ksef_number}
-                  preferKsefFaXml={row.source_type === 'ksef' || Boolean(row.ksef_number?.trim())}
+                  preferKsefFaXml={shouldPreferKsefFaXmlPreview}
                   reloadExtra={docPreviewReloadKey}
                 />
               </section>
