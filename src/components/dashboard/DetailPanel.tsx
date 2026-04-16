@@ -11,6 +11,7 @@ import {
   type InvoicePispPaymentState,
 } from '../../api/invoicesApi'
 import { getStoredToken } from '../../auth/session'
+import { COST_CATEGORIES, REVENUE_CATEGORIES } from '../../data/categories'
 
 const money = (amount: number, c: InvoiceRecord['currency']) =>
   new Intl.NumberFormat('pl-PL', {
@@ -21,7 +22,6 @@ const money = (amount: number, c: InvoiceRecord['currency']) =>
 
 type Props = {
   row: InvoiceRecord | null
-  categories: readonly string[]
   linkedRow: InvoiceRecord | null
   categoryLocalOnly: boolean
   onClose: () => void
@@ -51,7 +51,6 @@ type Props = {
 
 export function DetailPanel({
   row,
-  categories,
   linkedRow,
   categoryLocalOnly,
   onClose,
@@ -122,6 +121,14 @@ export function DetailPanel({
     row?.transfer?.transferRecipient,
     row?.transfer?.transferTitle,
   ])
+
+  const categoryOptions = useMemo(() => {
+    const base: string[] =
+      row?.ledger_kind === 'sale' ? [...REVENUE_CATEGORIES] : [...COST_CATEGORIES]
+    const c = row?.category?.trim()
+    if (c && !base.includes(c)) base.unshift(c)
+    return base
+  }, [row?.ledger_kind, row?.category])
 
   useEffect(() => {
     if (!row) {
@@ -557,12 +564,16 @@ export function DetailPanel({
                     <span className="field__label">Kategoria</span>
                     <select
                       className="input"
-                      title={categoryLocalOnly ? 'Kategoria jest zapamiętywana tylko w tej przeglądarce (do czasu odświeżenia strony); backend jej nie zapisuje.' : undefined}
+                      title={
+                        categoryLocalOnly
+                          ? 'W trybie demo kategoria jest tylko w tej przeglądarce.'
+                          : 'Zapis w bazie — widoczna w Raportach wg kategorii.'
+                      }
                       value={row.category ?? ''}
-                      onChange={(e) => onCategory(row.id, e.target.value || null)}
+                      onChange={(e) => void onCategory(row.id, e.target.value || null)}
                     >
                       <option value="">— brak —</option>
-                      {categories.map((c) => (
+                      {categoryOptions.map((c) => (
                         <option key={c} value={c}>{c}</option>
                       ))}
                     </select>

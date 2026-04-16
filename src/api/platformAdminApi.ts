@@ -5,7 +5,15 @@ export type PlatformTenantRow = {
   createdAt: string
   userCount: number
   invoiceCount: number
-  subscription: { status: string; planCode: string; provider: string } | null
+  subscription: {
+    status: string
+    planCode: string
+    provider: string
+    providerCustomerId: string | null
+    providerSubscriptionId: string | null
+    currentPeriodEnd: string | null
+    trialEndsAt: string | null
+  } | null
 }
 
 export type PlatformAdminKsefRow = {
@@ -55,4 +63,42 @@ export async function issueImpersonationToken(token: string, tenantId: string): 
   const body = (await res.json()) as { accessToken?: string; error?: { message?: string } }
   if (!res.ok || !body.accessToken) throw new Error(body.error?.message ?? `Impersonacja nieudana (${res.status})`)
   return body.accessToken
+}
+
+export type WebhookDlqPlatformSummary = {
+  totalDeadLetter: number
+  recent: Array<{
+    id: string
+    tenantId: string
+    eventType: string
+    attemptCount: number
+    lastError: string | null
+    updatedAt: string
+    tenant: { name: string; nip: string | null }
+  }>
+}
+
+export async function fetchWebhookDlqPlatform(token: string, limit = 100): Promise<WebhookDlqPlatformSummary> {
+  const q = new URLSearchParams({ limit: String(limit) })
+  const res = await fetch(`/api/v1/platform-admin/webhooks-dlq?${q}`, { headers: authHeader(token) })
+  const body = (await res.json()) as { data?: WebhookDlqPlatformSummary; error?: { message?: string } }
+  if (!res.ok) throw new Error(body.error?.message ?? `Webhook DLQ (${res.status})`)
+  return body.data ?? { totalDeadLetter: 0, recent: [] }
+}
+
+export type ConnectorsPlatformRow = {
+  tenantId: string
+  tenantName: string | null
+  tenantNip: string | null
+  ingestionSources: number
+  integrationCredentials: number
+  integrationPos: number
+  totalConnectors: number
+}
+
+export async function fetchConnectorsPlatformSummary(token: string): Promise<ConnectorsPlatformRow[]> {
+  const res = await fetch('/api/v1/platform-admin/connectors-summary', { headers: authHeader(token) })
+  const body = (await res.json()) as { data?: { rows: ConnectorsPlatformRow[] }; error?: { message?: string } }
+  if (!res.ok) throw new Error(body.error?.message ?? `Connectory (${res.status})`)
+  return Array.isArray(body.data?.rows) ? body.data!.rows : []
 }

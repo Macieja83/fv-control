@@ -36,6 +36,8 @@ export type ApiInvoiceListRow = {
   _count: { items: number; files: number }
   documentKind?: string
   ledgerKind?: string
+  /** Kategoria raportowa (zapis w API). */
+  reportCategory?: string | null
   ksefStatus?: string
   ksefRequired?: boolean
   needsContractorVerification?: boolean

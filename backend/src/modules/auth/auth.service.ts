@@ -153,12 +153,36 @@ export async function logout(prisma: PrismaClient, userId: string, refreshToken?
   }
 }
 
-export async function getMe(prisma: PrismaClient, userId: string) {
-  const user = await prisma.user.findUnique({ where: { id: userId } });
+type GetMeContext = {
+  id: string;
+  tenantId: string;
+  impersonatedByUserId?: string;
+};
+
+export async function getMe(prisma: PrismaClient, ctx: GetMeContext) {
+  const user = await prisma.user.findUnique({ where: { id: ctx.id } });
   if (!user?.isActive) {
     throw AppError.unauthorized();
   }
-  return sanitizeUser(user);
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: ctx.tenantId },
+    select: { name: true, nip: true },
+  });
+  const base = sanitizeUser(user);
+  return {
+    ...base,
+    tenantId: ctx.tenantId,
+    tenantName: tenant?.name ?? null,
+    impersonation:
+      ctx.impersonatedByUserId !== undefined
+        ? {
+            active: true as const,
+            effectiveTenantId: ctx.tenantId,
+            effectiveTenantName: tenant?.name ?? null,
+            effectiveTenantNip: tenant?.nip ?? null,
+          }
+        : null,
+  };
 }
 
 export async function verifyEmail(prisma: PrismaClient, token: string) {
@@ -344,6 +368,10 @@ export async function listTenantsForSuperAdmin(prisma: PrismaClient, limit = 200
         status: s.status,
         planCode: s.planCode,
         provider: s.provider,
+        providerCustomerId: s.providerCustomerId,
+        providerSubscriptionId: s.providerSubscriptionId,
+        currentPeriodEnd: s.currentPeriodEnd,
+        trialEndsAt: s.trialEndsAt,
       };
     })(),
   }));
@@ -361,6 +389,19 @@ export async function issueTenantImpersonationAccessToken(
   const tenant = await prisma.tenant.findUnique({ where: { id: targetTenantId } });
   if (!tenant) throw AppError.notFound("Tenant not found");
   const cfg = loadConfig();
+  await prisma.auditLog.create({
+    data: {
+      tenantId: targetTenantId,
+      actorId: user.id,
+      action: "PLATFORM_ADMIN_IMPERSONATION",
+      entityType: "TENANT",
+      entityId: targetTenantId,
+      metadata: {
+        actorEmail: user.email,
+        targetTenantName: tenant.name,
+      } as object,
+    },
+  });
   return {
     accessToken: signAccessToken(
       { sub: user.id, tid: targetTenantId, role: user.role, impBy: user.id },

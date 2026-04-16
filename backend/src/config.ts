@@ -27,6 +27,11 @@ const envSchema = z.object({
   RATE_LIMIT_LOGIN_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
   RATE_LIMIT_WEBHOOK_MAX: z.coerce.number().int().positive().default(120),
   RATE_LIMIT_WEBHOOK_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
+  /**
+   * Limit ręcznego `POST /connectors/ksef/sync` na tenant (po uwierzytelnieniu). 0 = wyłączony.
+   */
+  RATE_LIMIT_KSEF_SYNC_MAX: z.coerce.number().int().min(0).default(8),
+  RATE_LIMIT_KSEF_SYNC_WINDOW_MS: z.coerce.number().int().min(0).default(300_000),
   APP_NAME: z.string().default("FVControl API"),
   APP_VERSION: z.string().default("1.0.0"),
 
@@ -201,7 +206,7 @@ const envSchema = z.object({
   SIMPLIFIED_RECEIPT_MAX_PLN: z.coerce.number().positive().default(450),
   SIMPLIFIED_RECEIPT_MAX_EUR: z.coerce.number().positive().default(100),
 
-  /** Default n8n / automation webhook URL for outbox events (optional in prod if using per-tenant config later). */
+  /** Opcjonalny URL webhooka — gdy brak, `enqueueTenantWebhook` nie tworzy wpisów w outboxie. */
   N8N_WEBHOOK_URL: z.preprocess(
     (v) => (v === "" || v === undefined ? undefined : v),
     z.string().url().optional(),

@@ -14,11 +14,11 @@ describe("inbound webhook log redaction", () => {
     app = await buildApp();
     app.addHook("onRequest", async (req) => {
       if (!req.url.includes("/webhooks/inbound")) return;
-      const orig = req.log.info.bind(req.log);
-      req.log.info = (obj: unknown, msg?: string, ...rest: unknown[]) => {
-        infoSpy(obj, msg, ...rest);
-        return orig(obj as never, msg as never, ...(rest as never[]));
-      };
+      const orig = req.log.info.bind(req.log) as (...args: unknown[]) => void;
+      req.log.info = ((...args: unknown[]) => {
+        infoSpy(...args);
+        orig(...args);
+      }) as typeof req.log.info;
     });
   });
 

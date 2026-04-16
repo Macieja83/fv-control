@@ -6,6 +6,10 @@ import {
   issueTenantImpersonationAccessToken,
   listTenantsForSuperAdmin,
 } from "../modules/auth/auth.service.js";
+import {
+  getConnectorsPlatformSummary,
+  getWebhookDlqPlatformSummary,
+} from "../modules/platform-admin/platform-admin-aggregate.service.js";
 import { listKsefOverviewForPlatformAdmin } from "../modules/ksef/ksef-platform-admin.service.js";
 
 const listQuerySchema = z.object({
@@ -47,6 +51,31 @@ const platformAdminRoutes: FastifyPluginAsync = async (app) => {
       if (!request.authUser?.isPlatformAdmin) throw AppError.forbidden("Platform admin required");
       const body = parseOrThrow(impersonateSchema, request.body);
       return issueTenantImpersonationAccessToken(app.prisma, request.authUser.id, body.tenantId);
+    },
+  );
+
+  app.get(
+    "/platform-admin/webhooks-dlq",
+    {
+      preHandler: [app.authenticate],
+      schema: { tags: ["PlatformAdmin"], summary: "Outbound webhooks DEAD_LETTER (cross-tenant)" },
+    },
+    async (request) => {
+      if (!request.authUser?.isPlatformAdmin) throw AppError.forbidden("Platform admin required");
+      const q = parseOrThrow(listQuerySchema, request.query ?? {});
+      return { data: await getWebhookDlqPlatformSummary(app.prisma, q.limit) };
+    },
+  );
+
+  app.get(
+    "/platform-admin/connectors-summary",
+    {
+      preHandler: [app.authenticate],
+      schema: { tags: ["PlatformAdmin"], summary: "Ingestion + integration connectors per tenant" },
+    },
+    async (request) => {
+      if (!request.authUser?.isPlatformAdmin) throw AppError.forbidden("Platform admin required");
+      return { data: await getConnectorsPlatformSummary(app.prisma) };
     },
   );
 };

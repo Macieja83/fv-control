@@ -56,7 +56,7 @@ export function mapApiInvoiceRowToRecord(row: ApiInvoiceListRow): InvoiceRecord 
     net_amount: Number.isFinite(net) ? net : 0,
     gross_amount: Number.isFinite(gross) ? gross : 0,
     currency: mapCurrency(row.currency),
-    category: null,
+    category: row.reportCategory?.trim() || null,
     payment_status: row.status === 'PAID' ? 'paid' : 'unpaid',
     document_scope: row.legalChannel === 'EXCLUDED' ? 'private' : 'business',
     review_status: needsReviewByWorkflow ? 'needs_review' : 'cleared',

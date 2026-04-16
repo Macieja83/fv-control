@@ -30,6 +30,7 @@ import { parseInvoiceDate } from "../invoices/invoice-dates.js";
 import { createObjectStorage } from "../../adapters/storage/create-storage.js";
 import { loadConfig } from "../../config.js";
 import { getEffectiveKsefApiEnv, KSEF_INGESTION_SOURCE_LABEL } from "./ksef-effective-env.js";
+import { enqueueKsefSyncCompletedOutbox, enqueueKsefSyncFailedOutbox } from "./ksef-sync-outbox.js";
 import { loadKsefClientForTenant } from "./ksef-tenant-credentials.service.js";
 
 export type KsefSyncJobData = {
@@ -353,6 +354,24 @@ export async function runKsefSyncJob(
       errorPreview: errPreview,
     },
   );
+
+  const completedAt = syncRunAt();
+  void enqueueKsefSyncCompletedOutbox(prisma, data.tenantId, {
+    occurredAt: completedAt,
+    queueJobId: ctx?.queueJobId ?? null,
+    stats: {
+      fetched: result.fetched,
+      ingested: result.ingested,
+      skippedDuplicate: result.skippedDuplicate,
+      refetched: result.refetched,
+      errorCount: result.errors.length,
+    },
+    newHwmDate: skipHwmPersistence ? null : persistedHwm,
+    retryQueueSize: retryToPersist.length,
+  }).catch((err) => {
+    console.warn({ err, tenantId: data.tenantId }, "KSeF sync completed — webhook outbox enqueue failed");
+  });
+
   if (retryToPersist.length > 0) {
     console.warn(
       `[KSeF sync] Pozostawiono ${retryToPersist.length} numerów KSeF w retry queue (ponowienie w kolejnych sync).`,
@@ -816,6 +835,13 @@ export async function mergeKsefSyncRunTelemetry(
           errorPreview: patch.errorPreview ?? null,
         } as object,
       },
+    });
+    void enqueueKsefSyncFailedOutbox(prisma, tenantId, {
+      occurredAt: patch.runAt,
+      queueJobId: patch.queueJobId ?? null,
+      errorPreview: patch.errorPreview ?? null,
+    }).catch((err) => {
+      console.warn({ err, tenantId }, "KSeF sync failed — webhook outbox enqueue failed");
     });
   }
 }

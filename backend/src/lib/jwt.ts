@@ -34,6 +34,7 @@ export function verifyAccessToken(token: string, secret: string): AccessPayload 
       tid: o.tid,
       role: o.role as UserRole,
       typ: "access",
+      ...(typeof o.impBy === "string" && o.impBy.length > 0 ? { impBy: o.impBy } : {}),
     };
   } catch (e) {
     if (e instanceof AppError) throw e;

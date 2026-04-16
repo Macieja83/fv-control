@@ -21,6 +21,7 @@ import webhooksRoutes from "./webhooks.routes.js";
 import workflowsRoutes from "./workflows.routes.js";
 import ksefRoutes from "./ksef.routes.js";
 import platformAdminRoutes from "./platform-admin.routes.js";
+import reportsRoutes from "./reports.routes.js";
 import tenantRoutes from "./tenant.routes.js";
 import zenboxRoutes from "./zenbox.routes.js";
 
@@ -33,6 +34,7 @@ export async function registerApiRoutes(app: FastifyInstance): Promise<void> {
   await app.register(activityRoutes);
   await app.register(agreementsRoutes);
   await app.register(dashboardRoutes);
+  await app.register(reportsRoutes);
   await app.register(documentsRoutes);
   await app.register(duplicatesRoutes);
   await app.register(ingestionRoutes);

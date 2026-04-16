@@ -89,6 +89,7 @@ export const invoiceUpdateSchema = z.object({
   notes: z.string().max(5000).optional().nullable(),
   reviewStatus: z.nativeEnum(InvoiceReviewStatus).optional(),
   legalChannel: z.nativeEnum(LegalChannel).optional(),
+  reportCategory: z.string().max(200).optional().nullable(),
 });
 
 export const invoiceStatusPatchSchema = z.object({

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   deleteInvoiceRequest,
   fetchInvoicesListAllPages,
@@ -14,25 +14,14 @@ import type { InvoiceFilters, InvoiceRecord } from '../types/invoice'
 import { EMPTY_FILTERS } from '../types/invoice'
 import { seedInvoices } from '../data/mockInvoices'
 import { enrichDuplicateMetadata, isDuplicateFlagged } from '../lib/duplicates'
-import { COST_CATEGORIES } from '../data/categories'
+import { matchesInvoiceFilters } from '../lib/matchesInvoiceFilters'
+import { ALL_REPORT_CATEGORIES } from '../data/categories'
 import { mapApiInvoiceRowToRecord } from '../lib/mapApiInvoice'
 import { getStoredToken } from '../auth/session'
 
 const USE_MOCK_INVOICES =
   import.meta.env.VITE_USE_MOCK_INVOICES === 'true' ||
   import.meta.env.VITE_USE_MOCK_INVOICES === '1'
-
-/** W trybie API kategoria nie ma pola w backendzie — trzymamy wybór lokalnie i scalamy po każdym fetchu. */
-function mergeCategoryOverrides(
-  rows: InvoiceRecord[],
-  overrides: Record<string, string | null>,
-): InvoiceRecord[] {
-  return rows.map((r) =>
-    Object.prototype.hasOwnProperty.call(overrides, r.id)
-      ? { ...r, category: overrides[r.id] ?? null }
-      : r,
-  )
-}
 
 function nowIso() {
   return new Date().toISOString()
@@ -60,42 +49,6 @@ function pushHistory(
   }
 }
 
-function matchesFilters(row: InvoiceRecord, f: InvoiceFilters): boolean {
-  if (f.search.trim()) {
-    const q = f.search.toLowerCase()
-    const blob = [
-      row.supplier_name,
-      row.invoice_number,
-      row.supplier_nip,
-      row.extracted_vendor_nip ?? '',
-      row.ksef_number ?? '',
-      row.primary_document_id ?? '',
-      row.notes,
-    ]
-      .join(' ')
-      .toLowerCase()
-    if (!blob.includes(q)) return false
-  }
-  if (f.dateFrom && row.issue_date < f.dateFrom) return false
-  if (f.dateTo && row.issue_date > f.dateTo) return false
-  if (f.supplier && row.supplier_name !== f.supplier) return false
-  if (f.restaurant && row.restaurant_name !== f.restaurant) return false
-  if (f.reviewStatus && row.review_status !== f.reviewStatus) return false
-  if (f.category) {
-    if (f.category === '__none__') {
-      if (row.category) return false
-    } else if (row.category !== f.category) return false
-  }
-  if (f.payment && row.payment_status !== f.payment) return false
-  if (f.scope && row.document_scope !== f.scope) return false
-  if (f.source) {
-    if (f.source === 'discord_ready') {
-      if (row.source_type !== 'discord') return false
-    } else if (row.source_type !== f.source) return false
-  }
-  return true
-}
-
 export type QuickFilter =
   | null
   | 'all'
@@ -118,7 +71,6 @@ export function useInvoiceDashboard() {
   const [quickFilter, setQuickFilter] = useState<QuickFilter>(null)
   const [invoiceLedger, setInvoiceLedger] = useState<'purchase' | 'sale'>('purchase')
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const categoryOverridesRef = useRef<Record<string, string | null>>({})
 
   const [dataSource, setDataSource] = useState<InvoiceDataSource>(
     USE_MOCK_INVOICES ? 'mock' : 'api',
@@ -150,8 +102,7 @@ export function useInvoiceDashboard() {
         ...(dt ? { dateTo: dt } : {}),
       })
       const mapped = res.data.map(mapApiInvoiceRowToRecord)
-      const merged = mergeCategoryOverrides(mapped, categoryOverridesRef.current)
-      setInvoices(enrichDuplicateMetadata(merged))
+      setInvoices(enrichDuplicateMetadata(mapped))
       setDataSource('api')
     } catch (e) {
       if (USE_MOCK_INVOICES) {
@@ -197,7 +148,7 @@ export function useInvoiceDashboard() {
   }, [invoices, invoiceLedger])
 
   const filtered = useMemo(() => {
-    let list = ledgerScoped.filter((r) => matchesFilters(r, filters))
+    let list = ledgerScoped.filter((r) => matchesInvoiceFilters(r, filters))
     if (quickFilter === 'unpaid') {
       list = list.filter(
         (r) => r.payment_status === 'unpaid' && r.document_scope === 'business',
@@ -218,7 +169,7 @@ export function useInvoiceDashboard() {
 
   /** Wskaźniki jak lista: ten sam zestaw co po filtrach paska (m.in. zakres dat Od–Do), bez szybkiego filtra z kafelków. */
   const kpi = useMemo(() => {
-    const base = ledgerScoped.filter((r) => matchesFilters(r, filters))
+    const base = ledgerScoped.filter((r) => matchesInvoiceFilters(r, filters))
     const all = base.length
     const unpaidBiz = base.filter(
       (r) => r.payment_status === 'unpaid' && r.document_scope === 'business',
@@ -297,7 +248,7 @@ export function useInvoiceDashboard() {
   )
 
   const setCategory = useCallback(
-    (id: string, category: string | null) => {
+    async (id: string, category: string | null) => {
       if (USE_MOCK_INVOICES) {
         updateRow(id, (r) =>
           pushHistory(
@@ -309,14 +260,17 @@ export function useInvoiceDashboard() {
         )
         return
       }
-      categoryOverridesRef.current = { ...categoryOverridesRef.current, [id]: category }
-      setInvoices((prev) =>
-        enrichDuplicateMetadata(
-          prev.map((r) => (r.id === id ? { ...r, category } : r)),
-        ),
-      )
+      const token = getStoredToken()
+      if (!token) return
+      try {
+        await patchInvoice(token, id, { reportCategory: category })
+        await refreshFromApi()
+      } catch (e) {
+        window.alert(e instanceof Error ? e.message : String(e))
+        await refreshFromApi()
+      }
     },
-    [updateRow],
+    [updateRow, refreshFromApi],
   )
 
   const setScope = useCallback(
@@ -527,9 +481,6 @@ export function useInvoiceDashboard() {
         setSelectedId((cur) => (cur && idSet.has(cur) ? null : cur))
         return true
       }
-      for (const id of uniq) {
-        delete categoryOverridesRef.current[id]
-      }
       const token = getStoredToken()
       if (!token) return false
       const idSet = new Set(uniq)
@@ -618,7 +569,6 @@ export function useInvoiceDashboard() {
         setSelectedId((cur) => (cur === id ? null : cur))
         return
       }
-      delete categoryOverridesRef.current[id]
       const token = getStoredToken()
       if (!token) return
       try {
@@ -775,7 +725,7 @@ export function useInvoiceDashboard() {
     kpi,
     suppliers,
     restaurants,
-    categories: [...COST_CATEGORIES],
+    categories: ALL_REPORT_CATEGORIES,
     setPaid,
     setUnpaid,
     setCategory,
@@ -797,8 +747,8 @@ export function useInvoiceDashboard() {
     listLoading,
     listError,
     dataSource,
-    /** true = kategoria nie trafia do API, tylko pamięć podręczna w tej sesji */
-    categoryLocalOnly: !USE_MOCK_INVOICES,
+    /** true = kategoria tylko lokalnie (tryb demo); w API zapisuje się jako reportCategory */
+    categoryLocalOnly: USE_MOCK_INVOICES,
     refreshFromApi,
     retryInvoiceExtraction,
     syncKsefInvoiceFromApi,

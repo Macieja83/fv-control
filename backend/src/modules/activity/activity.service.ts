@@ -22,6 +22,8 @@ function titleForAction(action: string): string {
       return "KSeF sync — wyczerpane ponowienia (kolejka)";
     case "KSEF_SYNC_RUN_FAILED":
       return "KSeF sync — błąd przebiegu";
+    case "PLATFORM_ADMIN_IMPERSONATION":
+      return "Wejście operatora (impersonacja)";
     default:
       return action.replace(/_/g, " ");
   }

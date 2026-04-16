@@ -15,6 +15,13 @@ export type AuthUser = {
   emailVerified: boolean
   /** Konto operatora platformy — zakładka Admin, API /platform-admin/*. */
   isPlatformAdmin: boolean
+  tenantName?: string | null
+  impersonation?: {
+    active: true
+    effectiveTenantId: string
+    effectiveTenantName: string | null
+    effectiveTenantNip?: string | null
+  } | null
 }
 
 type AuthStatus = 'checking' | 'guest' | 'authed'

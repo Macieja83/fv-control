@@ -60,6 +60,40 @@ async function readErrorMessage(res: Response): Promise<string> {
   return `HTTP ${res.status}`
 }
 
+/** Błąd POST sync — 429: dołącza sekundy z `Retry-After` lub `details.retryAfterSec`, jeśli brak w treści. */
+async function readPostKsefSyncError(res: Response): Promise<string> {
+  const retryHeader = res.headers.get('Retry-After')
+  let fromHeader: number | undefined
+  if (retryHeader) {
+    const n = parseInt(retryHeader, 10)
+    if (!Number.isNaN(n) && n > 0) fromHeader = n
+  }
+  let bodyMsg = `HTTP ${res.status}`
+  let fromDetails: number | undefined
+  try {
+    const raw = await res.text()
+    if (raw) {
+      const j = JSON.parse(raw) as {
+        error?: { message?: string; details?: { retryAfterSec?: unknown } }
+      }
+      if (typeof j.error?.message === 'string') bodyMsg = j.error.message
+      const d = j.error?.details?.retryAfterSec
+      if (typeof d === 'number' && Number.isFinite(d) && d > 0) fromDetails = Math.ceil(d)
+    }
+  } catch {
+    /* keep defaults */
+  }
+  if (res.status === 429) {
+    const sec = fromDetails ?? fromHeader
+    const alreadyHasSeconds =
+      /\b\d+\s*s\.?\b/i.test(bodyMsg) || /za ok\.\s*\d+/i.test(bodyMsg) || /ponownie za ok/i.test(bodyMsg)
+    if (sec != null && sec > 0 && !alreadyHasSeconds) {
+      return `${bodyMsg.trim()} Możesz spróbować ponownie za ok. ${sec} s.`
+    }
+  }
+  return bodyMsg
+}
+
 function emptyKsefQueue(): KsefQueueStatus {
   return {
     redisAvailable: false,
@@ -101,7 +135,7 @@ export async function postKsefSync(
     },
     body: JSON.stringify(body ?? {}),
   })
-  if (!res.ok) throw new Error(await readErrorMessage(res))
+  if (!res.ok) throw new Error(await readPostKsefSyncError(res))
   return (await res.json()) as { queued: boolean; jobId?: string | number; dedupeSkipped?: boolean }
 }
 

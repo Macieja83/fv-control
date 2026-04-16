@@ -1,6 +1,8 @@
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { loadConfig } from "../config.js";
+import { AppError } from "../lib/errors.js";
+import { consumeKsefManualSyncRateToken } from "../lib/ksef-manual-sync-rate-limit.js";
 import { assertCanManageIntegrations, assertCanMutate } from "../lib/roles.js";
 import { parseOrThrow } from "../lib/validate.js";
 import { enqueueKsefSync, getKsefQueueSnapshotForTenant } from "../lib/ksef-sync-queue.js";
@@ -173,7 +175,21 @@ const ksefRoutes: FastifyPluginAsync = async (app) => {
     },
     async (request, reply) => {
       assertCanMutate(request.authUser!.role);
-      const effective = await getEffectiveKsefApiEnv(app.prisma, request.authUser!.tenantId);
+      const cfg = loadConfig();
+      const tenantId = request.authUser!.tenantId;
+      const rl = consumeKsefManualSyncRateToken(
+        tenantId,
+        cfg.RATE_LIMIT_KSEF_SYNC_MAX,
+        cfg.RATE_LIMIT_KSEF_SYNC_WINDOW_MS,
+      );
+      if (!rl.ok) {
+        void reply.header("Retry-After", String(rl.retryAfterSec));
+        throw AppError.tooManyRequests(
+          `Zbyt częste uruchamianie synchronizacji KSeF. Spróbuj ponownie za ok. ${rl.retryAfterSec} s.`,
+          { retryAfterSec: rl.retryAfterSec },
+        );
+      }
+      const effective = await getEffectiveKsefApiEnv(app.prisma, tenantId);
       if (effective === "mock") {
         return reply.status(400).send({
           error: {
@@ -182,7 +198,7 @@ const ksefRoutes: FastifyPluginAsync = async (app) => {
           },
         });
       }
-      const client = await loadKsefClientForTenant(app.prisma, request.authUser!.tenantId);
+      const client = await loadKsefClientForTenant(app.prisma, tenantId);
       if (!client) {
         return reply.status(400).send({
           error: {
@@ -193,7 +209,7 @@ const ksefRoutes: FastifyPluginAsync = async (app) => {
       }
       const body = (request.body as { force?: boolean; fromDate?: string; toDate?: string }) ?? {};
       const result = await enqueueKsefSync({
-        tenantId: request.authUser!.tenantId,
+        tenantId,
         forceRefetchFiles: body.force === true,
         fromDate: body.fromDate,
         toDate: body.toDate,

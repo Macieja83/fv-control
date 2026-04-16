@@ -240,6 +240,10 @@ export async function updateInvoice(
   if (input.notes !== undefined) data.notes = input.notes;
   if (input.reviewStatus !== undefined) data.reviewStatus = input.reviewStatus;
   if (input.legalChannel !== undefined) data.legalChannel = input.legalChannel;
+  if (input.reportCategory !== undefined) {
+    const t = input.reportCategory?.trim();
+    data.reportCategory = t && t.length > 0 ? t : null;
+  }
 
   const inv = await prisma.$transaction(async (tx) => {
     const updated = await tx.invoice.update({

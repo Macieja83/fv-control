@@ -539,6 +539,8 @@ model Invoice {
   rawPayload        Json?                   @map("raw_payload") @db.JsonB
   normalizedPayload Json?                   @map("normalized_payload") @db.JsonB
   complianceFlags   Json?                   @map("compliance_flags") @db.JsonB
+  /// Kategoria raportowa (wydatki / przychody) — ustawiana ręcznie w UI; agregacja w Raportach.
+  reportCategory    String?                 @map("report_category") @db.VarChar(200)
 
   items            InvoiceItem[]
   files            InvoiceFile[]

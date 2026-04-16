@@ -145,7 +145,12 @@ const authRoutes: FastifyPluginAsync = async (app) => {
     "/auth/me",
     { preHandler: [app.authenticate], schema: { tags: ["Auth"], summary: "Current user" } },
     async (request) => {
-      return authService.getMe(app.prisma, request.authUser!.id);
+      const u = request.authUser!;
+      return authService.getMe(app.prisma, {
+        id: u.id,
+        tenantId: u.tenantId,
+        impersonatedByUserId: u.impersonatedByUserId,
+      });
     },
   );
 };

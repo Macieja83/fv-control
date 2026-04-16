@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from './auth/AuthContext'
 import { ActivityDrawer } from './components/app/ActivityDrawer'
 import { AdminPanel } from './components/app/AdminPanel'
+import { ImpersonationBanner } from './components/app/ImpersonationBanner'
 import {
   APP_NAV_ITEMS,
   PLATFORM_ADMIN_NAV_ITEM,
@@ -10,6 +11,7 @@ import {
 import { ContractorsPanel } from './components/app/ContractorsPanel'
 import { DocumentsPanel } from './components/app/DocumentsPanel'
 import { PaymentsPanel } from './components/app/PaymentsPanel'
+import { ReportsPanel } from './components/app/ReportsPanel'
 import { SettingsPanel } from './components/app/SettingsPanel'
 import { Topbar } from './components/dashboard/Topbar'
 import { KPICards } from './components/dashboard/KPICards'
@@ -29,6 +31,7 @@ function readNavFromLocation(): AppNavKey {
   if (raw === 'plan') return 'settings'
   const keys: AppNavKey[] = [
     'invoices',
+    'reports',
     'documents',
     'payments',
     'contractors',
@@ -99,13 +102,16 @@ export default function DashboardApp() {
   }, [nav, setSelectedId])
 
   const topNavTabs = useMemo(
-    () => (user?.isPlatformAdmin ? [...APP_NAV_ITEMS, PLATFORM_ADMIN_NAV_ITEM] : APP_NAV_ITEMS),
-    [user?.isPlatformAdmin],
+    () =>
+      user?.isPlatformAdmin && !user?.impersonation?.active
+        ? [...APP_NAV_ITEMS, PLATFORM_ADMIN_NAV_ITEM]
+        : APP_NAV_ITEMS,
+    [user?.isPlatformAdmin, user?.impersonation?.active],
   )
 
   useEffect(() => {
-    if (nav === 'admin' && !user?.isPlatformAdmin) setNav('invoices')
-  }, [nav, user?.isPlatformAdmin])
+    if (nav === 'admin' && (!user?.isPlatformAdmin || user?.impersonation?.active)) setNav('invoices')
+  }, [nav, user?.isPlatformAdmin, user?.impersonation?.active])
 
   useEffect(() => {
     const q = new URLSearchParams(window.location.search)
@@ -128,6 +134,12 @@ export default function DashboardApp() {
 
   const activityBadge = kpi.review + kpi.unknownVendor
 
+  const impersonationLabel =
+    user?.impersonation?.active === true
+      ? user.impersonation.effectiveTenantName?.trim() ||
+        user.impersonation.effectiveTenantId.slice(0, 8) + '…'
+      : null
+
   return (
     <div className="app-shell">
       {listError && (
@@ -135,6 +147,7 @@ export default function DashboardApp() {
           {listError}
         </div>
       )}
+      {impersonationLabel && <ImpersonationBanner tenantLabel={impersonationLabel} />}
       <Topbar
         theme={theme}
         onThemeChange={setThemeAndDom}
@@ -196,6 +209,7 @@ export default function DashboardApp() {
           />
         </main>
       )}
+      {nav === 'reports' && <ReportsPanel />}
       {nav === 'documents' && (
         <main className="main-content main-content--padded">
           <DocumentsPanel />
@@ -225,7 +239,6 @@ export default function DashboardApp() {
         <DetailPanel
           key={selected?.id ?? 'none'}
           row={selected}
-          categories={categories}
           linkedRow={linkedRow}
           categoryLocalOnly={categoryLocalOnly}
           onClose={() => setSelectedId(null)}

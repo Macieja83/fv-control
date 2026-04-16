@@ -1,3 +1,10 @@
+type SessionImpersonation = {
+  active: true
+  effectiveTenantId: string
+  effectiveTenantName: string | null
+  effectiveTenantNip?: string | null
+} | null
+
 function readIsPlatformAdmin(u: { isPlatformAdmin?: boolean; isSuperAdmin?: boolean } | undefined): boolean {
   if (!u) return false
   if (u.isPlatformAdmin === true) return true
@@ -91,6 +98,8 @@ export async function sessionRequest(token: string): Promise<{
     tenantId: string
     emailVerified: boolean
     isPlatformAdmin: boolean
+    tenantName?: string | null
+    impersonation?: SessionImpersonation
   }
 }> {
   const res = await fetch('/api/v1/auth/me', {
@@ -104,8 +113,22 @@ export async function sessionRequest(token: string): Promise<{
     emailVerified?: boolean
     isPlatformAdmin?: boolean
     isSuperAdmin?: boolean
+    tenantName?: string | null
+    impersonation?: SessionImpersonation
   }
   if (typeof data.email === 'string') {
+    const imp = data.impersonation
+    const impersonation =
+      imp && typeof imp === 'object' && imp.active === true
+        ? {
+            active: true as const,
+            effectiveTenantId:
+              typeof imp.effectiveTenantId === 'string' ? imp.effectiveTenantId : (typeof data.tenantId === 'string' ? data.tenantId : ''),
+            effectiveTenantName: typeof imp.effectiveTenantName === 'string' || imp.effectiveTenantName === null ? imp.effectiveTenantName : null,
+            effectiveTenantNip:
+              typeof imp.effectiveTenantNip === 'string' || imp.effectiveTenantNip === null ? imp.effectiveTenantNip : undefined,
+          }
+        : null
     return {
       valid: true,
       user: {
@@ -113,6 +136,8 @@ export async function sessionRequest(token: string): Promise<{
         tenantId: typeof data.tenantId === 'string' ? data.tenantId : '',
         emailVerified: data.emailVerified === true,
         isPlatformAdmin: readIsPlatformAdmin(data),
+        tenantName: typeof data.tenantName === 'string' || data.tenantName === null ? data.tenantName : undefined,
+        impersonation,
       },
     }
   }
