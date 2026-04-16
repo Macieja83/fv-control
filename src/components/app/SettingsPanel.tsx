@@ -454,7 +454,265 @@ export function SettingsPanel() {
 
       {ok && <p className="workspace-panel__ok">Zapisano.</p>}
 
+      <section className="integration-card integration-card--tight settings-plan-section" style={{ marginBottom: 16 }}>
 
+        <h3 className="workspace-panel__h3">Plan i subskrypcja</h3>
+
+        <p className="workspace-panel__muted">
+
+          Abonament na FV Control (Stripe) — to nie jest przelew za faktury do dostawców.
+
+        </p>
+
+        {subErr && <p className="workspace-panel__err">{subErr}</p>}
+
+        {subLoading && <p className="workspace-panel__muted">Ładowanie subskrypcji…</p>}
+
+        {!subLoading && prepaid?.prepaidRenewSoon && !prepaid.prepaidExpired && (
+
+          <div className="app-banner app-banner--warn" role="status">
+
+            <strong>PRO (BLIK):</strong> zostało ok. <strong>{prepaid.prepaidDaysRemaining}</strong> dni do końca opłaconego
+
+            okresu ({new Date(prepaid.prepaidEndsAt).toLocaleString('pl-PL')}). Możesz przedłużyć dostęp przyciskiem „BLIK
+
+            — 30 dni”.
+
+          </div>
+
+        )}
+
+        {!subLoading && prepaid?.prepaidExpired && (
+
+          <div className="app-banner app-banner--error" role="alert">
+
+            <strong>PRO (BLIK):</strong> opłacony okres minął. Aby z powrotem korzystać z limitów PRO, opłać kolejny miesiąc
+
+            BLIKiem lub wybierz płatność kartą (subskrypcja miesięczna).
+
+          </div>
+
+        )}
+
+        {!subLoading && (
+
+          <>
+
+            {workspace && (
+
+              <p className="workspace-panel__muted" style={{ marginBottom: 12 }}>
+
+                Dokumenty (faktury + umowy): <strong>{workspace.used}</strong>
+
+                {workspace.limit != null ? (
+
+                  <>
+
+                    {' '}
+
+                    / <strong>{workspace.limit}</strong> na planie Free
+
+                  </>
+
+                ) : (
+
+                  <> — bez limitu (PRO)</>
+
+                )}
+
+                .
+
+              </p>
+
+            )}
+
+            <div className="settings-plan-tiles">
+
+              <article
+
+                className={`settings-plan-tile${workspace?.planCode === 'free' || !workspace?.hasProEntitlement ? ' settings-plan-tile--current' : ''}`}
+
+              >
+
+                <h4 className="settings-plan-tile__title">Free</h4>
+
+                <p className="settings-plan-tile__price">0 zł</p>
+
+                <ul className="settings-plan-tile__list">
+
+                  <li>Do 15 dokumentów (faktury + umowy)</li>
+
+                  <li>Podstawowe funkcje aplikacji</li>
+
+                </ul>
+
+                {workspace?.hasProEntitlement ? (
+
+                  <button type="button" className="btn-ghost settings-plan-tile__cta" onClick={() => void onSwitchFree()}>
+
+                    Przejdź na Free
+
+                  </button>
+
+                ) : (
+
+                  <p className="workspace-panel__muted settings-plan-tile__hint">Twój aktualny plan</p>
+
+                )}
+
+              </article>
+
+              <article
+
+                className={`settings-plan-tile settings-plan-tile--pro${workspace?.hasProEntitlement ? ' settings-plan-tile--current' : ''}`}
+
+              >
+
+                <h4 className="settings-plan-tile__title">PRO</h4>
+
+                <p className="settings-plan-tile__price">59 zł</p>
+
+                <ul className="settings-plan-tile__list">
+
+                  <li>Nieograniczona liczba dokumentów (faktury + umowy)</li>
+
+                  <li>Wszystkie funkcje aplikacji</li>
+
+                </ul>
+
+                <p className="workspace-panel__muted settings-plan-tile__sub">
+
+                  <strong>Karta:</strong> subskrypcja miesięczna w Stripe. <strong>BLIK:</strong> jednorazowo za 30 dni —
+
+                  przed końcem pokażemy przypomnienie.
+
+                </p>
+
+                {prepaid && !prepaid.prepaidExpired && (
+
+                  <p className="workspace-panel__muted settings-plan-tile__sub">
+
+                    Koniec okresu (BLIK): <strong>{new Date(prepaid.prepaidEndsAt).toLocaleString('pl-PL')}</strong> · zostało{' '}
+
+                    <strong>{prepaid.prepaidDaysRemaining}</strong> dni
+
+                  </p>
+
+                )}
+
+                <div className="settings-plan-tile__actions">
+
+                  <button
+
+                    type="button"
+
+                    className="btn-primary settings-plan-tile__btn"
+
+                    disabled={checkoutLoadingMethod !== null}
+
+                    onClick={() => void onCheckout('pro', 'CARD')}
+
+                  >
+
+                    {checkoutLoadingMethod === 'CARD' ? 'Przekierowanie…' : 'Karta — subskrypcja miesięczna'}
+
+                  </button>
+
+                  <button
+
+                    type="button"
+
+                    className="btn-primary settings-plan-tile__btn settings-plan-tile__btn--blik"
+
+                    disabled={checkoutLoadingMethod !== null}
+
+                    onClick={() => void onCheckout('pro', 'BLIK')}
+
+                  >
+
+                    {checkoutLoadingMethod === 'BLIK' ? 'Przekierowanie…' : 'BLIK — 30 dni'}
+
+                  </button>
+
+                  <button
+
+                    type="button"
+
+                    className="btn-ghost settings-plan-tile__btn"
+
+                    disabled={checkoutLoadingMethod !== null}
+
+                    onClick={() => void onCheckout('pro', 'GOOGLE_PAY')}
+
+                  >
+
+                    {checkoutLoadingMethod === 'GOOGLE_PAY' ? '…' : 'Google Pay'}
+
+                  </button>
+
+                  <button
+
+                    type="button"
+
+                    className="btn-ghost settings-plan-tile__btn"
+
+                    disabled={checkoutLoadingMethod !== null}
+
+                    onClick={() => void onCheckout('pro', 'APPLE_PAY')}
+
+                  >
+
+                    {checkoutLoadingMethod === 'APPLE_PAY' ? '…' : 'Apple Pay'}
+
+                  </button>
+
+                </div>
+
+                {subscription?.billingKind !== 'STRIPE_PREPAID_BLIK' && (
+
+                  <button
+
+                    type="button"
+
+                    className="btn-ghost settings-plan-tile__portal"
+
+                    onClick={() => void onOpenBillingPortal()}
+
+                  >
+
+                    Zarządzaj subskrypcją kartą (Stripe)
+
+                  </button>
+
+                )}
+
+                {subscription?.billingKind === 'STRIPE_PREPAID_BLIK' && (
+
+                  <p className="workspace-panel__muted settings-plan-tile__hint">
+
+                    PRO opłacony BLIKiem — przedłuż kolejną płatnością BLIK lub przejdź na kartę.
+
+                  </p>
+
+                )}
+
+              </article>
+
+            </div>
+
+            <p className="workspace-panel__muted" style={{ marginTop: 12 }}>
+
+              W Stripe Dashboard ustaw produkt PRO (karta) na 59 PLN / mies. (<span className="mono">STRIPE_PRICE_ID_PRO</span>
+
+              ); BLIK używa kwoty 59 PLN z aplikacji (30 dni).
+
+            </p>
+
+          </>
+
+        )}
+
+      </section>
 
       {!loading && (
         <section className="integration-card integration-card--tight" style={{ marginBottom: 16 }}>
@@ -600,258 +858,6 @@ export function SettingsPanel() {
       )}
 
       <PaymentsPanel embedded />
-
-      <section className="integration-card integration-card--tight settings-plan-section">
-
-        <h3 className="workspace-panel__h3">Plan i subskrypcja</h3>
-
-        <p className="workspace-panel__muted">
-
-          Abonament na FV Control (Stripe) — to nie jest przelew za faktury do dostawców.
-
-        </p>
-
-        {subErr && <p className="workspace-panel__err">{subErr}</p>}
-
-        {subLoading && <p className="workspace-panel__muted">Ładowanie subskrypcji…</p>}
-
-        {!subLoading && prepaid?.prepaidRenewSoon && !prepaid.prepaidExpired && (
-
-          <div className="app-banner app-banner--warn" role="status">
-
-            <strong>PRO (BLIK):</strong> zostało ok. <strong>{prepaid.prepaidDaysRemaining}</strong> dni do końca opłaconego
-
-            okresu ({new Date(prepaid.prepaidEndsAt).toLocaleString('pl-PL')}). Możesz przedłużyć dostęp przyciskiem „BLIK
-
-            — 30 dni”.
-
-          </div>
-
-        )}
-
-        {!subLoading && prepaid?.prepaidExpired && (
-
-          <div className="app-banner app-banner--error" role="alert">
-
-            <strong>PRO (BLIK):</strong> opłacony okres minął. Aby z powrotem korzystać z limitów PRO, opłać kolejny miesiąc
-
-            BLIKiem lub wybierz płatność kartą (subskrypcja miesięczna).
-
-          </div>
-
-        )}
-
-        {!subLoading && (
-
-          <>
-
-            {workspace && (
-
-              <p className="workspace-panel__muted" style={{ marginBottom: 12 }}>
-
-                Dokumenty (faktury + umowy): <strong>{workspace.used}</strong>
-
-                {workspace.limit != null ? (
-
-                  <>
-
-                    {' '}
-
-                    / <strong>{workspace.limit}</strong> na planie Free
-
-                  </>
-
-                ) : (
-
-                  <> — bez limitu (PRO)</>
-
-                )}
-
-                .
-
-              </p>
-
-            )}
-
-            <div className="settings-plan-tiles">
-
-              <article
-
-                className={`settings-plan-tile${workspace?.planCode === 'free' || !workspace?.hasProEntitlement ? ' settings-plan-tile--current' : ''}`}
-
-              >
-
-                <h4 className="settings-plan-tile__title">Free</h4>
-
-                <p className="settings-plan-tile__price">0 zł</p>
-
-                <ul className="settings-plan-tile__list">
-
-                  <li>Do 15 dokumentów (faktury + umowy)</li>
-
-                  <li>Podstawowe funkcje aplikacji</li>
-
-                </ul>
-
-                {workspace?.hasProEntitlement ? (
-
-                  <button type="button" className="btn-ghost settings-plan-tile__cta" onClick={() => void onSwitchFree()}>
-
-                    Przejdź na Free
-
-                  </button>
-
-                ) : (
-
-                  <p className="workspace-panel__muted settings-plan-tile__hint">Twój aktualny plan</p>
-
-                )}
-
-              </article>
-
-              <article
-
-                className={`settings-plan-tile settings-plan-tile--pro${workspace?.hasProEntitlement ? ' settings-plan-tile--current' : ''}`}
-
-              >
-
-                <h4 className="settings-plan-tile__title">PRO</h4>
-
-                <p className="settings-plan-tile__price">59 zł</p>
-
-                <p className="workspace-panel__muted settings-plan-tile__sub">
-
-                  <strong>Karta:</strong> subskrypcja miesięczna w Stripe. <strong>BLIK:</strong> jednorazowo za 30 dni —
-
-                  przed końcem pokażemy przypomnienie.
-
-                </p>
-
-                {prepaid && !prepaid.prepaidExpired && (
-
-                  <p className="workspace-panel__muted settings-plan-tile__sub">
-
-                    Koniec okresu (BLIK): <strong>{new Date(prepaid.prepaidEndsAt).toLocaleString('pl-PL')}</strong> · zostało{' '}
-
-                    <strong>{prepaid.prepaidDaysRemaining}</strong> dni
-
-                  </p>
-
-                )}
-
-                <div className="settings-plan-tile__actions">
-
-                  <button
-
-                    type="button"
-
-                    className="btn-primary settings-plan-tile__btn"
-
-                    disabled={checkoutLoadingMethod !== null}
-
-                    onClick={() => void onCheckout('pro', 'CARD')}
-
-                  >
-
-                    {checkoutLoadingMethod === 'CARD' ? 'Przekierowanie…' : 'Karta — subskrypcja miesięczna'}
-
-                  </button>
-
-                  <button
-
-                    type="button"
-
-                    className="btn-primary settings-plan-tile__btn settings-plan-tile__btn--blik"
-
-                    disabled={checkoutLoadingMethod !== null}
-
-                    onClick={() => void onCheckout('pro', 'BLIK')}
-
-                  >
-
-                    {checkoutLoadingMethod === 'BLIK' ? 'Przekierowanie…' : 'BLIK — 30 dni'}
-
-                  </button>
-
-                  <button
-
-                    type="button"
-
-                    className="btn-ghost settings-plan-tile__btn"
-
-                    disabled={checkoutLoadingMethod !== null}
-
-                    onClick={() => void onCheckout('pro', 'GOOGLE_PAY')}
-
-                  >
-
-                    {checkoutLoadingMethod === 'GOOGLE_PAY' ? '…' : 'Google Pay'}
-
-                  </button>
-
-                  <button
-
-                    type="button"
-
-                    className="btn-ghost settings-plan-tile__btn"
-
-                    disabled={checkoutLoadingMethod !== null}
-
-                    onClick={() => void onCheckout('pro', 'APPLE_PAY')}
-
-                  >
-
-                    {checkoutLoadingMethod === 'APPLE_PAY' ? '…' : 'Apple Pay'}
-
-                  </button>
-
-                </div>
-
-                {subscription?.billingKind !== 'STRIPE_PREPAID_BLIK' && (
-
-                  <button
-
-                    type="button"
-
-                    className="btn-ghost settings-plan-tile__portal"
-
-                    onClick={() => void onOpenBillingPortal()}
-
-                  >
-
-                    Zarządzaj subskrypcją kartą (Stripe)
-
-                  </button>
-
-                )}
-
-                {subscription?.billingKind === 'STRIPE_PREPAID_BLIK' && (
-
-                  <p className="workspace-panel__muted settings-plan-tile__hint">
-
-                    PRO opłacony BLIKiem — przedłuż kolejną płatnością BLIK lub przejdź na kartę.
-
-                  </p>
-
-                )}
-
-              </article>
-
-            </div>
-
-            <p className="workspace-panel__muted" style={{ marginTop: 12 }}>
-
-              W Stripe Dashboard ustaw produkt PRO (karta) na 59 PLN / mies. (<span className="mono">STRIPE_PRICE_ID_PRO</span>
-
-              ); BLIK używa kwoty 59 PLN z aplikacji (30 dni).
-
-            </p>
-
-          </>
-
-        )}
-
-      </section>
 
     </div>
 
