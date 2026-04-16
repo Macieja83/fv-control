@@ -13,7 +13,8 @@ Monorepo: **React (Vite) dashboard** + **FVControl API** (Fastify) — platforma
    Albo z podniesieniem Dockera przed startem: `npm run dev:stack`
 
 Skrypty: `dev:backend`, `dev:worker`, `web` = `vite`; `infra:down` zatrzymuje kontenery.  
-**VPS (nginx + `/var/www/fv-control`):** po `npm run build` uruchom [`./scripts/deploy-fv-www.sh`](./scripts/deploy-fv-www.sh) — opis w [`backend/docs/deploy-systemd-api-and-worker.md`](backend/docs/deploy-systemd-api-and-worker.md).
+**VPS — pełna instrukcja:** [`docs/VPS-DEPLOY.md`](docs/VPS-DEPLOY.md) (Docker stack, `.env`, nginx, Stripe webhook, checklisty).  
+**VPS (nginx + `/var/www/fv-control`):** po `npm run build` uruchom [`./scripts/deploy-fv-www.sh`](./scripts/deploy-fv-www.sh); przykład vhost: [`deploy/nginx-fv-control.example.conf`](deploy/nginx-fv-control.example.conf). Szczegóły systemd: [`backend/docs/deploy-systemd-api-and-worker.md`](backend/docs/deploy-systemd-api-and-worker.md).
 
 Alternatywa — ręcznie z `backend/`:
 

@@ -43,6 +43,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    # Na VPS: `cp .env.production.example .env` w katalogu `backend/` i uzupełnij sekrety — reszta zmiennych trafia do kontenera.
+    env_file:
+      - path: .env
+        required: false
     healthcheck:
       test:
         [
@@ -97,6 +101,9 @@ services:
       context: .
       dockerfile: Dockerfile
     command: ["node", "dist/worker.js"]
+    env_file:
+      - path: .env
+        required: false
     environment:
       NODE_ENV: production
       DATABASE_URL: postgresql://fvresta:fvresta@postgres:5432/fvresta?schema=public

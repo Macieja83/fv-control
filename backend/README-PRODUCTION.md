@@ -49,7 +49,7 @@ backend/
 | Worker | `node dist/worker.js` |
 | Migrations | `npx prisma migrate deploy` |
 
-Docker Compose runs migrations for **api** and **worker** startup commands (see `docker-compose.yml`).
+Docker Compose: migracje `prisma migrate deploy` uruchamiane przy starcie kontenera **api** (Dockerfile CMD); worker startuje po healthy API i **nie** powtarza migracji (zob. `docker-compose.yml`).
 
 ## Frontend (nginx static root)
 
