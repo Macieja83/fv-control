@@ -3,7 +3,6 @@ import {
   deleteTenantKsefCredentials,
   fetchTenantKsefCredentialsPublic,
   fetchTenantProfile,
-  patchTenantIntegrations,
   postTenantKsefConnectionTest,
   putTenantKsefCredentials,
   type TenantKsefCredentialsPublic,
@@ -17,21 +16,6 @@ import {
   type KsefConnectorStatus,
 } from '../../api/ksefApi'
 import { getStoredToken } from '../../auth/session'
-
-const BANKS = [
-  'PKO BP',
-  'mBank',
-  'ING',
-  'Santander',
-  'Millennium',
-  'Alior Bank',
-  'BNP Paribas',
-  'Pekao S.A.',
-  'Velo Bank',
-  'Nest Bank',
-  'Inteligo',
-  'Credit Agricole',
-]
 
 function formatBullMqState(state: string | null): string {
   if (!state) return '—'
@@ -145,28 +129,6 @@ export function PaymentsPanel(props: { embedded?: boolean }) {
   useEffect(() => {
     void load()
   }, [load])
-
-  const connectBank = async (label: string) => {
-    const token = getStoredToken()
-    if (!token) return
-    try {
-      const next = await patchTenantIntegrations(token, { bankConnected: true, bankLabel: label })
-      setState(next)
-    } catch (e: unknown) {
-      window.alert(e instanceof Error ? e.message : String(e))
-    }
-  }
-
-  const clearBank = async () => {
-    const token = getStoredToken()
-    if (!token) return
-    try {
-      const next = await patchTenantIntegrations(token, { bankConnected: false, bankLabel: null })
-      setState(next)
-    } catch (e: unknown) {
-      window.alert(e instanceof Error ? e.message : String(e))
-    }
-  }
 
   const onSaveKsef = async () => {
     const token = getStoredToken()
@@ -316,27 +278,12 @@ export function PaymentsPanel(props: { embedded?: boolean }) {
         <>
           <section className="integration-card">
             <h3 className="workspace-panel__h3">Konto bankowe</h3>
-            {state.bankConnected ? (
-              <div>
-                <p>
-                  Połączono: <strong>{state.bankLabel ?? '—'}</strong>
-                </p>
-                <button type="button" className="btn-ghost" onClick={() => void clearBank()}>
-                  Rozłącz
-                </button>
-              </div>
-            ) : (
-              <>
-                <p className="workspace-panel__muted">Wybierz bank, z którym chcesz powiązać konto (symulacja zgody).</p>
-                <div className="bank-grid">
-                  {BANKS.map((b) => (
-                    <button key={b} type="button" className="bank-grid__tile" onClick={() => void connectBank(b)}>
-                      {b}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
+            <p className="workspace-panel__muted">
+              <strong>W przygotowaniu.</strong> Konfiguracja powiązania konta bankowego z aplikacją jest w trakcie prac —
+              w przyszłości pojawi się tu możliwość bezpiecznego połączenia (np. w kontekście przyszłej integracji PISP /
+              podglądu operacji). Na razie płatności do kontrahentów realizujesz jak dotąd: przelewem na podstawie danych z
+              faktury (numer konta, kwota, tytuł).
+            </p>
           </section>
 
           <section className="integration-card">
@@ -634,8 +581,9 @@ export function PaymentsPanel(props: { embedded?: boolean }) {
         <div>
           <h2 className="workspace-panel__title">Płatności</h2>
           <p className="workspace-panel__lead">
-            Płatności <strong>za faktury do kontrahentów</strong> to przelew na konto z faktury (szczegóły faktury) lub
-            przyszła integracja <strong>PISP</strong>. Abonament aplikacji (Stripe) jest w zakładce <strong>Ustawienia</strong>.
+            Płatności <strong>za faktury do kontrahentów</strong> — przelew na podstawie danych z faktury; integracja konta
+            bankowego w aplikacji jest <strong>w przygotowaniu</strong>. Abonament (Stripe) jest w{' '}
+            <strong>Ustawienia</strong>.
           </p>
         </div>
       </header>
