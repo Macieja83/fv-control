@@ -1,6 +1,5 @@
 import type { FastifyInstance } from "fastify";
 import adminSettingsRoutes from "./admin-settings.routes.js";
-import adminWebhooksRoutes from "./admin-webhooks.routes.js";
 import activityRoutes from "./activity.routes.js";
 import agreementsRoutes from "./agreements.routes.js";
 import authRoutes from "./auth.routes.js";
@@ -17,7 +16,6 @@ import ingestionRoutes from "./ingestion.routes.js";
 import invoiceFilesRoutes from "./invoice-files.routes.js";
 import invoicesRoutes from "./invoices.routes.js";
 import integrationsRoutes from "./integrations.routes.js";
-import webhooksRoutes from "./webhooks.routes.js";
 import workflowsRoutes from "./workflows.routes.js";
 import ksefRoutes from "./ksef.routes.js";
 import platformAdminRoutes from "./platform-admin.routes.js";
@@ -43,9 +41,7 @@ export async function registerApiRoutes(app: FastifyInstance): Promise<void> {
   await app.register(platformAdminRoutes);
   await app.register(zenboxRoutes);
   await app.register(workflowsRoutes);
-  await app.register(webhooksRoutes);
   await app.register(adminSettingsRoutes);
-  await app.register(adminWebhooksRoutes);
   await app.register(contractorsRoutes);
   await app.register(invoicesRoutes);
   await app.register(invoiceFilesRoutes);

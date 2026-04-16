@@ -1,6 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
 import { AppError } from "../../lib/errors.js";
-import { enqueueTenantWebhook } from "../../lib/outbox-enqueue.js";
 import { buildAccountingPackage } from "../compliance/compliance-engine.js";
 
 export async function exportAccountingBatch(
@@ -55,12 +54,6 @@ export async function exportAccountingBatch(
         createdById: userId,
       },
     });
-  });
-
-  await enqueueTenantWebhook(prisma, tenantId, "invoice.export.ready", {
-    accountingExportId: exportRow.id,
-    invoiceIds: invoices.map((i) => i.id),
-    count: invoices.length,
   });
 
   return {

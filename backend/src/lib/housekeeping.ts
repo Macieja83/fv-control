@@ -1,5 +1,4 @@
 import type { PrismaClient } from "@prisma/client";
-import { loadConfig } from "../config.js";
 import {
   cleanupDeletedTotal,
   idempotencyKeysActiveGauge,
@@ -12,19 +11,6 @@ export async function runIdempotencyCleanup(prisma: PrismaClient): Promise<numbe
   });
   if (result.count > 0) {
     cleanupDeletedTotal.labels("idempotency").inc(result.count);
-  }
-  return result.count;
-}
-
-export async function runWebhookOutboxSentCleanup(prisma: PrismaClient): Promise<number> {
-  const cfg = loadConfig();
-  const days = cfg.WEBHOOK_OUTBOX_SENT_RETENTION_DAYS;
-  const cutoff = new Date(Date.now() - days * 86_400_000);
-  const result = await prisma.webhookOutbox.deleteMany({
-    where: { status: "SENT", updatedAt: { lt: cutoff } },
-  });
-  if (result.count > 0) {
-    cleanupDeletedTotal.labels("webhook").inc(result.count);
   }
   return result.count;
 }

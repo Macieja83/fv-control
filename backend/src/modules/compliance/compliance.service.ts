@@ -6,7 +6,6 @@ import type {
   PrismaClient,
 } from "@prisma/client";
 import { loadConfig } from "../../config.js";
-import { enqueueTenantWebhook } from "../../lib/outbox-enqueue.js";
 import { evaluateComplianceRules } from "./compliance-engine.js";
 
 type RefreshOpts = {
@@ -128,37 +127,7 @@ export async function refreshInvoiceCompliance(
     });
   });
 
-  if (opts.enqueueIngested) {
-    await enqueueTenantWebhook(prisma, tenantId, "invoice.ingested", { invoiceId });
-  }
-
-  if (opts.enqueueClassified !== false) {
-    await enqueueTenantWebhook(prisma, tenantId, "invoice.classified", {
-      invoiceId,
-      legalChannel: result.legalChannel,
-      documentKind: result.documentKind,
-      reviewStatus: result.reviewStatus,
-    });
-  }
-
-  if (
-    opts.enqueueDuplicate &&
-    duplicateConfidence != null &&
-    duplicateConfidence >= 0.72 &&
-    dupAsCandidate != null
-  ) {
-    await enqueueTenantWebhook(prisma, tenantId, "invoice.duplicate.detected", {
-      invoiceId,
-      confidence: duplicateConfidence,
-    });
-  }
-
-  if (result.reviewStatus === "NEEDS_REVIEW") {
-    await enqueueTenantWebhook(prisma, tenantId, "invoice.compliance.flagged", {
-      invoiceId,
-      flags: result.complianceFlags,
-    });
-  }
+  // Webhook outbox removed (no n8n / automation integration).
 }
 
 export async function recordComplianceEvent(

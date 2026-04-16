@@ -8,7 +8,6 @@ import {
 } from "../modules/auth/auth.service.js";
 import {
   getConnectorsPlatformSummary,
-  getWebhookDlqPlatformSummary,
 } from "../modules/platform-admin/platform-admin-aggregate.service.js";
 import { listKsefOverviewForPlatformAdmin } from "../modules/ksef/ksef-platform-admin.service.js";
 
@@ -51,19 +50,6 @@ const platformAdminRoutes: FastifyPluginAsync = async (app) => {
       if (!request.authUser?.isPlatformAdmin) throw AppError.forbidden("Platform admin required");
       const body = parseOrThrow(impersonateSchema, request.body);
       return issueTenantImpersonationAccessToken(app.prisma, request.authUser.id, body.tenantId);
-    },
-  );
-
-  app.get(
-    "/platform-admin/webhooks-dlq",
-    {
-      preHandler: [app.authenticate],
-      schema: { tags: ["PlatformAdmin"], summary: "Outbound webhooks DEAD_LETTER (cross-tenant)" },
-    },
-    async (request) => {
-      if (!request.authUser?.isPlatformAdmin) throw AppError.forbidden("Platform admin required");
-      const q = parseOrThrow(listQuerySchema, request.query ?? {});
-      return { data: await getWebhookDlqPlatformSummary(app.prisma, q.limit) };
     },
   );
 

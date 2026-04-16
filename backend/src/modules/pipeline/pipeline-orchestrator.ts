@@ -461,21 +461,6 @@ export async function runPipelineJob(prisma: PrismaClient, processingJobId: stri
     );
     await recordAttempt(prisma, processingJobId, attemptNo, "COMPLIANCE", "compliance layer applied");
 
-    if (cfg.N8N_WEBHOOK_URL) {
-      await prisma.webhookOutbox.create({
-        data: {
-          tenantId: jobRow.tenantId,
-          eventType: "invoice.processed",
-          url: cfg.N8N_WEBHOOK_URL,
-          payload: {
-            invoiceId: invoice.id,
-            documentId: document.id,
-            correlationId: jobRow.correlationId,
-          } as object,
-          status: "PENDING",
-        },
-      });
-    }
     await recordAttempt(prisma, processingJobId, attemptNo, "EMIT_EVENTS", "outbox");
 
     await prisma.auditLog.create({

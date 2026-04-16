@@ -3,12 +3,10 @@ import {
   fetchConnectorsPlatformSummary,
   fetchPlatformKsefOverview,
   fetchPlatformTenants,
-  fetchWebhookDlqPlatform,
   issueImpersonationToken,
   type ConnectorsPlatformRow,
   type PlatformAdminKsefRow,
   type PlatformTenantRow,
-  type WebhookDlqPlatformSummary,
 } from '../../api/platformAdminApi'
 import { IMPERSONATION_RESTORE_TOKEN_KEY, getStoredToken, setStoredToken } from '../../auth/session'
 
@@ -37,7 +35,6 @@ type SortKey = 'name' | 'createdAt' | 'users' | 'plan'
 export function AdminPanel() {
   const [rows, setRows] = useState<PlatformTenantRow[]>([])
   const [ksefRows, setKsefRows] = useState<PlatformAdminKsefRow[]>([])
-  const [dlq, setDlq] = useState<WebhookDlqPlatformSummary | null>(null)
   const [connectors, setConnectors] = useState<ConnectorsPlatformRow[]>([])
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
@@ -55,15 +52,13 @@ export function AdminPanel() {
     setLoading(true)
     setErr(null)
     try {
-      const [data, ksef, dlqData, conn] = await Promise.all([
+      const [data, ksef, conn] = await Promise.all([
         fetchPlatformTenants(token),
         fetchPlatformKsefOverview(token, 200),
-        fetchWebhookDlqPlatform(token, 120),
         fetchConnectorsPlatformSummary(token),
       ])
       setRows(data)
       setKsefRows(ksef)
-      setDlq(dlqData)
       setConnectors(conn)
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : String(e))
@@ -230,45 +225,6 @@ export function AdminPanel() {
           </div>
         </>
       )}
-
-      <section className="integration-card integration-card--tight" style={{ marginTop: 24 }}>
-        <h3 className="workspace-panel__h3">Webhooki — DEAD_LETTER (platforma)</h3>
-        <p className="workspace-panel__muted">
-          Wychodzące webhooki po wyczerpaniu retry. Szczegóły i ponowienie per tenant w zakładce integracji (Administrator
-          workspace).
-        </p>
-        {!loading && dlq && (
-          <>
-            <p className="workspace-panel__muted" style={{ marginTop: 8 }}>
-              Łącznie w DLQ: <strong>{dlq.totalDeadLetter}</strong>
-              {dlq.recent.length > 0 ? ` · ostatnie ${dlq.recent.length} wpisy:` : '.'}
-            </p>
-            {dlq.recent.length > 0 && (
-              <div className="settings-superadmin-list" style={{ marginTop: 12 }}>
-                {dlq.recent.map((w) => (
-                  <div key={w.id} className="settings-superadmin-item" style={{ alignItems: 'flex-start' }}>
-                    <div>
-                      <strong>{w.tenant.name}</strong>{' '}
-                      <span className="workspace-panel__muted">
-                        · {w.eventType} · próby: {w.attemptCount} · {formatDate(w.updatedAt)}
-                      </span>
-                      {w.lastError && (
-                        <div className="workspace-panel__err" style={{ fontSize: '0.85rem', marginTop: 4 }}>
-                          {w.lastError.slice(0, 220)}
-                          {w.lastError.length > 220 ? '…' : ''}
-                        </div>
-                      )}
-                    </div>
-                    <button type="button" className="btn-ghost" onClick={() => void onImpersonate(w.tenantId)}>
-                      Wejdź
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </>
-        )}
-      </section>
 
       <section className="integration-card integration-card--tight" style={{ marginTop: 24 }}>
         <h3 className="workspace-panel__h3">Connectory (skrót)</h3>

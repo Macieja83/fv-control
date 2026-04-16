@@ -7,9 +7,7 @@ import { runPipelineJob } from "./modules/pipeline/pipeline-orchestrator.js";
 import {
   runIdempotencyCleanup,
   refreshIdempotencyActiveGauge,
-  runWebhookOutboxSentCleanup,
 } from "./lib/housekeeping.js";
-import { sweepWebhookOutbox } from "./modules/webhooks/webhook-delivery.service.js";
 import { getRedisConnection } from "./lib/redis-connection.js";
 import { IMAP_ZENBOX_SYNC_QUEUE_NAME, KSEF_SYNC_QUEUE_NAME, PIPELINE_QUEUE_NAME } from "./lib/queue-constants.js";
 import { enqueueZenboxImapSync } from "./lib/imap-sync-queue.js";
@@ -126,13 +124,6 @@ worker.on("completed", () => {
   /* logged per job in orchestrator metrics */
 });
 
-const webhookTimer = setInterval(() => {
-  void sweepWebhookOutbox(prisma).catch((err) => {
-    console.error("webhook outbox sweep failed", err);
-  });
-}, cfg.WEBHOOK_DELIVERY_INTERVAL_MS);
-webhookTimer.unref();
-
 async function autoScheduleImapSync(): Promise<void> {
   try {
     const mailboxes = await prisma.mailbox.findMany({
@@ -206,7 +197,6 @@ const housekeepingTimer = setInterval(() => {
   void (async () => {
     try {
       await runIdempotencyCleanup(prisma);
-      await runWebhookOutboxSentCleanup(prisma);
       await refreshIdempotencyActiveGauge(prisma);
     } catch (err) {
       console.error("housekeeping failed", err);
@@ -217,7 +207,6 @@ housekeepingTimer.unref();
 
 process.on("SIGTERM", () => {
   void (async () => {
-    clearInterval(webhookTimer);
     clearInterval(housekeepingTimer);
     if (imapAutoSyncTimer) clearInterval(imapAutoSyncTimer);
     if (ksefAutoSyncTimer) clearInterval(ksefAutoSyncTimer);
@@ -230,5 +219,5 @@ process.on("SIGTERM", () => {
 });
 
 console.info(
-  `FVControl worker: pipeline ${PIPELINE_QUEUE_NAME}, IMAP ${IMAP_ZENBOX_SYNC_QUEUE_NAME}, KSeF ${KSEF_SYNC_QUEUE_NAME} (prefix=${cfg.BULLMQ_PREFIX}); webhooks every ${cfg.WEBHOOK_DELIVERY_INTERVAL_MS}ms; IMAP auto-sync every ${cfg.IMAP_AUTO_SYNC_INTERVAL_MS}ms; KSeF auto-sync every ${cfg.KSEF_AUTO_SYNC_INTERVAL_MS}ms`,
+  `FVControl worker: pipeline ${PIPELINE_QUEUE_NAME}, IMAP ${IMAP_ZENBOX_SYNC_QUEUE_NAME}, KSeF ${KSEF_SYNC_QUEUE_NAME} (prefix=${cfg.BULLMQ_PREFIX}); IMAP auto-sync every ${cfg.IMAP_AUTO_SYNC_INTERVAL_MS}ms; KSeF auto-sync every ${cfg.KSEF_AUTO_SYNC_INTERVAL_MS}ms`,
 );

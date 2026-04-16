@@ -40,8 +40,6 @@ const envSchema = z.object({
   RATE_LIMIT_VERIFY_EMAIL_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
   RATE_LIMIT_RESEND_VERIFICATION_MAX: z.coerce.number().int().positive().default(10),
   RATE_LIMIT_RESEND_VERIFICATION_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
-  RATE_LIMIT_WEBHOOK_MAX: z.coerce.number().int().positive().default(120),
-  RATE_LIMIT_WEBHOOK_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
   /**
    * Limit ręcznego `POST /connectors/ksef/sync` na tenant (po uwierzytelnieniu). 0 = wyłączony.
    */
@@ -67,8 +65,6 @@ const envSchema = z.object({
 
   /** How often (ms) the worker auto-enqueues IMAP sync for every active mailbox. 0 = disabled. */
   IMAP_AUTO_SYNC_INTERVAL_MS: z.coerce.number().int().min(0).default(300_000),
-  WEBHOOK_SIGNING_SECRET: z
-    .preprocess((v) => (v === "" || v === undefined ? undefined : v), z.string().min(16).optional()),
   METRICS_BEARER_TOKEN: z
     .preprocess((v) => (v === "" || v === undefined ? undefined : v), z.string().min(24).optional()),
 
@@ -208,26 +204,11 @@ const envSchema = z.object({
   PIPELINE_MAX_ATTEMPTS: z.coerce.number().int().positive().default(8),
   IDEMPOTENCY_TTL_HOURS: z.coerce.number().int().positive().default(24),
 
-  WEBHOOK_DELIVERY_INTERVAL_MS: z.coerce.number().int().positive().default(5000),
-  WEBHOOK_DELIVERY_MAX_ATTEMPTS: z.coerce.number().int().positive().default(10),
-  WEBHOOK_HTTP_TIMEOUT_MS: z.coerce.number().int().positive().default(15_000),
-  /** Max |now - X-FVControl-Timestamp| for inbound signed webhooks (seconds). */
-  WEBHOOK_MAX_SKEW_SECONDS: z.coerce.number().int().positive().default(300),
-  /** Delete terminal SENT outbox rows older than this many days (housekeeping). */
-  WEBHOOK_OUTBOX_SENT_RETENTION_DAYS: z.coerce.number().int().positive().default(90),
-  /** Reclaim stuck PROCESSING deliveries not updated for this long (ms). */
-  WEBHOOK_PROCESSING_STALE_MS: z.coerce.number().int().positive().default(900_000),
   HOUSEKEEPING_INTERVAL_MS: z.coerce.number().int().positive().default(60_000),
 
   /** Simplified receipt (paragon z NIP) — max gross in PLN for out-of-KSeF simplified path */
   SIMPLIFIED_RECEIPT_MAX_PLN: z.coerce.number().positive().default(450),
   SIMPLIFIED_RECEIPT_MAX_EUR: z.coerce.number().positive().default(100),
-
-  /** Opcjonalny URL webhooka — gdy brak, `enqueueTenantWebhook` nie tworzy wpisów w outboxie. */
-  N8N_WEBHOOK_URL: z.preprocess(
-    (v) => (v === "" || v === undefined ? undefined : v),
-    z.string().url().optional(),
-  ),
 
   /** Zenbox IMAP (ImapFlow) timeouts */
   IMAP_FLOW_CONNECTION_TIMEOUT_MS: z.coerce.number().int().positive().default(60_000),
@@ -265,9 +246,6 @@ export function loadConfig(): AppConfig {
   if (parsed.data.NODE_ENV === "production") {
     if (parsed.data.FEATURE_AI_EXTRACTION_MOCK) {
       throw new Error("Invalid environment: FEATURE_AI_EXTRACTION_MOCK must be false in production");
-    }
-    if (!parsed.data.WEBHOOK_SIGNING_SECRET) {
-      throw new Error("Invalid environment: WEBHOOK_SIGNING_SECRET is required in production");
     }
     if (!parsed.data.METRICS_BEARER_TOKEN) {
       throw new Error("Invalid environment: METRICS_BEARER_TOKEN is required in production");

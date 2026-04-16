@@ -178,16 +178,6 @@ enum DuplicateResolution {
   FALSE_POSITIVE
 }
 
-enum WebhookDeliveryStatus {
-  PENDING
-  PROCESSING
-  SENT
-  FAILED_RETRYABLE
-  DEAD_LETTER
-  /// Legacy PostgreSQL enum label; rows are migrated to FAILED_RETRYABLE — do not write from app code.
-  FAILED
-}
-
 enum IdempotencyLifecycle {
   IN_FLIGHT
   COMPLETED
@@ -270,7 +260,6 @@ model Tenant {
   ingestionSources       IngestionSource[]
   processingJobs         ProcessingJob[]
   integrationCredentials IntegrationCredential[]
-  webhooksOutbox         WebhookOutbox[]
   auditLogs              AuditLog[]
   idempotencyKeys        IdempotencyKey[]
   invoiceDuplicates      InvoiceDuplicate[]
@@ -868,27 +857,6 @@ model SourceAttachment {
   @@index([sourceMessageId])
   @@index([documentId])
   @@map("source_attachments")
-}
-
-// --- Webhooks & audit ---
-
-model WebhookOutbox {
-  id             String                @id @default(uuid()) @db.Uuid
-  tenantId       String                @db.Uuid
-  tenant         Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  eventType      String
-  url            String
-  payload        Json                  @db.JsonB
-  status         WebhookDeliveryStatus @default(PENDING)
-  attemptCount   Int                   @default(0)
-  lastError      String?
-  idempotencyKey String?
-  createdAt      DateTime              @default(now())
-  updatedAt      DateTime              @updatedAt
-
-  @@index([tenantId, status])
-  @@index([status, updatedAt])
-  @@map("webhooks_outbox")
 }
 
 model BillingWebhookEvent {

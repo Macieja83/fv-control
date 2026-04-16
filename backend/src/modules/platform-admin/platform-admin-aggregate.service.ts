@@ -1,27 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
 
-export async function getWebhookDlqPlatformSummary(prisma: PrismaClient, limit: number) {
-  const take = Math.min(Math.max(limit, 1), 200);
-  const [totalDeadLetter, recent] = await prisma.$transaction([
-    prisma.webhookOutbox.count({ where: { status: "DEAD_LETTER" } }),
-    prisma.webhookOutbox.findMany({
-      where: { status: "DEAD_LETTER" },
-      orderBy: { updatedAt: "desc" },
-      take,
-      select: {
-        id: true,
-        tenantId: true,
-        eventType: true,
-        attemptCount: true,
-        lastError: true,
-        updatedAt: true,
-        tenant: { select: { name: true, nip: true } },
-      },
-    }),
-  ]);
-  return { totalDeadLetter, recent };
-}
-
 function countIds(rows: { tenantId: string }[]): Map<string, number> {
   const m = new Map<string, number>();
   for (const r of rows) {
