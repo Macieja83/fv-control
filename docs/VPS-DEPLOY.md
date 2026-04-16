@@ -1,5 +1,14 @@
 # Wdrożenie na VPS (FV Control)
 
+**Szybki start na serwerze** (po `git clone` / `git pull`, z katalogu głównego repo):
+
+```bash
+chmod +x scripts/vps-first-boot.sh
+./scripts/vps-first-boot.sh
+```
+
+Przy pierwszym uruchomieniu skrypt utworzy `backend/.env` z `.env.production.example` i zakończy się — uzupełnij sekrety, potem uruchom skrypt ponownie, aby zbudować i podnieść Dockera.
+
 Dwa typowe warianty: **(A) cały stack w Dockerze** (`backend/docker-compose.yml`) albo **(B) tylko Postgres + Redis w Dockerze**, API + worker przez systemd (zob. [backend/docs/deploy-systemd-api-and-worker.md](../backend/docs/deploy-systemd-api-and-worker.md)).
 
 ---
