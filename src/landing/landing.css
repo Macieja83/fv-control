@@ -74,6 +74,11 @@
   transform: translateY(-1px);
 }
 
+.landing-btn:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
+  transition-duration: 70ms;
+}
+
 .landing-btn:focus-visible {
   outline: 3px solid var(--accent-ring, rgba(79, 110, 247, 0.35));
   outline-offset: 2px;

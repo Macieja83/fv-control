@@ -6,6 +6,7 @@ export function KPICards({
   review,
   noCat,
   unknownVendor,
+  activeFilter,
   onPickFilter,
 }: {
   all: number
@@ -15,6 +16,8 @@ export function KPICards({
   review: number
   noCat: number
   unknownVendor: number
+  /** Który szybki filtr jest aktywny (`all` = „Wszystkie faktury”). */
+  activeFilter: 'all' | 'unpaid' | 'paid' | 'dups' | 'review' | 'noCat' | 'unknownVendor'
   onPickFilter: (key: 'all' | 'unpaid' | 'paid' | 'dups' | 'review' | 'noCat' | 'unknownVendor') => void
 }) {
   const cards = [
@@ -40,7 +43,8 @@ export function KPICards({
         <button
           key={c.key}
           type="button"
-          className="kpi-card"
+          className={`kpi-card${activeFilter === c.key ? ' kpi-card--active' : ''}`}
+          aria-pressed={activeFilter === c.key}
           onClick={() => onPickFilter(c.key)}
         >
           <span className="kpi-card__label">{c.label}</span>
