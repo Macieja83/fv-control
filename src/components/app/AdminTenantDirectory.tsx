@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { Fragment, useCallback, useMemo, useState } from 'react'
 import type { ConnectorsPlatformRow, PlatformAdminKsefRow, PlatformTenantRow } from '../../api/platformAdminApi'
 
 type PlanFilter = 'all' | 'pro' | 'not_pro' | 'stripe' | 'no_sub' | 'archived'
@@ -39,6 +39,37 @@ function buildEnriched(rows: PlatformTenantRow[], ksef: PlatformAdminKsefRow[], 
   return rows.map((t) => ({ ...t, ksef: km.get(t.id), connectors: cm.get(t.id) }))
 }
 
+function isProPlanCode(planCode: string | null | undefined): boolean {
+  return (planCode ?? '').toLowerCase() === 'pro'
+}
+
+/** PRO opłacony / w trialu — „premium” można używać w praktyce. */
+function isPremiumSubscriptionActive(t: Enriched): boolean {
+  const st = t.subscription?.status
+  if (!isProPlanCode(t.subscription?.planCode)) return false
+  return st === 'ACTIVE' || st === 'TRIALING'
+}
+
+type Health = { label: string; tone: 'ok' | 'warn' | 'bad' | 'muted' }
+
+function tenantHealth(t: Enriched): Health {
+  if (t.deletedAt) return { label: 'Zarchiwizowane', tone: 'bad' }
+  const sub = t.subscription
+  if (!sub) return { label: 'Brak subskrypcji w bazie', tone: 'warn' }
+  const notes: string[] = []
+  if (!t.nip?.trim()) notes.push('brak NIP')
+  if (sub.status === 'PAST_DUE') notes.push('płatność po terminie')
+  if (sub.status === 'CANCELED') notes.push('subskrypcja anulowana')
+  if (sub.status === 'SUSPENDED') notes.push('konto zawieszone')
+  const k = t.ksef
+  if (k?.lastQueueFinalFailure) notes.push('KSeF: błąd kolejki')
+  if (k?.lastSyncOk === false) notes.push('KSeF: sync z błędem')
+  if (k && k.credentialSource === 'none' && k.effectiveKsefEnv !== 'mock') notes.push('KSeF: brak poświadczeń')
+  if (notes.length) return { label: `Uwagi: ${notes.join(' · ')}`, tone: 'warn' }
+  if (sub.status === 'ACTIVE' || sub.status === 'TRIALING') return { label: 'W porządku', tone: 'ok' }
+  return { label: sub.status, tone: 'muted' }
+}
+
 async function copyText(label: string, text: string, onDone: (msg: string) => void) {
   try {
     await navigator.clipboard.writeText(text)
@@ -67,10 +98,11 @@ export function AdminTenantDirectory(props: AdminTenantDirectoryProps) {
 
   const stats = useMemo(() => {
     const pro = rows.filter((r) => (r.subscription?.planCode ?? '').toLowerCase() === 'pro').length
+    const premiumOk = enriched.filter(isPremiumSubscriptionActive).length
     const stripe = rows.filter((r) => r.subscription?.provider === 'STRIPE').length
     const archived = rows.filter((r) => r.deletedAt).length
-    return { total: rows.length, pro, stripe, archived }
-  }, [rows])
+    return { total: rows.length, pro, premiumOk, stripe, archived }
+  }, [rows, enriched])
 
   const filteredSorted = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -163,8 +195,12 @@ export function AdminTenantDirectory(props: AdminTenantDirectoryProps) {
           <span className="admin-stat-pill__value">{stats.total}</span>
         </div>
         <div className="admin-stat-pill">
-          <span className="admin-stat-pill__label">PRO</span>
+          <span className="admin-stat-pill__label">Plan PRO</span>
           <span className="admin-stat-pill__value">{stats.pro}</span>
+        </div>
+        <div className="admin-stat-pill" title="PRO z aktywną subskrypcją (ACTIVE lub TRIALING)">
+          <span className="admin-stat-pill__label">PRO aktywne</span>
+          <span className="admin-stat-pill__value">{stats.premiumOk}</span>
         </div>
         <div className="admin-stat-pill">
           <span className="admin-stat-pill__label">Stripe</span>
@@ -188,7 +224,7 @@ export function AdminTenantDirectory(props: AdminTenantDirectoryProps) {
             className="workspace-panel__search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Nazwa, NIP, UUID, plan, status, Stripe customer/sub…"
+            placeholder="Nazwa, NIP, plan, status, Stripe…"
             autoComplete="off"
           />
         </label>
@@ -200,7 +236,7 @@ export function AdminTenantDirectory(props: AdminTenantDirectoryProps) {
       <div className="workspace-panel__sort workspace-panel__muted admin-tenant-directory__filters">
         <span className="admin-filter-label">Filtr:</span>
         {filterBtn('all', 'Wszyscy')}
-        {filterBtn('pro', 'PRO')}
+        {filterBtn('pro', 'Plan PRO')}
         {filterBtn('not_pro', 'Bez PRO')}
         {filterBtn('stripe', 'Stripe')}
         {filterBtn('no_sub', 'Bez subskrypcji')}
@@ -227,161 +263,153 @@ export function AdminTenantDirectory(props: AdminTenantDirectoryProps) {
       </div>
 
       {err && <p className="workspace-panel__err">{err}</p>}
-      {loading && <p className="workspace-panel__muted">Ładowanie katalogu tenantów…</p>}
+      {loading && <p className="workspace-panel__muted">Ładowanie listy tenantów…</p>}
       {!loading && rows.length === 0 && <p className="workspace-panel__muted">Brak zarejestrowanych tenantów.</p>}
 
       {!loading && rows.length > 0 && (
-        <div className="admin-tenant-card-list">
-          {filteredSorted.map((t) => {
-            const isOpen = expanded.has(t.id)
-            const plan = (t.subscription?.planCode ?? '').toLowerCase()
-            const sub = t.subscription
-            return (
-              <article key={t.id} className={`admin-tenant-card${t.deletedAt ? ' admin-tenant-card--archived' : ''}`}>
-                <header className="admin-tenant-card__head">
-                  <div className="admin-tenant-card__title-block">
-                    <h3 className="admin-tenant-card__title">{t.name}</h3>
-                    <div className="admin-tenant-badges">
-                      {t.deletedAt ? <span className="admin-pill admin-pill--archived">Zarchiwizowany</span> : null}
-                      <span className={`admin-pill admin-pill--plan-${plan === 'pro' ? 'pro' : 'muted'}`}>{planLabel(sub?.planCode)}</span>
-                      {sub ? <span className="admin-pill admin-pill--muted">{sub.status}</span> : <span className="admin-pill admin-pill--warn">Brak wpisu subskrypcji</span>}
-                      {sub?.provider ? <span className="admin-pill admin-pill--stripe">{sub.provider}</span> : null}
-                    </div>
-                  </div>
-                  <div className="admin-tenant-card__actions">
-                    <button type="button" className="btn-ghost" onClick={() => toggleExpand(t.id)} aria-expanded={isOpen}>
-                      {isOpen ? 'Zwiń szczegóły' : 'Szczegóły'}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-primary"
-                      disabled={!!t.deletedAt || busyId === t.id}
-                      onClick={() => void onEnter(t.id)}
-                      title={t.deletedAt ? 'Tenant zarchiwizowany — impersonacja wyłączona.' : 'Wejdź na workspace tenanta (impersonacja)'}
-                    >
-                      {busyId === t.id ? 'Łączenie…' : 'Wejdź na konto'}
-                    </button>
-                  </div>
-                </header>
-
-                <div className="admin-tenant-card__grid">
-                  <dl className="admin-tenant-kv">
-                    <dt>NIP</dt>
-                    <dd>{t.nip?.trim() || '—'}</dd>
-                    <dt>Rejestracja</dt>
-                    <dd>{formatDate(t.createdAt)}</dd>
-                    <dt>Użytkownicy</dt>
-                    <dd>{t.userCount}</dd>
-                    <dt>Faktury (łącznie)</dt>
-                    <dd>{t.invoiceCount}</dd>
-                  </dl>
-                  <dl className="admin-tenant-kv">
-                    <dt>Subskrypcja</dt>
-                    <dd>
-                      {sub ? (
-                        <>
-                          Okres: {formatDate(sub.currentPeriodStart)} → {formatDate(sub.currentPeriodEnd)}
-                          {sub.trialEndsAt ? (
-                            <>
-                              <br />
-                              Trial do: {formatDate(sub.trialEndsAt)}
-                            </>
-                          ) : null}
-                        </>
-                      ) : (
-                        '—'
-                      )}
-                    </dd>
-                    <dt>Stripe</dt>
-                    <dd className="admin-tenant-kv__mono">
-                      {sub?.provider === 'STRIPE' ? (
-                        <>
-                          customer: {sub.providerCustomerId ?? '—'}
-                          <br />
-                          subscription: {sub.providerSubscriptionId ?? '—'}
-                        </>
-                      ) : (
-                        '—'
-                      )}
-                    </dd>
-                  </dl>
-                </div>
-
-                <div className="admin-tenant-card__integrations">
-                  <div className="admin-tenant-card__integrations-title">Integracje (skrót)</div>
-                  <div className="workspace-panel__muted admin-tenant-inline">
-                    <strong>Connectory:</strong> ingestion {t.connectors?.ingestionSources ?? 0}, credentials {t.connectors?.integrationCredentials ?? 0}, POS{' '}
-                    {t.connectors?.integrationPos ?? 0}
-                    <span className="admin-dot">·</span>
-                    <strong>KSeF:</strong> API {t.ksef?.effectiveKsefEnv ?? '—'}, poświadczenia {t.ksef?.credentialSource ?? '—'}, faktury KSeF w bazie {t.ksef?.ksefInvoiceCount ?? 0}
-                    {t.ksef?.lastSyncRunAt ? (
-                      <>
-                        <span className="admin-dot">·</span>
-                        ostatni sync {formatDate(t.ksef.lastSyncRunAt)}
-                        {t.ksef.lastSyncOk != null ? ` (${t.ksef.lastSyncOk ? 'OK' : 'błąd'})` : ''}
-                      </>
-                    ) : null}
-                  </div>
-                  {(t.ksef?.lastSyncErrorPreview || (t.ksef?.lastQueueFinalFailure && t.ksef.lastQueueError)) && (
-                    <div className="workspace-panel__err admin-tenant-warn" role="status">
-                      {t.ksef?.lastSyncErrorPreview ? <div>Sync: {t.ksef.lastSyncErrorPreview.slice(0, 220)}</div> : null}
-                      {t.ksef?.lastQueueFinalFailure && t.ksef.lastQueueError ? (
-                        <div>Kolejka: {t.ksef.lastQueueError.slice(0, 220)}</div>
-                      ) : null}
-                    </div>
-                  )}
-                </div>
-
-                {isOpen && (
-                  <footer className="admin-tenant-card__expand">
-                    <div className="admin-tenant-kv admin-tenant-kv--full">
-                      <dt>UUID tenanta</dt>
-                      <dd className="admin-tenant-kv__mono">
-                        {t.id}{' '}
-                        <button type="button" className="btn-ghost" onClick={() => void copyText('UUID', t.id, showToast)}>
-                          Kopiuj
-                        </button>
-                      </dd>
-                      {sub?.provider === 'STRIPE' && sub.providerCustomerId ? (
-                        <>
-                          <dt>Stripe customer (pełny)</dt>
-                          <dd className="admin-tenant-kv__mono">
-                            {sub.providerCustomerId}{' '}
-                            <button type="button" className="btn-ghost" onClick={() => void copyText('customer id', sub.providerCustomerId!, showToast)}>
-                              Kopiuj
-                            </button>
-                          </dd>
-                        </>
-                      ) : null}
-                      {sub?.provider === 'STRIPE' && sub.providerSubscriptionId ? (
-                        <>
-                          <dt>Stripe subscription (pełny)</dt>
-                          <dd className="admin-tenant-kv__mono">
-                            {sub.providerSubscriptionId}{' '}
-                            <button type="button" className="btn-ghost" onClick={() => void copyText('subscription id', sub.providerSubscriptionId!, showToast)}>
-                              Kopiuj
-                            </button>
-                          </dd>
-                        </>
-                      ) : null}
-                      {t.deletedAt ? (
-                        <>
-                          <dt>Zarchiwizowano</dt>
-                          <dd>{formatDate(t.deletedAt)}</dd>
-                        </>
-                      ) : null}
-                    </div>
-                  </footer>
-                )}
-              </article>
-            )
-          })}
+        <div className="admin-tenant-table-wrap">
+          <table className="admin-tenant-table">
+            <thead>
+              <tr>
+                <th>Firma</th>
+                <th>NIP</th>
+                <th>Plan</th>
+                <th>PRO aktywne</th>
+                <th>Status subskrypcji</th>
+                <th>Stan</th>
+                <th>Faktury</th>
+                <th className="admin-tenant-table__col-actions">Akcje</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredSorted.map((t) => {
+                const isOpen = expanded.has(t.id)
+                const sub = t.subscription
+                const health = tenantHealth(t)
+                const premium = isPremiumSubscriptionActive(t)
+                const proCode = isProPlanCode(sub?.planCode)
+                return (
+                  <Fragment key={t.id}>
+                    <tr className={`admin-tenant-table__row${t.deletedAt ? ' admin-tenant-table__row--archived' : ''}`}>
+                      <td className="admin-tenant-table__cell-name">
+                        <strong>{t.name}</strong>
+                        <div className="workspace-panel__muted admin-tenant-table__sub">Od {formatDate(t.createdAt)} · {t.userCount} użytk.</div>
+                      </td>
+                      <td className="admin-tenant-table__mono">{t.nip?.trim() || '—'}</td>
+                      <td>{planLabel(sub?.planCode)}</td>
+                      <td>
+                        {premium ? (
+                          <span className="admin-health admin-health--ok">Tak</span>
+                        ) : proCode ? (
+                          <span className="admin-health admin-health--warn" title="Plan PRO, ale subskrypcja nie jest ACTIVE/TRIALING">
+                            Nie ({sub?.status ?? '—'})
+                          </span>
+                        ) : (
+                          <span className="admin-health admin-health--muted">Nie</span>
+                        )}
+                      </td>
+                      <td>{sub?.status ?? '—'}</td>
+                      <td>
+                        <span className={`admin-health admin-health--${health.tone}`}>{health.label}</span>
+                      </td>
+                      <td>{t.invoiceCount}</td>
+                      <td className="admin-tenant-table__col-actions">
+                        <div className="admin-tenant-table__actions">
+                          <button type="button" className="btn-ghost btn-ghost--sm" onClick={() => toggleExpand(t.id)} aria-expanded={isOpen}>
+                            {isOpen ? 'Mniej' : 'Więcej'}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-primary btn-primary--sm"
+                            disabled={!!t.deletedAt || busyId === t.id}
+                            onClick={() => void onEnter(t.id)}
+                            title={t.deletedAt ? 'Tenant zarchiwizowany.' : 'Wejdź na workspace tenanta'}
+                          >
+                            {busyId === t.id ? '…' : 'Konto'}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                    {isOpen && (
+                      <tr className="admin-tenant-table__detail">
+                        <td colSpan={8}>
+                          <div className="admin-tenant-detail">
+                            <div className="admin-tenant-detail__grid">
+                              <dl className="admin-tenant-kv">
+                                <dt>UUID</dt>
+                                <dd className="admin-tenant-kv__mono">
+                                  {t.id}{' '}
+                                  <button type="button" className="btn-ghost" onClick={() => void copyText('UUID', t.id, showToast)}>
+                                    Kopiuj
+                                  </button>
+                                </dd>
+                                <dt>Okres rozliczenia</dt>
+                                <dd>
+                                  {sub ? (
+                                    <>
+                                      {formatDate(sub.currentPeriodStart)} → {formatDate(sub.currentPeriodEnd)}
+                                      {sub.trialEndsAt ? (
+                                        <>
+                                          <br />
+                                          Trial: {formatDate(sub.trialEndsAt)}
+                                        </>
+                                      ) : null}
+                                    </>
+                                  ) : (
+                                    '—'
+                                  )}
+                                </dd>
+                              </dl>
+                              <dl className="admin-tenant-kv">
+                                <dt>Stripe</dt>
+                                <dd className="admin-tenant-kv__mono">
+                                  {sub?.provider === 'STRIPE' ? (
+                                    <>
+                                      {sub.providerCustomerId ?? '—'}
+                                      <br />
+                                      {sub.providerSubscriptionId ?? '—'}
+                                    </>
+                                  ) : (
+                                    sub?.provider ?? '—'
+                                  )}
+                                </dd>
+                                <dt>Integracje</dt>
+                                <dd className="workspace-panel__muted">
+                                  Ingestion {t.connectors?.ingestionSources ?? 0} · Credentials {t.connectors?.integrationCredentials ?? 0} · POS{' '}
+                                  {t.connectors?.integrationPos ?? 0}
+                                  <br />
+                                  KSeF: {t.ksef?.effectiveKsefEnv ?? '—'}, cred. {t.ksef?.credentialSource ?? '—'}, FA KSeF: {t.ksef?.ksefInvoiceCount ?? 0}
+                                  {t.ksef?.lastSyncRunAt ? (
+                                    <>
+                                      <br />
+                                      Ostatni sync: {formatDate(t.ksef.lastSyncRunAt)}
+                                      {t.ksef.lastSyncOk != null ? ` (${t.ksef.lastSyncOk ? 'OK' : 'błąd'})` : ''}
+                                    </>
+                                  ) : null}
+                                </dd>
+                              </dl>
+                            </div>
+                            {(t.ksef?.lastSyncErrorPreview || (t.ksef?.lastQueueFinalFailure && t.ksef.lastQueueError)) && (
+                              <div className="workspace-panel__err admin-tenant-warn" role="status">
+                                {t.ksef?.lastSyncErrorPreview ? <div>Sync: {t.ksef.lastSyncErrorPreview.slice(0, 240)}</div> : null}
+                                {t.ksef?.lastQueueFinalFailure && t.ksef.lastQueueError ? <div>Kolejka: {t.ksef.lastQueueError.slice(0, 240)}</div> : null}
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                )
+              })}
+            </tbody>
+          </table>
         </div>
       )}
 
       <p className="workspace-panel__muted admin-tenant-directory__footnote">
-        Rozliczenia Stripe obsługujesz w Stripe Dashboard; webhook: <span className="mono">/api/v1/billing/webhooks/stripe</span>. Pełna checklista produkcji:{' '}
-        <span className="mono">backend/docs/go-live-checklist.md</span>.
+        Kolumna <strong>PRO aktywne</strong> = plan PRO oraz status <span className="mono">ACTIVE</span> lub <span className="mono">TRIALING</span>. Checklista
+        produkcji: <span className="mono">backend/docs/go-live-checklist.md</span>.
       </p>
     </section>
   )

@@ -74,8 +74,8 @@ export function AdminPanel() {
         <div>
           <h2 className="workspace-panel__title">Admin — operator platformy</h2>
           <p className="workspace-panel__lead">
-            Pełny widok każdego tenanta: dane firmy, subskrypcja i Stripe, skrót integracji (connectory, KSeF). Wejście na konto
-            otwiera workspace w kontekście wybranego tenanta (JWT impersonacji).
+            Lista firm: NIP, plan, czy PRO jest realnie aktywne, status subskrypcji i krótki stan konta. Przycisk „Konto” — wejście
+            na workspace tenanta (impersonacja). W „Więcej” — UUID, Stripe, KSeF.
           </p>
         </div>
         <div className="workspace-panel__head-actions">
