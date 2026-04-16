@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 export type CategoryBarDatum = {
   label: string
@@ -12,11 +12,32 @@ type Props = {
   variant: 'purchase' | 'sale'
   formatMoney: (n: number, currency: string) => string
   emptyHint?: string
+  /** Wejście wierszy i pasków (domyślnie włączone) */
+  motion?: boolean
 }
 
-export function CategoryBarChart({ data, variant, formatMoney, emptyHint }: Props) {
+function formatPctShare(n: number): string {
+  if (!Number.isFinite(n)) return '—'
+  return new Intl.NumberFormat('pl-PL', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 1,
+  }).format(n)
+}
+
+export function CategoryBarChart({ data, variant, formatMoney, emptyHint, motion = true }: Props) {
   const [hover, setHover] = useState<number | null>(null)
-  const max = useMemo(() => Math.max(0, ...data.map((d) => d.value)), [data])
+  const [barsReady, setBarsReady] = useState(false)
+  const total = useMemo(() => data.reduce((s, d) => s + d.value, 0), [data])
+
+  useEffect(() => {
+    if (!motion) {
+      setBarsReady(true)
+      return
+    }
+    setBarsReady(false)
+    const id = requestAnimationFrame(() => setBarsReady(true))
+    return () => cancelAnimationFrame(id)
+  }, [motion, data])
 
   if (data.length === 0) {
     return (
@@ -28,18 +49,19 @@ export function CategoryBarChart({ data, variant, formatMoney, emptyHint }: Prop
 
   return (
     <div
-      className={`report-chart report-chart--${variant}`}
+      className={`report-chart report-chart--${variant}${motion ? ' report-chart--motion' : ''}`}
       role="group"
       aria-label={variant === 'purchase' ? 'Wykres wydatków wg kategorii' : 'Wykres przychodów wg kategorii'}
     >
       {data.map((d, i) => {
-        const pct = max > 0 ? Math.round((d.value / max) * 1000) / 10 : 0
-        const w = Math.max(pct, d.value > 0 ? 2 : 0)
+        const sharePct = total > 0 ? (d.value / total) * 100 : 0
+        const fillW = barsReady ? sharePct : 0
         const active = hover === i
         return (
           <div
             key={`${d.label}-${i}`}
             className={`report-chart__row${active ? ' report-chart__row--active' : ''}`}
+            style={motion ? { animationDelay: `${0.04 + i * 0.045}s` } : undefined}
             onMouseEnter={() => setHover(i)}
             onMouseLeave={() => setHover(null)}
           >
@@ -50,9 +72,14 @@ export function CategoryBarChart({ data, variant, formatMoney, emptyHint }: Prop
               </span>
             </div>
             <div className="report-chart__track" aria-hidden>
-              <div className="report-chart__fill" style={{ width: `${w}%` }} />
+              <div className="report-chart__fill" style={{ width: `${Math.min(fillW, 100)}%` }} />
             </div>
-            <div className="report-chart__value mono">{formatMoney(d.value, d.currency)}</div>
+            <div className="report-chart__value">
+              <div className="report-chart__amount mono">{formatMoney(d.value, d.currency)}</div>
+              <div className="report-chart__pct workspace-panel__muted" title="% w sumie">
+                {formatPctShare(sharePct)}%
+              </div>
+            </div>
           </div>
         )
       })}

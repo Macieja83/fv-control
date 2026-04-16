@@ -5,6 +5,7 @@ import { getStoredToken } from '../../auth/session'
 import { ALL_REPORT_CATEGORIES } from '../../data/categories'
 import { seedInvoices } from '../../data/mockInvoices'
 import { CategoryBarChart, type CategoryBarDatum } from '../dashboard/CategoryBarChart'
+import { ReportsVisualSummary } from './ReportsVisualSummary'
 import { FilterBar } from '../dashboard/FilterBar'
 import { matchesInvoiceFilters } from '../../lib/matchesInvoiceFilters'
 import { enrichDuplicateMetadata } from '../../lib/duplicates'
@@ -194,18 +195,22 @@ export function ReportsPanel({ invoiceListEpoch }: ReportsPanelProps) {
     [filtered, effectiveCurrency],
   )
 
+  const totalPurchaseGross = useMemo(
+    () => purchaseData.reduce((s, d) => s + d.value, 0),
+    [purchaseData],
+  )
+  const totalSaleGross = useMemo(() => saleData.reduce((s, d) => s + d.value, 0), [saleData])
+  const profitGross = totalSaleGross - totalPurchaseGross
+  const profitMarginPct =
+    totalSaleGross > 0 ? (profitGross / totalSaleGross) * 100 : null
+
   return (
     <main className="main-content main-content--padded">
       <div className="workspace-panel reports-panel">
         <header className="workspace-panel__head">
           <h2 className="workspace-panel__title">Raporty</h2>
           <p className="workspace-panel__lead">
-            Wykresy sum brutto według kategorii — dane z <strong>API / bazy</strong> po zalogowaniu (jak lista faktur,
-            bez podziału na koszt/sprzedaż w zapytaniu). Te same filtry co na fakturach: dostawca, kategoria, płatność,
-            typ… Domyślnie od <strong>początku bieżącego miesiąca do dzisiaj</strong> — możesz zmienić <strong>Od–Do</strong> w
-            filtrach. Lista i wykresy odświeżają się automatycznie po dodaniu lub zmianie faktury (ta sama synchronizacja co
-            zakładka Faktury).
-            Faktury w imporcie (INGESTING) są pomijane.
+            Brutto wg kategorii · te same filtry co lista faktur · INGESTING pominięte.
           </p>
         </header>
 
@@ -213,20 +218,14 @@ export function ReportsPanel({ invoiceListEpoch }: ReportsPanelProps) {
 
         {devDemoFallback ? (
           <div className="app-banner" role="status" style={{ marginBottom: '0.75rem' }}>
-            <strong>Tryb dev — brak działającego API pod listę faktur.</strong> Vite obsługuje tylko logowanie; bez{' '}
-            <span className="mono">FV_RESTA_API_URL</span> żądanie <span className="mono">GET /api/v1/invoices</span> nie
-            trafia do backendu. Pokazano <strong>przykładowe dane z kodu</strong> (seed). Żeby zobaczyć bazę: uruchom{' '}
-            <span className="mono">npm run dev</span> w folderze <span className="mono">backend</span> i w{' '}
-            <span className="mono">.env</span> (katalog główny) ustaw{' '}
-            <span className="mono">FV_RESTA_API_URL=http://localhost:3000</span>, potem zrestartuj Vite.
+            <strong>Dev:</strong> brak API — dane seed. Ustaw <span className="mono">FV_RESTA_API_URL</span> i backend (
+            <span className="mono">npm run dev</span> w <span className="mono">backend</span>).
           </div>
         ) : null}
 
         {!loading && !err && status === 'authed' && reportDataFromApi && rawRows.length === 0 ? (
           <p className="workspace-panel__muted" role="status">
-            API nie zwróciło żadnej faktury dla zakresu <span className="mono">{filters.dateFrom}</span> —{' '}
-            <span className="mono">{filters.dateTo}</span>. Rozszerz daty w filtrach albo dodaj faktury w zakładce Faktury
-            (raport zaktualizuje się po synchronizacji listy).
+            Brak faktur w <span className="mono">{filters.dateFrom}</span> — <span className="mono">{filters.dateTo}</span>.
           </p>
         ) : null}
 
@@ -235,8 +234,7 @@ export function ReportsPanel({ invoiceListEpoch }: ReportsPanelProps) {
         optionRows.length > 0 &&
         filtered.length === 0 ? (
           <p className="workspace-panel__muted" role="status">
-            Wczytano {optionRows.length} faktur{apiTotal != null ? ` (API: łącznie ${apiTotal})` : ''}, ale bieżące
-            filtry (np. dostawca, kategoria, typ) wykluczają wszystkie — poluzuj filtry w pasku powyżej.
+            {optionRows.length} faktur w bazie{apiTotal != null ? ` (${apiTotal} z API)` : ''}, filtry wykluczają wszystkie.
           </p>
         ) : null}
 
@@ -270,30 +268,41 @@ export function ReportsPanel({ invoiceListEpoch }: ReportsPanelProps) {
           </label>
           <p className="workspace-panel__muted reports-toolbar__hint">
             {loading
-              ? 'Wczytywanie…'
-              : reportDataFromApi && apiTotal != null
-                ? `Z API: ${rawRows.length} wczytanych / ${apiTotal} pasujących do zapytania · po filtrach UI: ${filtered.length} · waluty: ${currenciesInFiltered.join(', ') || '—'}`
-                : `Po filtrach: ${filtered.length} faktur · waluty: ${currenciesInFiltered.join(', ') || '—'}`}
+              ? '…'
+              : `${filtered.length} faktur · ${currenciesInFiltered.join(', ') || '—'}${
+                  reportDataFromApi && apiTotal != null ? ` · API ${rawRows.length}/${apiTotal}` : ''
+                }`}
           </p>
         </div>
 
+        {!loading && filtered.length > 0 ? (
+          <ReportsVisualSummary
+            currency={effectiveCurrency}
+            totalPurchase={totalPurchaseGross}
+            totalSale={totalSaleGross}
+            profit={profitGross}
+            profitMarginPct={profitMarginPct}
+            formatMoney={money}
+          />
+        ) : null}
+
         <div className="reports-chart-grid">
           <section className="reports-chart-card">
-            <h3 className="workspace-panel__h3">Wydatki (zakupy)</h3>
+            <h3 className="workspace-panel__h3">Wydatki</h3>
             <CategoryBarChart
               variant="purchase"
               data={purchaseData}
               formatMoney={money}
-              emptyHint="Brak kosztów w wybranej walucie i filtrach."
+              emptyHint="Brak danych."
             />
           </section>
           <section className="reports-chart-card">
-            <h3 className="workspace-panel__h3">Przychody (sprzedaż)</h3>
+            <h3 className="workspace-panel__h3">Przychody</h3>
             <CategoryBarChart
               variant="sale"
               data={saleData}
               formatMoney={money}
-              emptyHint="Brak sprzedaży w wybranej walucie i filtrach."
+              emptyHint="Brak danych."
             />
           </section>
         </div>
