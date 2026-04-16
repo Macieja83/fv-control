@@ -16,6 +16,12 @@ const authRoutes: FastifyPluginAsync = async (app) => {
   app.post(
     "/auth/register",
     {
+      config: {
+        rateLimit: {
+          max: loadConfig().RATE_LIMIT_REGISTER_MAX,
+          timeWindow: loadConfig().RATE_LIMIT_REGISTER_WINDOW_MS,
+        },
+      },
       schema: {
         tags: ["Auth"],
         summary: "Register tenant account (owner)",
@@ -42,6 +48,12 @@ const authRoutes: FastifyPluginAsync = async (app) => {
   app.post(
     "/auth/verify-email",
     {
+      config: {
+        rateLimit: {
+          max: loadConfig().RATE_LIMIT_VERIFY_EMAIL_MAX,
+          timeWindow: loadConfig().RATE_LIMIT_VERIFY_EMAIL_WINDOW_MS,
+        },
+      },
       schema: { tags: ["Auth"], summary: "Verify email with token" },
     },
     async (request, reply) => {
@@ -54,6 +66,12 @@ const authRoutes: FastifyPluginAsync = async (app) => {
   app.post(
     "/auth/resend-verification",
     {
+      config: {
+        rateLimit: {
+          max: loadConfig().RATE_LIMIT_RESEND_VERIFICATION_MAX,
+          timeWindow: loadConfig().RATE_LIMIT_RESEND_VERIFICATION_WINDOW_MS,
+        },
+      },
       schema: { tags: ["Auth"], summary: "Resend email verification token" },
     },
     async (request, reply) => {
@@ -95,6 +113,12 @@ const authRoutes: FastifyPluginAsync = async (app) => {
   app.post(
     "/auth/refresh",
     {
+      config: {
+        rateLimit: {
+          max: loadConfig().RATE_LIMIT_REFRESH_MAX,
+          timeWindow: loadConfig().RATE_LIMIT_REFRESH_WINDOW_MS,
+        },
+      },
       schema: {
         tags: ["Auth"],
         summary: "Rotate refresh token",

@@ -1,5 +1,22 @@
+import { Prisma } from "@prisma/client";
 import type { PrismaClient, SubscriptionStatus } from "@prisma/client";
 import { AppError } from "../../lib/errors.js";
+
+const inMemoryWebhookDedup = new Set<string>();
+let canUseBillingWebhookTable: boolean | null = null;
+
+async function detectBillingWebhookTable(prisma: PrismaClient): Promise<boolean> {
+  if (canUseBillingWebhookTable != null) return canUseBillingWebhookTable;
+  try {
+    const rows = await prisma.$queryRaw<Array<{ exists: boolean }>>(
+      Prisma.sql`SELECT to_regclass('public.billing_webhook_events') IS NOT NULL AS "exists"`,
+    );
+    canUseBillingWebhookTable = rows[0]?.exists === true;
+  } catch {
+    canUseBillingWebhookTable = false;
+  }
+  return canUseBillingWebhookTable;
+}
 function mapStripeSubscriptionStatus(raw: unknown): SubscriptionStatus | null {
   if (typeof raw !== "string") return null;
   switch (raw) {
@@ -23,7 +40,46 @@ function parseUnixSecDate(v: unknown): Date | null {
   return null;
 }
 
-export async function handleStripeWebhookEvent(prisma: PrismaClient, payload: Record<string, unknown>) {
+async function claimWebhookEvent(
+  prisma: PrismaClient,
+  provider: "STRIPE" | "P24",
+  eventId: string,
+  payload: Record<string, unknown>,
+) {
+  const hasTable = await detectBillingWebhookTable(prisma);
+  if (!hasTable) {
+    const key = `${provider}:${eventId}`;
+    if (inMemoryWebhookDedup.has(key)) return false;
+    inMemoryWebhookDedup.add(key);
+    return true;
+  }
+  try {
+    const payloadJson = JSON.stringify(payload);
+    const inserted = await prisma.$executeRaw(
+      Prisma.sql`
+        INSERT INTO "billing_webhook_events" ("provider", "eventId", "payload")
+        VALUES (${provider}::"BillingWebhookProvider", ${eventId}, ${payloadJson}::jsonb)
+        ON CONFLICT ("provider", "eventId") DO NOTHING
+      `,
+    );
+    canUseBillingWebhookTable = true;
+    return inserted > 0;
+  } catch {
+    canUseBillingWebhookTable = false;
+    // Fallback dla środowisk bez najnowszej migracji (np. lokalne test DB):
+    // deduplikacja tylko per-process.
+    const key = `${provider}:${eventId}`;
+    if (inMemoryWebhookDedup.has(key)) return false;
+    inMemoryWebhookDedup.add(key);
+    return true;
+  }
+}
+
+export async function handleStripeWebhookEvent(prisma: PrismaClient, payload: Record<string, unknown>, eventId: string) {
+  const claimed = await claimWebhookEvent(prisma, "STRIPE", eventId, payload);
+  if (!claimed) {
+    return { accepted: true, duplicated: true as const, updated: false };
+  }
   const eventType = typeof payload.type === "string" ? payload.type : "unknown";
   const dataObj =
     payload.data && typeof payload.data === "object"
@@ -118,7 +174,11 @@ function mapP24Status(raw: unknown): SubscriptionStatus | null {
   }
 }
 
-export async function handleP24SubscriptionWebhook(prisma: PrismaClient, payload: Record<string, unknown>) {
+export async function handleP24SubscriptionWebhook(prisma: PrismaClient, payload: Record<string, unknown>, eventId: string) {
+  const claimed = await claimWebhookEvent(prisma, "P24", eventId, payload);
+  if (!claimed) {
+    return { accepted: true, duplicated: true as const, updated: false };
+  }
   const tenantId = typeof payload.tenantId === "string" ? payload.tenantId.trim() : "";
   if (!tenantId) throw AppError.validation("Missing tenantId");
   const status = mapP24Status(payload.status);

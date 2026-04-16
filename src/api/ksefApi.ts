@@ -1,3 +1,4 @@
+import { readApiErrorMessage } from './http'
 const API = '/api/v1'
 
 export type KsefSyncStats = {
@@ -48,16 +49,6 @@ export type KsefConnectorStatus = {
   lastSyncErrorPreview: string | null
   invoiceCount: number
   queue: KsefQueueStatus
-}
-
-async function readErrorMessage(res: Response): Promise<string> {
-  try {
-    const j = (await res.json()) as { error?: { message?: string } }
-    if (typeof j.error?.message === 'string') return j.error.message
-  } catch {
-    /* ignore */
-  }
-  return `HTTP ${res.status}`
 }
 
 /** Błąd POST sync — 429: dołącza sekundy z `Retry-After` lub `details.retryAfterSec`, jeśli brak w treści. */
@@ -114,7 +105,7 @@ export async function fetchKsefConnectorStatus(token: string): Promise<KsefConne
   const res = await fetch(`${API}/connectors/ksef/status`, {
     headers: { Authorization: `Bearer ${token}` },
   })
-  if (!res.ok) throw new Error(await readErrorMessage(res))
+  if (!res.ok) throw new Error(await readApiErrorMessage(res))
   const j = (await res.json()) as KsefConnectorStatus
   if (!j.queue) j.queue = emptyKsefQueue()
   return j
@@ -153,6 +144,6 @@ export async function patchKsefConnectorSettings(
     },
     body: JSON.stringify({ ksefApiEnv }),
   })
-  if (!res.ok) throw new Error(await readErrorMessage(res))
+  if (!res.ok) throw new Error(await readApiErrorMessage(res))
   return (await res.json()) as { ok: boolean }
 }

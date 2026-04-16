@@ -177,7 +177,7 @@ const ksefRoutes: FastifyPluginAsync = async (app) => {
       assertCanMutate(request.authUser!.role);
       const cfg = loadConfig();
       const tenantId = request.authUser!.tenantId;
-      const rl = consumeKsefManualSyncRateToken(
+      const rl = await consumeKsefManualSyncRateToken(
         tenantId,
         cfg.RATE_LIMIT_KSEF_SYNC_MAX,
         cfg.RATE_LIMIT_KSEF_SYNC_WINDOW_MS,

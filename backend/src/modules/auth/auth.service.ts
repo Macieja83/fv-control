@@ -404,7 +404,7 @@ export async function issueTenantImpersonationAccessToken(
   });
   return {
     accessToken: signAccessToken(
-      { sub: user.id, tid: targetTenantId, role: user.role, impBy: user.id },
+      { sub: user.id, tid: targetTenantId, role: user.role, impBy: user.id, typ: "impersonation" },
       cfg.JWT_ACCESS_SECRET,
       cfg.JWT_ACCESS_TTL_MIN,
     ),

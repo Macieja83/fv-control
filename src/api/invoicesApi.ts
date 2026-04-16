@@ -1,4 +1,5 @@
 const API = '/api/v1'
+import { readApiErrorMessage } from './http'
 
 export type ApiInvoiceListRow = {
   id: string
@@ -57,16 +58,6 @@ export type InvoicesListResponse = {
   meta: { total: number; page: number; limit: number; totalPages: number }
 }
 
-async function readErrorMessage(res: Response): Promise<string> {
-  try {
-    const j = (await res.json()) as { error?: { message?: string } }
-    if (typeof j.error?.message === 'string') return j.error.message
-  } catch {
-    /* ignore */
-  }
-  return `HTTP ${res.status}`
-}
-
 export type FetchInvoicesListOpts = {
   limit?: number
   page?: number
@@ -95,7 +86,7 @@ export async function fetchInvoicesList(
   const res = await fetch(`${API}/invoices?${q}`, {
     headers: { Authorization: `Bearer ${token}` },
   })
-  if (!res.ok) throw new Error(await readErrorMessage(res))
+  if (!res.ok) throw new Error(await readApiErrorMessage(res))
   return (await res.json()) as InvoicesListResponse
 }
 
@@ -148,7 +139,7 @@ export async function patchInvoice(
     },
     body: JSON.stringify(body),
   })
-  if (!res.ok) throw new Error(await readErrorMessage(res))
+  if (!res.ok) throw new Error(await readApiErrorMessage(res))
 }
 
 export async function patchInvoiceStatus(
@@ -164,7 +155,7 @@ export async function patchInvoiceStatus(
     },
     body: JSON.stringify({ status }),
   })
-  if (!res.ok) throw new Error(await readErrorMessage(res))
+  if (!res.ok) throw new Error(await readApiErrorMessage(res))
 }
 
 export async function deleteInvoiceRequest(token: string, invoiceId: string): Promise<void> {
@@ -172,7 +163,7 @@ export async function deleteInvoiceRequest(token: string, invoiceId: string): Pr
     method: 'DELETE',
     headers: { Authorization: `Bearer ${token}` },
   })
-  if (!res.ok) throw new Error(await readErrorMessage(res))
+  if (!res.ok) throw new Error(await readApiErrorMessage(res))
 }
 
 export type RetryExtractionResponse = {
@@ -196,7 +187,7 @@ export async function postSendInvoiceToKsef(token: string, invoiceId: string): P
     headers: { Authorization: `Bearer ${token}` },
   })
   if (res.status === 401) throw new Error('Sesja wygasła — zaloguj się ponownie.')
-  if (!res.ok) throw new Error(await readErrorMessage(res))
+  if (!res.ok) throw new Error(await readApiErrorMessage(res))
   return (await res.json()) as unknown
 }
 
@@ -215,7 +206,7 @@ export async function postCreateInvoice(
     body: JSON.stringify(body),
   })
   if (res.status === 401) throw new Error('Sesja wygasła — zaloguj się ponownie.')
-  if (!res.ok) throw new Error(await readErrorMessage(res))
+  if (!res.ok) throw new Error(await readApiErrorMessage(res))
   const data = (await res.json()) as ApiInvoiceCreateResponse
   if (typeof data.id !== 'string') throw new Error('API: brak id utworzonej faktury.')
   return data
@@ -240,7 +231,7 @@ export async function postRehydrateKsefInvoice(
     headers: { Authorization: `Bearer ${token}` },
   })
   if (res.status === 401) throw new Error('Sesja wygasła — zaloguj się ponownie.')
-  if (!res.ok) throw new Error(await readErrorMessage(res))
+  if (!res.ok) throw new Error(await readApiErrorMessage(res))
   return (await res.json()) as RehydrateFromKsefResponse
 }
 
@@ -256,7 +247,7 @@ export async function postRetryInvoiceExtraction(
     },
   )
   if (res.status === 401) throw new Error('Sesja wygasła — zaloguj się ponownie.')
-  if (!res.ok) throw new Error(await readErrorMessage(res))
+  if (!res.ok) throw new Error(await readApiErrorMessage(res))
   return (await res.json()) as RetryExtractionResponse
 }
 
@@ -265,7 +256,7 @@ export async function fetchInvoiceEvents(token: string, invoiceId: string): Prom
     headers: { Authorization: `Bearer ${token}` },
   })
   if (res.status === 401) throw new Error('Sesja wygasła — zaloguj się ponownie.')
-  if (!res.ok) throw new Error(await readErrorMessage(res))
+  if (!res.ok) throw new Error(await readApiErrorMessage(res))
   return (await res.json()) as InvoiceEventRow[]
 }
 
@@ -284,7 +275,7 @@ export async function fetchInvoicePispPaymentState(
     headers: { Authorization: `Bearer ${token}` },
   })
   if (res.status === 401) throw new Error('Sesja wygasła — zaloguj się ponownie.')
-  if (!res.ok) throw new Error(await readErrorMessage(res))
+  if (!res.ok) throw new Error(await readApiErrorMessage(res))
   return (await res.json()) as InvoicePispPaymentState
 }
 
@@ -304,6 +295,6 @@ export async function postAdoptInvoiceVendor(
     body: JSON.stringify(body ?? {}),
   })
   if (res.status === 401) throw new Error('Sesja wygasła — zaloguj się ponownie.')
-  if (!res.ok) throw new Error(await readErrorMessage(res))
+  if (!res.ok) throw new Error(await readApiErrorMessage(res))
   return (await res.json()) as AdoptVendorResponse
 }

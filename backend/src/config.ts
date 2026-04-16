@@ -21,10 +21,25 @@ const envSchema = z.object({
   ENCRYPTION_KEY: z
     .string()
     .min(1)
+    .refine((v) => {
+      try {
+        return Buffer.from(v, "base64").length === 32;
+      } catch {
+        return false;
+      }
+    }, "ENCRYPTION_KEY must be base64 of exactly 32 bytes")
     .describe("Base64-encoded 32-byte key for AES-256-GCM (credentials, tokens at rest)"),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
   RATE_LIMIT_LOGIN_MAX: z.coerce.number().int().positive().default(10),
   RATE_LIMIT_LOGIN_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
+  RATE_LIMIT_REGISTER_MAX: z.coerce.number().int().positive().default(10),
+  RATE_LIMIT_REGISTER_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
+  RATE_LIMIT_REFRESH_MAX: z.coerce.number().int().positive().default(30),
+  RATE_LIMIT_REFRESH_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
+  RATE_LIMIT_VERIFY_EMAIL_MAX: z.coerce.number().int().positive().default(20),
+  RATE_LIMIT_VERIFY_EMAIL_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
+  RATE_LIMIT_RESEND_VERIFICATION_MAX: z.coerce.number().int().positive().default(10),
+  RATE_LIMIT_RESEND_VERIFICATION_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
   RATE_LIMIT_WEBHOOK_MAX: z.coerce.number().int().positive().default(120),
   RATE_LIMIT_WEBHOOK_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
   /**
@@ -54,6 +69,8 @@ const envSchema = z.object({
   IMAP_AUTO_SYNC_INTERVAL_MS: z.coerce.number().int().min(0).default(300_000),
   WEBHOOK_SIGNING_SECRET: z
     .preprocess((v) => (v === "" || v === undefined ? undefined : v), z.string().min(16).optional()),
+  METRICS_BEARER_TOKEN: z
+    .preprocess((v) => (v === "" || v === undefined ? undefined : v), z.string().min(24).optional()),
 
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
@@ -244,6 +261,17 @@ export function loadConfig(): AppConfig {
   if (!parsed.success) {
     const msg = parsed.error.flatten().fieldErrors;
     throw new Error(`Invalid environment: ${JSON.stringify(msg)}`);
+  }
+  if (parsed.data.NODE_ENV === "production") {
+    if (parsed.data.FEATURE_AI_EXTRACTION_MOCK) {
+      throw new Error("Invalid environment: FEATURE_AI_EXTRACTION_MOCK must be false in production");
+    }
+    if (!parsed.data.WEBHOOK_SIGNING_SECRET) {
+      throw new Error("Invalid environment: WEBHOOK_SIGNING_SECRET is required in production");
+    }
+    if (!parsed.data.METRICS_BEARER_TOKEN) {
+      throw new Error("Invalid environment: METRICS_BEARER_TOKEN is required in production");
+    }
   }
   if (process.env.NODE_ENV === "production") {
     cached = parsed.data;

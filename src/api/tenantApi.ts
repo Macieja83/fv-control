@@ -1,3 +1,4 @@
+import { readApiErrorMessage } from './http'
 const API = '/api/v1'
 
 export type TenantProfileResponse = {
@@ -15,19 +16,9 @@ export type TenantProfileResponse = {
   }
 }
 
-async function readErrorMessage(res: Response): Promise<string> {
-  try {
-    const j = (await res.json()) as { error?: { message?: string } }
-    if (typeof j.error?.message === 'string') return j.error.message
-  } catch {
-    /* ignore */
-  }
-  return `HTTP ${res.status}`
-}
-
 export async function fetchTenantProfile(token: string): Promise<TenantProfileResponse> {
   const res = await fetch(`${API}/tenant`, { headers: { Authorization: `Bearer ${token}` } })
-  if (!res.ok) throw new Error(await readErrorMessage(res))
+  if (!res.ok) throw new Error(await readApiErrorMessage(res))
   return (await res.json()) as TenantProfileResponse
 }
 
@@ -43,7 +34,7 @@ export async function patchTenantProfile(
     },
     body: JSON.stringify(body),
   })
-  if (!res.ok) throw new Error(await readErrorMessage(res))
+  if (!res.ok) throw new Error(await readApiErrorMessage(res))
 }
 
 export async function patchTenantIntegrations(
@@ -63,7 +54,7 @@ export async function patchTenantIntegrations(
     },
     body: JSON.stringify(body),
   })
-  if (!res.ok) throw new Error(await readErrorMessage(res))
+  if (!res.ok) throw new Error(await readApiErrorMessage(res))
   return (await res.json()) as TenantProfileResponse['portalIntegrations']
 }
 
@@ -88,7 +79,7 @@ export async function fetchTenantKsefCredentialsPublic(token: string): Promise<T
   const res = await fetch(`${API}/tenant/ksef-credentials`, {
     headers: { Authorization: `Bearer ${token}` },
   })
-  if (!res.ok) throw new Error(await readErrorMessage(res))
+  if (!res.ok) throw new Error(await readApiErrorMessage(res))
   return (await res.json()) as TenantKsefCredentialsPublic
 }
 
@@ -101,7 +92,7 @@ export async function putTenantKsefCredentials(token: string, body: TenantKsefUp
     },
     body: JSON.stringify(body),
   })
-  if (!res.ok) throw new Error(await readErrorMessage(res))
+  if (!res.ok) throw new Error(await readApiErrorMessage(res))
   return (await res.json()) as { ok: boolean }
 }
 
@@ -110,7 +101,7 @@ export async function deleteTenantKsefCredentials(token: string): Promise<{ ok: 
     method: 'DELETE',
     headers: { Authorization: `Bearer ${token}` },
   })
-  if (!res.ok) throw new Error(await readErrorMessage(res))
+  if (!res.ok) throw new Error(await readApiErrorMessage(res))
   return (await res.json()) as { ok: boolean }
 }
 
@@ -143,6 +134,6 @@ export async function postTenantKsefConnectionTest(
     },
     body,
   })
-  if (!res.ok) throw new Error(await readErrorMessage(res))
+  if (!res.ok) throw new Error(await readApiErrorMessage(res))
   return (await res.json()) as TenantKsefTestResult
 }

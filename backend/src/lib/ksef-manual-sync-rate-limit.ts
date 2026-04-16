@@ -1,7 +1,8 @@
 /**
- * Prosty limiter in-process per tenant dla ręcznego kolejkowania sync KSeF.
- * (Po `authenticate` — klucz to `tenantId`, nie IP.)
+ * Limiter per tenant dla ręcznego kolejkowania sync KSeF.
+ * Preferuje Redis (działa między instancjami); fallback do in-memory gdy Redis niedostępny.
  */
+import { getRedisConnection } from "./redis-connection.js";
 
 type Bucket = { windowStart: number; count: number };
 
@@ -23,12 +24,33 @@ function pruneBuckets(targetSize: number): void {
  * Zwraca `ok: false` gdy w bieżącym oknie czasu wykorzystano już `max` żądań.
  * `max === 0` lub `windowMs === 0` — limit wyłączony.
  */
-export function consumeKsefManualSyncRateToken(
+export async function consumeKsefManualSyncRateToken(
   tenantId: string,
   max: number,
   windowMs: number,
-): { ok: true } | { ok: false; retryAfterSec: number } {
+): Promise<{ ok: true } | { ok: false; retryAfterSec: number }> {
   if (max <= 0 || windowMs <= 0) return { ok: true };
+
+  const redisKey = `ksef:manual-sync:rl:${tenantId}`;
+  try {
+    const redis = getRedisConnection();
+    const tx = redis.multi();
+    tx.incr(redisKey);
+    tx.pexpire(redisKey, windowMs, "NX");
+    tx.pttl(redisKey);
+    const out = await tx.exec();
+    if (out) {
+      const count = Number(out[0]?.[1] ?? 0);
+      const ttlMs = Number(out[2]?.[1] ?? -1);
+      if (count > max) {
+        const retryAfterSec = Math.max(1, Math.ceil((ttlMs > 0 ? ttlMs : windowMs) / 1000));
+        return { ok: false, retryAfterSec };
+      }
+      return { ok: true };
+    }
+  } catch {
+    // Fallback poniżej (in-process) utrzymuje dotychczasowe działanie przy problemach Redis.
+  }
 
   const now = Date.now();
   let b = buckets.get(tenantId);

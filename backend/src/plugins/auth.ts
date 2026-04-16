@@ -26,6 +26,9 @@ const authPlugin: FastifyPluginAsync = async (app) => {
         throw AppError.unauthorized("User not found or inactive");
       }
       const isPlatformAdmin = isPlatformAdminEmail(user.email);
+      if (payload.typ === "impersonation" && !isPlatformAdmin) {
+        throw AppError.unauthorized("Impersonation token requires platform admin");
+      }
       if (payload.tid !== user.tenantId && !isPlatformAdmin) {
         throw AppError.unauthorized("Invalid tenant context");
       }

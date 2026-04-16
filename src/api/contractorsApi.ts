@@ -1,3 +1,4 @@
+import { readApiErrorMessage } from './http'
 const API = '/api/v1'
 
 export type ContractorDto = {
@@ -13,19 +14,9 @@ export type ContractorDto = {
   updatedAt: string
 }
 
-async function readErrorMessage(res: Response): Promise<string> {
-  try {
-    const j = (await res.json()) as { error?: { message?: string } }
-    if (typeof j.error?.message === 'string') return j.error.message
-  } catch {
-    /* ignore */
-  }
-  return `HTTP ${res.status}`
-}
-
 export async function fetchContractors(token: string): Promise<ContractorDto[]> {
   const res = await fetch(`${API}/contractors`, { headers: { Authorization: `Bearer ${token}` } })
-  if (!res.ok) throw new Error(await readErrorMessage(res))
+  if (!res.ok) throw new Error(await readApiErrorMessage(res))
   return (await res.json()) as ContractorDto[]
 }
 
@@ -41,7 +32,7 @@ export async function createContractor(
     },
     body: JSON.stringify(body),
   })
-  if (!res.ok) throw new Error(await readErrorMessage(res))
+  if (!res.ok) throw new Error(await readApiErrorMessage(res))
   return (await res.json()) as ContractorDto
 }
 
@@ -50,5 +41,5 @@ export async function deleteContractor(token: string, id: string): Promise<void>
     method: 'DELETE',
     headers: { Authorization: `Bearer ${token}` },
   })
-  if (!res.ok) throw new Error(await readErrorMessage(res))
+  if (!res.ok) throw new Error(await readApiErrorMessage(res))
 }

@@ -9,6 +9,10 @@
 1. Compare `.env` to `.env.example` — all required keys present.
 2. `JWT_*` length ≥ 32 characters.
 3. `ENCRYPTION_KEY` is base64 of **32 bytes**.
+4. In production ensure:
+   - `FEATURE_AI_EXTRACTION_MOCK=false`,
+   - `WEBHOOK_SIGNING_SECRET` set,
+   - `METRICS_BEARER_TOKEN` set.
 
 ## Database connection failures
 

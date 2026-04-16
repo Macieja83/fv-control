@@ -3,6 +3,7 @@ import { useAuth } from './auth/AuthContext'
 import { ActivityDrawer } from './components/app/ActivityDrawer'
 import { AdminPanel } from './components/app/AdminPanel'
 import { ImpersonationBanner } from './components/app/ImpersonationBanner'
+import { OnboardingChecklistBanner } from './components/app/OnboardingChecklistBanner'
 import {
   APP_NAV_ITEMS,
   PLATFORM_ADMIN_NAV_ITEM,
@@ -159,6 +160,9 @@ export default function DashboardApp() {
         onNavChange={setNav}
         navTabs={topNavTabs}
       />
+      {!user?.isPlatformAdmin && (
+        <OnboardingChecklistBanner user={user} onGoToNav={setNav} />
+      )}
       {nav === 'invoices' && (
         <main className="main-content">
           <div className="invoice-toolbar">

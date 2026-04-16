@@ -7,15 +7,15 @@ export type AccessPayload = {
   tid: string;
   role: UserRole;
   impBy?: string;
-  typ: "access";
+  typ: "access" | "impersonation";
 };
 
 export function signAccessToken(
-  payload: Omit<AccessPayload, "typ">,
+  payload: Omit<AccessPayload, "typ"> & { typ?: AccessPayload["typ"] },
   secret: string,
   expiresInMinutes: number,
 ): string {
-  const body: AccessPayload = { ...payload, typ: "access" };
+  const body: AccessPayload = { ...payload, typ: payload.typ ?? "access" };
   return jwt.sign(body, secret, { expiresIn: `${expiresInMinutes}m`, algorithm: "HS256" });
 }
 
@@ -26,14 +26,21 @@ export function verifyAccessToken(token: string, secret: string): AccessPayload 
       throw AppError.unauthorized("Invalid token");
     }
     const o = decoded as Record<string, unknown>;
-    if (o.typ !== "access" || typeof o.sub !== "string" || typeof o.tid !== "string") {
+    if (
+      (o.typ !== "access" && o.typ !== "impersonation") ||
+      typeof o.sub !== "string" ||
+      typeof o.tid !== "string"
+    ) {
       throw AppError.unauthorized("Invalid token");
+    }
+    if (o.typ === "impersonation" && (typeof o.impBy !== "string" || o.impBy.length === 0)) {
+      throw AppError.unauthorized("Invalid impersonation token");
     }
     return {
       sub: o.sub,
       tid: o.tid,
       role: o.role as UserRole,
-      typ: "access",
+      typ: o.typ,
       ...(typeof o.impBy === "string" && o.impBy.length > 0 ? { impBy: o.impBy } : {}),
     };
   } catch (e) {

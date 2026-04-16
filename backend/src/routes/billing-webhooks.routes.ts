@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 import { loadConfig } from "../config.js";
 import { AppError } from "../lib/errors.js";
@@ -79,7 +79,11 @@ const billingWebhooksRoutes: FastifyPluginAsync = async (app) => {
           return reply.status(401).send({ error: { code: "UNAUTHORIZED", message: "Bad signature" } });
         }
         const payload = (request.body ?? {}) as Record<string, unknown>;
-        const result = await handleStripeWebhookEvent(app.prisma, payload);
+        const eventId =
+          typeof payload.id === "string" && payload.id.trim().length > 0
+            ? payload.id.trim()
+            : `rawsha:${createHash("sha256").update(raw).digest("hex")}`;
+        const result = await handleStripeWebhookEvent(app.prisma, payload, eventId);
         return reply.status(202).send(result);
       },
     );
@@ -97,7 +101,14 @@ const billingWebhooksRoutes: FastifyPluginAsync = async (app) => {
           return reply.status(401).send({ error: { code: "UNAUTHORIZED", message: "Bad signature" } });
         }
         const payload = (request.body ?? {}) as Record<string, unknown>;
-        const result = await handleP24SubscriptionWebhook(app.prisma, payload);
+        const eventId =
+          (typeof payload.eventId === "string" && payload.eventId.trim().length > 0
+            ? payload.eventId.trim()
+            : null) ??
+          (typeof payload.orderId === "string" && payload.orderId.trim().length > 0 ? payload.orderId.trim() : null) ??
+          (typeof payload.sessionId === "string" && payload.sessionId.trim().length > 0 ? payload.sessionId.trim() : null) ??
+          `rawsha:${createHash("sha256").update(raw).digest("hex")}`;
+        const result = await handleP24SubscriptionWebhook(app.prisma, payload, eventId);
         return reply.status(202).send(result);
       },
     );

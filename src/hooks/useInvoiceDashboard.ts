@@ -17,7 +17,7 @@ import { enrichDuplicateMetadata, isDuplicateFlagged } from '../lib/duplicates'
 import { matchesInvoiceFilters } from '../lib/matchesInvoiceFilters'
 import { ALL_REPORT_CATEGORIES } from '../data/categories'
 import { mapApiInvoiceRowToRecord } from '../lib/mapApiInvoice'
-import { getStoredToken } from '../auth/session'
+import { clearStoredToken, getStoredToken } from '../auth/session'
 
 const USE_MOCK_INVOICES =
   import.meta.env.VITE_USE_MOCK_INVOICES === 'true' ||
@@ -25,6 +25,16 @@ const USE_MOCK_INVOICES =
 
 function nowIso() {
   return new Date().toISOString()
+}
+
+function handleExpiredSession(msg: string): boolean {
+  if (!msg.toLowerCase().includes('sesja wygasła')) return false
+  clearStoredToken()
+  if (window.location.pathname !== '/login') {
+    window.history.pushState(null, '', '/login')
+    window.dispatchEvent(new PopStateEvent('popstate'))
+  }
+  return true
 }
 
 function pushHistory(
@@ -114,6 +124,7 @@ export function useInvoiceDashboard() {
           e instanceof Error && e.message.trim()
             ? e.message.trim()
             : 'Nie udało się pobrać faktur z API.'
+        if (handleExpiredSession(msg)) return
         setListError(msg)
         setInvoices([])
       }

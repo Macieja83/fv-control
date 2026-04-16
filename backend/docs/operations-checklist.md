@@ -3,9 +3,9 @@
 ## Before production deploy
 
 1. **Migrations:** `npx prisma migrate deploy` on API and worker (see Makefile / compose).
-2. **Secrets:** `JWT_*`, `ENCRYPTION_KEY`, `WEBHOOK_SIGNING_SECRET` (production values).
+2. **Secrets:** `JWT_*`, `ENCRYPTION_KEY`, `WEBHOOK_SIGNING_SECRET`, `METRICS_BEARER_TOKEN` (production values).
 3. **Worker:** at least one `worker` process running (outbox sweep + housekeeping + BullMQ).
-4. **Metrics:** scrape `GET /metrics` (Prometheus). Confirm counters increase under load tests.
+4. **Metrics:** scrape `GET /metrics` (Prometheus) with `Authorization: Bearer <METRICS_BEARER_TOKEN>`. Confirm counters increase under load tests.
 
 ## Key metrics
 

@@ -6,11 +6,12 @@ import { AppErrorBoundary } from './components/app/AppErrorBoundary'
 import LandingPage from './landing/LandingPage'
 import './index.css'
 
-type GuestRoute = 'landing' | 'login' | 'register'
+type GuestRoute = 'landing' | 'login' | 'register' | 'verify'
 
 function resolveGuestRoute(pathname: string): GuestRoute {
   if (pathname === '/login') return 'login'
   if (pathname === '/register') return 'register'
+  if (pathname === '/verify') return 'verify'
   return 'landing'
 }
 

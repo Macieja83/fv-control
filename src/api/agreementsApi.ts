@@ -1,4 +1,5 @@
 import { getStoredToken } from '../auth/session'
+import { readApiErrorMessage } from './http'
 
 const API = '/api/v1'
 
@@ -27,16 +28,6 @@ export type AgreementDetail = AgreementListRow & {
   normalizedPayload: unknown
 }
 
-async function readErrorMessage(res: Response): Promise<string> {
-  try {
-    const j = (await res.json()) as { error?: { message?: string } }
-    if (typeof j.error?.message === 'string') return j.error.message
-  } catch {
-    /* ignore */
-  }
-  return `HTTP ${res.status}`
-}
-
 function tokenOrThrow(): string {
   const token = getStoredToken()
   if (!token) throw new Error('Brak sesji — zaloguj się ponownie.')
@@ -46,8 +37,7 @@ function tokenOrThrow(): string {
 export async function fetchAgreements(): Promise<AgreementListRow[]> {
   const token = tokenOrThrow()
   const res = await fetch(`${API}/agreements`, { headers: { Authorization: `Bearer ${token}` } })
-  if (res.status === 401) throw new Error('Sesja wygasła — zaloguj się ponownie.')
-  if (!res.ok) throw new Error(await readErrorMessage(res))
+  if (!res.ok) throw new Error(await readApiErrorMessage(res))
   return (await res.json()) as AgreementListRow[]
 }
 
@@ -56,8 +46,7 @@ export async function fetchAgreement(id: string): Promise<AgreementDetail> {
   const res = await fetch(`${API}/agreements/${encodeURIComponent(id)}`, {
     headers: { Authorization: `Bearer ${token}` },
   })
-  if (res.status === 401) throw new Error('Sesja wygasła — zaloguj się ponownie.')
-  if (!res.ok) throw new Error(await readErrorMessage(res))
+  if (!res.ok) throw new Error(await readApiErrorMessage(res))
   return (await res.json()) as AgreementDetail
 }
 
@@ -83,8 +72,7 @@ export async function patchAgreement(
     },
     body: JSON.stringify(body),
   })
-  if (res.status === 401) throw new Error('Sesja wygasła — zaloguj się ponownie.')
-  if (!res.ok) throw new Error(await readErrorMessage(res))
+  if (!res.ok) throw new Error(await readApiErrorMessage(res))
   return (await res.json()) as AgreementDetail
 }
 
@@ -97,8 +85,7 @@ export async function uploadAgreementFile(file: File): Promise<AgreementDetail> 
     headers: { Authorization: `Bearer ${token}` },
     body: form,
   })
-  if (res.status === 401) throw new Error('Sesja wygasła — zaloguj się ponownie.')
-  if (!res.ok) throw new Error(await readErrorMessage(res))
+  if (!res.ok) throw new Error(await readApiErrorMessage(res))
   return (await res.json()) as AgreementDetail
 }
 
@@ -108,7 +95,7 @@ export async function openAgreementDocumentBlobUrl(id: string): Promise<string> 
   const res = await fetch(`${API}/agreements/${encodeURIComponent(id)}/download`, {
     headers: { Authorization: `Bearer ${token}` },
   })
-  if (!res.ok) throw new Error(await readErrorMessage(res))
+  if (!res.ok) throw new Error(await readApiErrorMessage(res))
   const blob = await res.blob()
   return URL.createObjectURL(blob)
 }

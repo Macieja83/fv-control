@@ -80,6 +80,31 @@ html[data-theme='dark'] .app-shell {
   gap: 0.5rem 1rem;
   background: color-mix(in srgb, #c2410c 12%, var(--surface-1));
 }
+.app-banner--onboarding {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem 1rem;
+  background: color-mix(in srgb, #0284c7 12%, var(--surface-1));
+}
+.app-banner__sub {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+  margin-top: 0.35rem;
+}
+.onboarding-step {
+  opacity: 0.95;
+}
+.onboarding-step--done {
+  opacity: 0.82;
+}
+.app-banner__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
 .table-loading { padding: 1.25rem; color: var(--text-muted); text-align: center; }
 
 /* ─── Topbar + moduły (zakładki) ─── */
@@ -1334,6 +1359,14 @@ html[data-theme='dark'] .upload-bar__status--error { color: #f87171; }
 .workspace-panel__ok {
   color: var(--success);
   font-size: 0.85rem;
+}
+
+.workspace-panel__checklist {
+  margin: 0.6rem 0 0;
+  padding-left: 1.1rem;
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  line-height: 1.45;
 }
 
 .contractor-form {

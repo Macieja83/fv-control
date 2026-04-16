@@ -1,3 +1,4 @@
+import { readApiErrorMessage } from './http'
 const API = '/api/v1'
 
 export type CategoryBreakdownRow = {
@@ -12,16 +13,6 @@ export type CategoryBreakdownResponse = {
   rows: CategoryBreakdownRow[]
 }
 
-async function readErrorMessage(res: Response): Promise<string> {
-  try {
-    const j = (await res.json()) as { error?: { message?: string } }
-    if (typeof j.error?.message === 'string') return j.error.message
-  } catch {
-    /* ignore */
-  }
-  return `HTTP ${res.status}`
-}
-
 export async function fetchCategoryBreakdown(
   token: string,
   opts?: { dateFrom?: string; dateTo?: string; currency?: string },
@@ -34,6 +25,6 @@ export async function fetchCategoryBreakdown(
   const res = await fetch(`${API}/reports/category-breakdown${qs ? `?${qs}` : ''}`, {
     headers: { Authorization: `Bearer ${token}` },
   })
-  if (!res.ok) throw new Error(await readErrorMessage(res))
+  if (!res.ok) throw new Error(await readApiErrorMessage(res))
   return (await res.json()) as CategoryBreakdownResponse
 }

@@ -19,16 +19,19 @@ import {
 import { fetchTenantProfile, patchTenantProfile, type TenantProfileResponse } from '../../api/tenantApi'
 
 import { getStoredToken } from '../../auth/session'
+import { useAuth } from '../../auth/AuthContext'
 
 
 
 export function SettingsPanel() {
+  const { user } = useAuth()
 
   const [name, setName] = useState('')
 
   const [nip, setNip] = useState('')
 
   const [loading, setLoading] = useState(true)
+  const [tenantProfile, setTenantProfile] = useState<TenantProfileResponse | null>(null)
 
   const [saving, setSaving] = useState(false)
 
@@ -75,6 +78,7 @@ export function SettingsPanel() {
     try {
 
       const t: TenantProfileResponse = await fetchTenantProfile(token)
+      setTenantProfile(t)
 
       setName(t.name)
 
@@ -321,6 +325,29 @@ export function SettingsPanel() {
       {ok && <p className="workspace-panel__ok">Zapisano.</p>}
 
 
+
+      {!loading && (
+        <section className="integration-card integration-card--tight" style={{ marginBottom: 16 }}>
+          <h3 className="workspace-panel__h3">Checklista gotowości konta</h3>
+          <p className="workspace-panel__muted">
+            Gdy wszystkie punkty są gotowe, konto jest przygotowane do pracy na realnych fakturach.
+          </p>
+          <ul className="workspace-panel__checklist">
+            <li>
+              {user?.emailVerified ? '✅' : '⬜'} Weryfikacja e-mail właściciela konta
+            </li>
+            <li>
+              {nip.replace(/\s/g, '').length >= 10 ? '✅' : '⬜'} Uzupełniony NIP firmy
+            </li>
+            <li>
+              {tenantProfile?.portalIntegrations.ksefConfigured ? '✅' : '⬜'} Zapisane poświadczenia KSeF (Płatności)
+            </li>
+            <li>
+              {(subscription?.status === 'ACTIVE' || subscription?.status === 'TRIALING') ? '✅' : '⬜'} Aktywna subskrypcja (trial/active)
+            </li>
+          </ul>
+        </section>
+      )}
 
       {!loading && (
 

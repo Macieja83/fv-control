@@ -25,6 +25,27 @@ export default function LoginPage({ initialMode = 'login' }: LoginPageProps) {
     setMode(initialMode)
   }, [initialMode])
 
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search)
+    const tokenFromUrl = q.get('token')?.trim() ?? ''
+    if (!tokenFromUrl) return
+    setMode('verify')
+    setVerificationToken(tokenFromUrl)
+    setError(null)
+    setOk('Wykryto token z linku weryfikacyjnego. Potwierdzanie konta…')
+    setLoading(true)
+    void loginWithVerificationToken(tokenFromUrl)
+      .then(() => {
+        setOk('E-mail został potwierdzony. Logowanie…')
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : 'Nie udało się zweryfikować tokenu z linku.')
+      })
+      .finally(() => {
+        setLoading(false)
+      })
+  }, [loginWithVerificationToken])
+
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)

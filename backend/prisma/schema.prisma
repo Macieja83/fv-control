@@ -241,6 +241,11 @@ enum SubscriptionProvider {
   STRIPE
 }
 
+enum BillingWebhookProvider {
+  STRIPE
+  P24
+}
+
 enum AuthProvider {
   GOOGLE
 }
@@ -884,6 +889,18 @@ model WebhookOutbox {
   @@index([tenantId, status])
   @@index([status, updatedAt])
   @@map("webhooks_outbox")
+}
+
+model BillingWebhookEvent {
+  id         String                 @id @default(uuid()) @db.Uuid
+  provider   BillingWebhookProvider
+  eventId    String
+  payload    Json                   @db.JsonB
+  receivedAt DateTime               @default(now()) @map("received_at")
+
+  @@unique([provider, eventId])
+  @@index([receivedAt])
+  @@map("billing_webhook_events")
 }
 
 model AuditLog {
