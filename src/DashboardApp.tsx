@@ -88,6 +88,7 @@ export default function DashboardApp() {
     listError,
     dataSource,
     categoryLocalOnly,
+    invoiceListEpoch,
     refreshFromApi,
     retryInvoiceExtraction,
     syncKsefInvoiceFromApi,
@@ -211,7 +212,7 @@ export default function DashboardApp() {
           />
         </main>
       )}
-      {nav === 'reports' && <ReportsPanel />}
+      {nav === 'reports' && <ReportsPanel invoiceListEpoch={invoiceListEpoch} />}
       {nav === 'documents' && (
         <main className="main-content main-content--padded">
           <DocumentsPanel />

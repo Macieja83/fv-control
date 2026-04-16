@@ -53,7 +53,12 @@ function aggregateForChart(
     .sort((a, b) => b.value - a.value)
 }
 
-export function ReportsPanel() {
+export type ReportsPanelProps = {
+  /** Rosnie po każdej aktualizacji listy faktur w dashboardzie — wymusza ponowne pobranie danych do wykresów. */
+  invoiceListEpoch: number
+}
+
+export function ReportsPanel({ invoiceListEpoch }: ReportsPanelProps) {
   const { status } = useAuth()
   const [filters, setFilters] = useState<InvoiceFilters>(() => ({
     ...EMPTY_FILTERS,
@@ -136,7 +141,7 @@ export function ReportsPanel() {
 
   useEffect(() => {
     void load()
-  }, [load, status])
+  }, [load, status, invoiceListEpoch])
 
   const optionRows = useMemo(
     () => rawRows.filter((r) => r.invoice_status !== 'INGESTING'),
@@ -197,8 +202,9 @@ export function ReportsPanel() {
           <p className="workspace-panel__lead">
             Wykresy sum brutto według kategorii — dane z <strong>API / bazy</strong> po zalogowaniu (jak lista faktur,
             bez podziału na koszt/sprzedaż w zapytaniu). Te same filtry co na fakturach: dostawca, kategoria, płatność,
-            typ… Domyślnie od <strong>początku bieżącego miesiąca do dzisiaj</strong> — możesz zmienić <strong>Od–Do</strong> i
-            kliknąć „Odśwież z API”.
+            typ… Domyślnie od <strong>początku bieżącego miesiąca do dzisiaj</strong> — możesz zmienić <strong>Od–Do</strong> w
+            filtrach. Lista i wykresy odświeżają się automatycznie po dodaniu lub zmianie faktury (ta sama synchronizacja co
+            zakładka Faktury).
             Faktury w imporcie (INGESTING) są pomijane.
           </p>
         </header>
@@ -219,8 +225,8 @@ export function ReportsPanel() {
         {!loading && !err && status === 'authed' && reportDataFromApi && rawRows.length === 0 ? (
           <p className="workspace-panel__muted" role="status">
             API nie zwróciło żadnej faktury dla zakresu <span className="mono">{filters.dateFrom}</span> —{' '}
-            <span className="mono">{filters.dateTo}</span>. Rozszerz daty w filtrach i kliknij „Odśwież z API”, albo
-            dodaj faktury w zakładce Faktury.
+            <span className="mono">{filters.dateTo}</span>. Rozszerz daty w filtrach albo dodaj faktury w zakładce Faktury
+            (raport zaktualizuje się po synchronizacji listy).
           </p>
         ) : null}
 
@@ -269,11 +275,6 @@ export function ReportsPanel() {
                 ? `Z API: ${rawRows.length} wczytanych / ${apiTotal} pasujących do zapytania · po filtrach UI: ${filtered.length} · waluty: ${currenciesInFiltered.join(', ') || '—'}`
                 : `Po filtrach: ${filtered.length} faktur · waluty: ${currenciesInFiltered.join(', ') || '—'}`}
           </p>
-          {status === 'authed' ? (
-            <button type="button" className="btn" disabled={loading} onClick={() => void load()}>
-              Odśwież z API
-            </button>
-          ) : null}
         </div>
 
         <div className="reports-chart-grid">

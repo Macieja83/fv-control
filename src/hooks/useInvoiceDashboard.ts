@@ -86,6 +86,12 @@ export function useInvoiceDashboard() {
     USE_MOCK_INVOICES ? 'mock' : 'api',
   )
 
+  /** Rosnie przy każdej aktualizacji listy faktur (API / mock) — Raporty podpinają się pod to, żeby odświeżać wykresy bez osobnego przycisku. */
+  const [invoiceListEpoch, setInvoiceListEpoch] = useState(0)
+  const bumpInvoiceListEpoch = useCallback(() => {
+    setInvoiceListEpoch((n) => n + 1)
+  }, [])
+
   const refreshFromApi = useCallback(async () => {
     const token = getStoredToken()
     if (!token) {
@@ -98,6 +104,7 @@ export function useInvoiceDashboard() {
         setInvoices([])
       }
       setListLoading(false)
+      bumpInvoiceListEpoch()
       return
     }
     setListLoading(true)
@@ -114,24 +121,30 @@ export function useInvoiceDashboard() {
       const mapped = res.data.map(mapApiInvoiceRowToRecord)
       setInvoices(enrichDuplicateMetadata(mapped))
       setDataSource('api')
+      bumpInvoiceListEpoch()
     } catch (e) {
       if (USE_MOCK_INVOICES) {
         setListError(null)
         setInvoices(enrichDuplicateMetadata(seedInvoices()))
         setDataSource('mock')
+        bumpInvoiceListEpoch()
       } else {
         const msg =
           e instanceof Error && e.message.trim()
             ? e.message.trim()
             : 'Nie udało się pobrać faktur z API.'
-        if (handleExpiredSession(msg)) return
+        if (handleExpiredSession(msg)) {
+          bumpInvoiceListEpoch()
+          return
+        }
         setListError(msg)
         setInvoices([])
+        bumpInvoiceListEpoch()
       }
     } finally {
       setListLoading(false)
     }
-  }, [invoiceLedger, filters.dateFrom, filters.dateTo])
+  }, [invoiceLedger, filters.dateFrom, filters.dateTo, bumpInvoiceListEpoch])
 
   useEffect(() => {
     void refreshFromApi()
@@ -493,6 +506,7 @@ export function useInvoiceDashboard() {
         const idSet = new Set(uniq)
         setInvoices((prev) => enrichDuplicateMetadata(prev.filter((r) => !idSet.has(r.id))))
         setSelectedId((cur) => (cur && idSet.has(cur) ? null : cur))
+        bumpInvoiceListEpoch()
         return true
       }
       const token = getStoredToken()
@@ -511,7 +525,7 @@ export function useInvoiceDashboard() {
         return false
       }
     },
-    [refreshFromApi],
+    [refreshFromApi, bumpInvoiceListEpoch],
   )
 
   const confirmDuplicate = useCallback(
@@ -581,6 +595,7 @@ export function useInvoiceDashboard() {
           return enrichDuplicateMetadata(next)
         })
         setSelectedId((cur) => (cur === id ? null : cur))
+        bumpInvoiceListEpoch()
         return
       }
       const token = getStoredToken()
@@ -593,7 +608,7 @@ export function useInvoiceDashboard() {
         window.alert(e instanceof Error ? e.message : String(e))
       }
     },
-    [refreshFromApi],
+    [refreshFromApi, bumpInvoiceListEpoch],
   )
 
   const adoptInvoiceVendor = useCallback(
@@ -658,6 +673,7 @@ export function useInvoiceDashboard() {
         const next = prev.filter((r) => r.duplicate_of_id === null)
         return enrichDuplicateMetadata(next)
       })
+      bumpInvoiceListEpoch()
       return
     }
     const token = getStoredToken()
@@ -672,7 +688,7 @@ export function useInvoiceDashboard() {
     } catch (e) {
       window.alert(e instanceof Error ? e.message : String(e))
     }
-  }, [invoices, refreshFromApi])
+  }, [invoices, refreshFromApi, bumpInvoiceListEpoch])
 
   const pickKpi = useCallback(
     (key: 'all' | 'unpaid' | 'paid' | 'dups' | 'review' | 'noCat' | 'unknownVendor') => {
@@ -763,6 +779,8 @@ export function useInvoiceDashboard() {
     dataSource,
     /** true = kategoria tylko lokalnie (tryb demo); w API zapisuje się jako reportCategory */
     categoryLocalOnly: USE_MOCK_INVOICES,
+    /** Zwiększa się po każdej synchronizacji listy faktur z API (i odpowiednikach w mocku). */
+    invoiceListEpoch,
     refreshFromApi,
     retryInvoiceExtraction,
     syncKsefInvoiceFromApi,
