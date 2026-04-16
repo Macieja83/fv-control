@@ -971,26 +971,6 @@ html[data-theme='dark'] .btn-icon-del { color: #f87171; }
 
 .detail-section--tight { padding-bottom: 0.5rem; margin-bottom: 0.65rem; }
 
-.detail-payment-panel {
-  padding: 0.75rem 0.85rem;
-  border-radius: var(--radius);
-  border: 1px solid var(--border);
-  background: var(--surface-1);
-}
-.detail-payment-panel > p.workspace-panel__muted:first-of-type {
-  margin-top: 0;
-}
-.detail-payment-panel .detail-dl { margin-top: 0.35rem; }
-
-.detail-qr-wrap {
-  display: inline-block;
-  padding: 12px;
-  background: #fff;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  margin-top: 0.5rem;
-}
-
 .detail-actions {
   display: flex;
   flex-direction: column;
@@ -1839,6 +1819,12 @@ html[data-theme='dark'] .upload-bar__status--error { color: #f87171; }
   font-family: ui-monospace, Menlo, Consolas, monospace;
   font-size: 0.8rem;
   white-space: nowrap;
+}
+
+.admin-tenant-table__cell-email {
+  max-width: 16rem;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .admin-tenant-table__col-actions {

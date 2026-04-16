@@ -379,6 +379,13 @@ export async function listTenantsForSuperAdmin(prisma: PrismaClient, limit = 200
     include: {
       _count: { select: { users: true, invoices: true } },
       subscriptions: { orderBy: { createdAt: "desc" }, take: 1 },
+      /** Pierwszy OWNER = konto utworzone przy rejestracji (email z formularza / Google). */
+      users: {
+        where: { role: "OWNER" },
+        orderBy: { createdAt: "asc" },
+        take: 1,
+        select: { email: true },
+      },
     },
   });
   return rows.map((t) => ({
@@ -387,6 +394,7 @@ export async function listTenantsForSuperAdmin(prisma: PrismaClient, limit = 200
     nip: t.nip,
     deletedAt: t.deletedAt,
     createdAt: t.createdAt,
+    registrationEmail: t.users[0]?.email ?? null,
     userCount: t._count.users,
     invoiceCount: t._count.invoices,
     subscription: (() => {

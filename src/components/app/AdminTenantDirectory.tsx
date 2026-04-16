@@ -120,9 +120,11 @@ export function AdminTenantDirectory(props: AdminTenantDirectoryProps) {
         const cust = t.subscription?.providerCustomerId ?? ''
         const sub = t.subscription?.providerSubscriptionId ?? ''
         const k = t.ksef?.effectiveKsefEnv ?? ''
+        const regEmail = (t.registrationEmail ?? '').toLowerCase()
         return (
           t.name.toLowerCase().includes(q) ||
           t.id.toLowerCase().includes(q) ||
+          regEmail.includes(q) ||
           nip.toLowerCase().includes(q) ||
           plan.toLowerCase().includes(q) ||
           st.toLowerCase().includes(q) ||
@@ -224,7 +226,7 @@ export function AdminTenantDirectory(props: AdminTenantDirectoryProps) {
             className="workspace-panel__search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Nazwa, NIP, plan, status, Stripe…"
+            placeholder="Nazwa, e-mail, NIP, plan, status, Stripe…"
             autoComplete="off"
           />
         </label>
@@ -272,6 +274,7 @@ export function AdminTenantDirectory(props: AdminTenantDirectoryProps) {
             <thead>
               <tr>
                 <th>Firma</th>
+                <th>E-mail rejestracji</th>
                 <th>NIP</th>
                 <th>Plan</th>
                 <th>PRO aktywne</th>
@@ -294,6 +297,9 @@ export function AdminTenantDirectory(props: AdminTenantDirectoryProps) {
                       <td className="admin-tenant-table__cell-name">
                         <strong>{t.name}</strong>
                         <div className="workspace-panel__muted admin-tenant-table__sub">Od {formatDate(t.createdAt)} · {t.userCount} użytk.</div>
+                      </td>
+                      <td className="admin-tenant-table__mono admin-tenant-table__cell-email">
+                        {t.registrationEmail?.trim() || '—'}
                       </td>
                       <td className="admin-tenant-table__mono">{t.nip?.trim() || '—'}</td>
                       <td>{planLabel(sub?.planCode)}</td>
@@ -332,7 +338,7 @@ export function AdminTenantDirectory(props: AdminTenantDirectoryProps) {
                     </tr>
                     {isOpen && (
                       <tr className="admin-tenant-table__detail">
-                        <td colSpan={8}>
+                        <td colSpan={9}>
                           <div className="admin-tenant-detail">
                             <div className="admin-tenant-detail__grid">
                               <dl className="admin-tenant-kv">

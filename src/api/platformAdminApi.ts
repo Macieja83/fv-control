@@ -2,6 +2,8 @@ export type PlatformTenantRow = {
   id: string
   name: string
   nip: string | null
+  /** E-mail pierwszego użytkownika OWNER (rejestracja). */
+  registrationEmail: string | null
   /** null = aktywny; data ISO gdy tenant oznaczony jako usunięty (soft delete). */
   deletedAt?: string | null
   createdAt: string

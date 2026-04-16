@@ -1,15 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { buildEpcSctQrPayload } from '../../lib/epcTransferQr'
 import type { InvoiceRecord } from '../../types/invoice'
 import { DuplicateBadge, PaymentBadge, ScopeBadge, SourceBadge } from './Badges'
 import { InvoiceDocumentPreview } from './InvoiceDocumentPreview'
-import { SafeQrCode } from './safeQrCode'
-import {
-  fetchInvoiceEvents,
-  fetchInvoicePispPaymentState,
-  type InvoiceEventRow,
-  type InvoicePispPaymentState,
-} from '../../api/invoicesApi'
+import { fetchInvoiceEvents, type InvoiceEventRow } from '../../api/invoicesApi'
 import { getStoredToken } from '../../auth/session'
 import { COST_CATEGORIES, REVENUE_CATEGORIES } from '../../data/categories'
 
@@ -36,9 +29,9 @@ type Props = {
   onNotes: (id: string, notes: string) => void
   onNeedsReview: (id: string) => void
   onClearReview: (id: string) => void
-  /** Ponowna kolejka OCR na istniejącym pliku (upload e-mail — nie KSeF). */
+  /** Ponowne przetworzenie pliku (upload e-mail itd.) — wywoływane z „Odśwież” przy źródle innym niż KSeF. */
   onRetryExtraction?: (id: string) => void | Promise<void>
-  /** Pobranie XML z MF + pipeline (faktury z importu KSeF). */
+  /** Pobranie FA XML z KSeF + pipeline — wywoływane z „Odśwież” dla faktur z KSeF. */
   onKsefSync?: (id: string) => void | Promise<void>
   /** Odświeżenie listy z API (np. gdy status INGESTING — bez nowej kolejki). */
   onRefreshList?: () => void | Promise<void>
@@ -73,17 +66,14 @@ export function DetailPanel({
   onAdoptVendor,
 }: Props) {
   const [draftNotes, setDraftNotes] = useState('')
-  const [ocrBusy, setOcrBusy] = useState(false)
   const [ksefBusy, setKsefBusy] = useState(false)
-  const [ksefPullBusy, setKsefPullBusy] = useState(false)
+  const [previewRefreshBusy, setPreviewRefreshBusy] = useState(false)
   const [docPreviewReloadKey, setDocPreviewReloadKey] = useState(0)
   const [adoptNip, setAdoptNip] = useState('')
   const [adoptName, setAdoptName] = useState('')
   const [adoptBusy, setAdoptBusy] = useState(false)
   const [paymentEvents, setPaymentEvents] = useState<InvoiceEventRow[]>([])
   const [paymentEventsLoading, setPaymentEventsLoading] = useState(false)
-  const [pispState, setPispState] = useState<InvoicePispPaymentState | null>(null)
-  const [pispLoading, setPispLoading] = useState(false)
   const overlayRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -102,25 +92,6 @@ export function DetailPanel({
   useEffect(() => {
     setDocPreviewReloadKey(0)
   }, [row?.id])
-
-  const epcQrPayload = useMemo(() => {
-    if (!row?.transfer?.transferBankAccount) return null
-    return buildEpcSctQrPayload({
-      beneficiaryName: row.transfer.transferRecipient?.trim() || 'Odbiorca',
-      accountRaw: row.transfer.transferBankAccount,
-      amount: row.transfer.transferAmount,
-      currency: row.transfer.transferCurrency,
-      remittance: row.transfer.transferTitle?.trim() || row.invoice_number,
-    })
-  }, [
-    row?.id,
-    row?.invoice_number,
-    row?.transfer?.transferBankAccount,
-    row?.transfer?.transferAmount,
-    row?.transfer?.transferCurrency,
-    row?.transfer?.transferRecipient,
-    row?.transfer?.transferTitle,
-  ])
 
   const categoryOptions = useMemo(() => {
     const base: string[] =
@@ -157,22 +128,21 @@ export function DetailPanel({
       .finally(() => setPaymentEventsLoading(false))
   }, [row?.id])
 
-  useEffect(() => {
-    if (!row || row.ledger_kind !== 'purchase' || row.payment_status === 'paid') {
-      setPispState(null)
-      return
+  const handlePreviewRefresh = useCallback(async () => {
+    if (!row) return
+    setPreviewRefreshBusy(true)
+    try {
+      if (row.source_type === 'ksef' && onKsefSync) {
+        await onKsefSync(row.id)
+      } else if (onRetryExtraction) {
+        await onRetryExtraction(row.id)
+      }
+      if (onRefreshList) await onRefreshList()
+      setDocPreviewReloadKey((n) => n + 1)
+    } finally {
+      setPreviewRefreshBusy(false)
     }
-    const token = getStoredToken()
-    if (!token) {
-      setPispState(null)
-      return
-    }
-    setPispLoading(true)
-    void fetchInvoicePispPaymentState(token, row.id)
-      .then(setPispState)
-      .catch(() => setPispState(null))
-      .finally(() => setPispLoading(false))
-  }, [row?.id, row?.ledger_kind, row?.payment_status])
+  }, [row, onKsefSync, onRetryExtraction, onRefreshList])
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -240,42 +210,27 @@ export function DetailPanel({
             <div className="modal-grid__left">
               <section className="detail-section">
                 <h3>Podgląd dokumentu</h3>
-                {row.source_type === 'ksef' && onKsefSync ? (
+                {(onKsefSync || onRetryExtraction || onRefreshList) && (
                   <div className="detail-ksef-toolbar">
                     <div className="detail-ksef-toolbar__row">
                       <button
                         type="button"
                         className="btn btn--primary btn--sm"
-                        disabled={ksefPullBusy}
-                        onClick={async () => {
-                          setKsefPullBusy(true)
-                          try {
-                            await onKsefSync(row.id)
-                            setDocPreviewReloadKey((n) => n + 1)
-                          } finally {
-                            setKsefPullBusy(false)
-                          }
-                        }}
+                        disabled={previewRefreshBusy}
+                        onClick={() => void handlePreviewRefresh()}
                       >
-                        {ksefPullBusy
-                          ? 'Pobieranie z KSeF…'
-                          : row.invoice_status === 'INGESTING'
-                            ? 'Ponów pobranie z KSeF'
-                            : 'Pobierz z KSeF i przetwórz'}
+                        {previewRefreshBusy
+                          ? 'Odświeżanie…'
+                          : 'Odśwież'}
                       </button>
-                      {onRefreshList ? (
-                        <button type="button" className="btn btn--ghost btn--sm" onClick={() => void onRefreshList()}>
-                          Odśwież dane
-                        </button>
-                      ) : null}
                     </div>
                     <p className="detail-ksef-toolbar__hint workspace-panel__muted">
-                      Pobiera aktualny plik FA XML z KSeF i kolejkuje ekstrakcję. Lista odświeża się automatycznie, gdy
-                      worker skończy pracę. Jeśli status utknie w „przetwarzanie”, użyj ponownie przycisku powyżej —
-                      serwer zwolni zawieszone zadanie i pobierze fakturę od nowa.
+                      {row.source_type === 'ksef'
+                        ? 'Pobiera aktualny plik z KSeF i kolejkuje przetwarzanie. Przy zaciętym statusie użyj ponownie — serwer może zwolnić zadanie i pobrać fakturę od nowa.'
+                        : 'Ponownie przetwarza plik z magazynu i odświeża listę oraz podgląd.'}
                     </p>
                   </div>
-                ) : null}
+                )}
                 <InvoiceDocumentPreview
                   key={row.id}
                   invoiceId={row.id}
@@ -426,99 +381,6 @@ export function DetailPanel({
                 </section>
               )}
 
-              {row.ledger_kind === 'purchase' && row.payment_status !== 'paid' && (
-                <section className="detail-section detail-payment-panel">
-                  <h3>Przelew do wystawcy</h3>
-                  <p className="workspace-panel__muted" style={{ margin: '0 0 0.75rem' }}>
-                    Środki idą <strong>bezpośrednio na konto kontrahenta</strong> z faktury. Możesz zeskanować{' '}
-                    <strong>kod QR (EPC)</strong> w aplikacji banku albo skopiować pola.{' '}
-                    <strong>PISP</strong> — po podłączeniu open banking; status na dole sekcji.
-                  </p>
-                  {row.transfer?.transferBankAccount ? (
-                    <dl className="detail-dl">
-                      <dt>Odbiorca</dt>
-                      <dd>{row.transfer.transferRecipient ?? '—'}</dd>
-                      <dt>Bank</dt>
-                      <dd>{row.transfer.transferBankName ?? '—'}</dd>
-                      <dt>Numer rachunku</dt>
-                      <dd className="mono wrap">
-                        {row.transfer.transferBankAccount}{' '}
-                        <button
-                          type="button"
-                          className="btn-ghost"
-                          onClick={() => void navigator.clipboard.writeText(row.transfer!.transferBankAccount!)}
-                        >
-                          Kopiuj
-                        </button>
-                      </dd>
-                      <dt>Tytuł</dt>
-                      <dd className="mono wrap">
-                        {row.transfer.transferTitle ?? '—'}{' '}
-                        {row.transfer.transferTitle ? (
-                          <button
-                            type="button"
-                            className="btn-ghost"
-                            onClick={() => void navigator.clipboard.writeText(row.transfer!.transferTitle!)}
-                          >
-                            Kopiuj
-                          </button>
-                        ) : null}
-                      </dd>
-                      <dt>Kwota</dt>
-                      <dd>
-                        {money(Number.parseFloat(row.transfer.transferAmount) || 0, row.currency)}{' '}
-                        <button
-                          type="button"
-                          className="btn-ghost"
-                          onClick={() =>
-                            void navigator.clipboard.writeText(
-                              `${row.transfer!.transferAmount} ${row.transfer!.transferCurrency}`,
-                            )
-                          }
-                        >
-                          Kopiuj
-                        </button>
-                      </dd>
-                    </dl>
-                  ) : null}
-                  {row.transfer?.transferBankAccount && epcQrPayload ? (
-                    <div>
-                      <p className="workspace-panel__muted" style={{ margin: '0.75rem 0 0.35rem' }}>
-                        <strong>Kod QR przelewu</strong> (EPC / SEPA) — PLN i EUR. Bez QR użyj pól powyżej.
-                      </p>
-                      <div className="detail-qr-wrap">
-                        <SafeQrCode value={epcQrPayload} size={200} level="M" />
-                      </div>
-                    </div>
-                  ) : row.transfer?.transferBankAccount && row.currency !== 'PLN' && row.currency !== 'EUR' ? (
-                    <p className="workspace-panel__muted" style={{ marginTop: '0.75rem' }} role="status">
-                      Kod QR EPC jest dla PLN i EUR — ta faktura jest w {row.currency}; użyj przelewu ręcznego.
-                    </p>
-                  ) : null}
-                  {row.transfer?.transferBankAccount &&
-                  !epcQrPayload &&
-                  (row.currency === 'PLN' || row.currency === 'EUR') ? (
-                    <p className="workspace-panel__muted" style={{ marginTop: '0.5rem' }} role="status">
-                      Nie udało się złożyć poprawnego IBAN — QR niedostępny. Wykonaj przelew ręcznie.
-                    </p>
-                  ) : null}
-                  {!row.transfer?.transferBankAccount ? (
-                    <p className="workspace-panel__muted" role="status">
-                      Brak numeru rachunku w danych faktury — sprawdź dokument lub ponów ekstrakcję (OCR).
-                    </p>
-                  ) : null}
-                  {pispLoading ? (
-                    <p className="workspace-panel__muted" style={{ marginTop: '0.75rem' }} role="status">
-                      Sprawdzanie statusu PISP…
-                    </p>
-                  ) : pispState ? (
-                    <p className="workspace-panel__muted" style={{ marginTop: '0.75rem' }} role="status">
-                      <strong>PISP:</strong> {pispState.message}
-                    </p>
-                  ) : null}
-                </section>
-              )}
-
               <div className="detail-actions">
                 <div className="detail-actions__group">
                   <span className="detail-actions__label">Płatność</span>
@@ -594,34 +456,6 @@ export function DetailPanel({
                     </p>
                   )}
                 </div>
-                {onRetryExtraction && row.source_type !== 'ksef' && (
-                  <div className="detail-actions__group">
-                    <span className="detail-actions__label">Plik źródłowy</span>
-                    <div className="detail-actions__row">
-                      <button
-                        type="button"
-                        className="btn btn--sm btn--warning"
-                        disabled={ocrBusy || row.invoice_status === 'INGESTING'}
-                        onClick={async () => {
-                          setOcrBusy(true)
-                          try {
-                            await onRetryExtraction(row.id)
-                          } finally {
-                            setOcrBusy(false)
-                          }
-                        }}
-                      >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-                        {' '}
-                        {ocrBusy
-                          ? 'Kolejkowanie…'
-                          : row.invoice_status === 'INGESTING'
-                            ? 'OCR…'
-                            : 'Ponów OCR'}
-                      </button>
-                    </div>
-                  </div>
-                )}
                 <div className="detail-actions__danger">
                   <button
                     type="button"

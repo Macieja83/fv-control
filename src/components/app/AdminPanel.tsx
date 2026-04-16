@@ -74,7 +74,7 @@ export function AdminPanel() {
         <div>
           <h2 className="workspace-panel__title">Admin — operator platformy</h2>
           <p className="workspace-panel__lead">
-            Lista firm: NIP, plan, czy PRO jest realnie aktywne, status subskrypcji i krótki stan konta. Przycisk „Konto” — wejście
+            Lista firm: e-mail rejestracji (właściciel), NIP, plan, czy PRO jest realnie aktywne, status subskrypcji i krótki stan konta. Przycisk „Konto” — wejście
             na workspace tenanta (impersonacja). W „Więcej” — UUID, Stripe, KSeF.
           </p>
         </div>

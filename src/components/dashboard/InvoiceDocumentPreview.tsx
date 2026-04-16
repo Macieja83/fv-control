@@ -230,8 +230,8 @@ export function InvoiceDocumentPreview({
       <div className="doc-preview doc-preview--error">
         <p role="alert">{message}</p>
         <p className="doc-preview__hint">
-          Przy fakturach z KSeF użyj przycisku „Pobierz z KSeF i przetwórz” nad podglądem. Tutaj możesz ponowić samo
-          pobranie pliku z serwera (np. po zakończeniu przetwarzania).
+          Użyj przycisku <strong>Odśwież</strong> nad podglądem — pobierze fakturę z KSeF lub ponownie przetworzy plik i
+          odświeży widok.
           {message.includes('Sesja wygasła') || message.includes('401')
             ? ' Błąd 401 oznacza wygasły token — wyloguj się i zaloguj ponownie.'
             : ''}
