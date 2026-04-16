@@ -45,13 +45,13 @@ function formatKsefPhase(phase: string | null): string {
 }
 
 function formatKsefTestResult(r: TenantKsefTestResult): string {
-  const src =
-    r.credentialSource === 'tenant' ? 'tenant (baza)' : r.credentialSource === 'global' ? 'serwer (.env)' : '—'
-  const scope = r.probe === 'draft' ? 'formularz (bez zapisu)' : 'zapis w bazie'
   if (r.ok) {
-    return `Połączenie OK — ${scope}, źródło: ${src}${r.accessValidUntil ? `; accessToken do: ${r.accessValidUntil}` : ''}.`
+    if (r.probe === 'draft') {
+      return 'Połączenie z KSeF działa — sprawdzono dane wpisane powyżej (jeszcze bez zapisu).'
+    }
+    return 'Połączenie z KSeF działa — użyto zapisanych poświadczeń.'
   }
-  return `Test KSeF nieudany (${scope}, źródło: ${src}): ${r.message ?? 'nieznany błąd'}`
+  return r.message ?? 'Nie udało się połączyć z KSeF. Sprawdź klucz, PIN i certyfikat.'
 }
 
 function fileToCertField(file: File): Promise<string> {
@@ -235,13 +235,9 @@ export function PaymentsPanel(props: { embedded?: boolean }) {
     try {
       const r = await postKsefSync(token, {})
       if (r.dedupeSkipped) {
-        setSyncMsg(
-          'Synchronizacja już jest w kolejce lub w toku — poczekaj na zakończenie i kliknij „Odśwież status”.',
-        )
+        setSyncMsg('Synchronizacja jest już w toku — poczekaj chwilę i odśwież status poniżej.')
       } else {
-        setSyncMsg(
-          `Zadanie zapisane w kolejce (job: ${String(r.jobId ?? '—')}). Pobranie może trwać kilka minut — potem odśwież status.`,
-        )
+        setSyncMsg('Wysłano żądanie pobrania faktur — może to potrwać kilka minut. Potem kliknij „Odśwież status”.')
       }
     } catch (e: unknown) {
       setSyncMsg(e instanceof Error ? e.message : String(e))
@@ -269,6 +265,18 @@ export function PaymentsPanel(props: { embedded?: boolean }) {
     }
   }
 
+  const onTestKsefSmart = async () => {
+    if (ksefToken.trim()) {
+      await onTestKsefDraft()
+      return
+    }
+    if (ksefMeta?.storedCredential) {
+      await onTestKsefSaved()
+      return
+    }
+    setKsefMsg('Wklej klucz z portalu KSeF albo najpierw zapisz poświadczenia — wtedy można sprawdzić połączenie.')
+  }
+
   const body = (
     <>
       {loading && <p className="workspace-panel__muted">Ładowanie…</p>}
@@ -289,138 +297,166 @@ export function PaymentsPanel(props: { embedded?: boolean }) {
           <section className="integration-card integration-card--ksef">
             <h3 className="workspace-panel__h3">KSeF</h3>
             <p className="workspace-panel__muted">
-              Jedna integracja: <strong>poświadczenia</strong> do API MF oraz <strong>import faktur</strong> (worker
-              okresowo pobiera metadane i XML). Wymaga działającego workera i Redis po stronie serwera.
+              Pobieranie faktur z Ministerstwa Finansów do tej aplikacji. Poniżej wklejasz dane z portalu KSeF — są one
+              przechowywane w sposób szyfrowany.
             </p>
 
             <div className="ksef-block">
-              <h4 className="ksef-block__title">Synchronizacja (import z API)</h4>
+              <h4 className="ksef-block__title">Synchronizacja</h4>
               <p className="workspace-panel__muted">
-                Stan ostatniego przebiegu i kolejki — możesz wymusić synchronizację ręcznie (gdy poświadczenia są zapisane).
+                Faktury są pobierane automatycznie oraz na żądanie — gdy poświadczenia są już zapisane.
               </p>
               {!ksefConnector?.configured && (
-                <p className="workspace-panel__muted">
-                  Najpierw zapisz poświadczenia w sekcji niżej — bez tego synchronizacja się nie uruchomi.
-                </p>
+                <p className="workspace-panel__muted">Najpierw uzupełnij i zapisz dane w sekcji niżej.</p>
               )}
               {ksefConnector && (
-                <dl className="detail-dl" style={{ marginBottom: 12 }}>
-                <dt>Znacznik przyrostu (HWM)</dt>
-                <dd className="mono" style={{ marginBottom: 8 }}>
-                  {ksefConnector.lastSyncHwmDate != null && ksefConnector.lastSyncHwmDate !== ''
-                    ? String(ksefConnector.lastSyncHwmDate)
-                    : '— (pierwszy sync pobierze od domyślnego okna)'}
-                </dd>
-                <dt>Ostatni przebieg sync</dt>
-                <dd style={{ marginBottom: 8 }}>
-                  {ksefConnector.lastSyncRunAt ?
-                    new Date(ksefConnector.lastSyncRunAt).toLocaleString('pl-PL')
-                  : '— (jeszcze nie było ukończonego joba)'}
-                  {ksefConnector.lastSyncPhase ?
-                    <>
-                      {' '}
-                      · faza: <strong>{formatKsefPhase(ksefConnector.lastSyncPhase)}</strong>
-                    </>
-                  : null}
-                  {ksefConnector.lastSyncOk != null ?
-                    <>
-                      {' '}
-                      ·{' '}
-                      <strong>{ksefConnector.lastSyncOk ? 'OK' : 'problem'}</strong>
-                    </>
-                  : null}
-                </dd>
-                {ksefConnector.lastSyncSkippedReason && (
-                  <>
-                    <dt>Powód pominięcia</dt>
-                    <dd style={{ marginBottom: 8 }}>{ksefConnector.lastSyncSkippedReason}</dd>
-                  </>
-                )}
-                {ksefConnector.lastSyncStats && (
-                  <>
-                    <dt>Statystyki ostatniego przebiegu</dt>
-                    <dd className="mono" style={{ marginBottom: 8 }}>
-                      pobrane metadane: {String(ksefConnector.lastSyncStats.fetched ?? '—')} · import:{' '}
-                      {String(ksefConnector.lastSyncStats.ingested ?? '—')} · pom. dupl.:{' '}
-                      {String(ksefConnector.lastSyncStats.skippedDuplicate ?? '—')} · pon. XML:{' '}
-                      {String(ksefConnector.lastSyncStats.refetched ?? '—')} · błędy:{' '}
-                      {String(ksefConnector.lastSyncStats.errorCount ?? '—')}
-                    </dd>
-                  </>
-                )}
-                {ksefConnector.lastSyncErrorPreview && (
-                  <>
-                    <dt>Fragment błędów</dt>
-                    <dd className="workspace-panel__err" style={{ marginBottom: 8, whiteSpace: 'pre-wrap' }}>
-                      {ksefConnector.lastSyncErrorPreview}
-                    </dd>
-                  </>
-                )}
-                <dt>Faktury z importu KSeF w bazie</dt>
-                <dd>{ksefConnector.invoiceCount}</dd>
-                <dt>Auto-sync (worker)</dt>
-                <dd>
-                  {ksefConnector.autoSyncIntervalMs > 0 ?
-                    `co ${Math.round(ksefConnector.autoSyncIntervalMs / 1000)} s`
-                  : 'wyłączone (KSEF_AUTO_SYNC_INTERVAL_MS=0)'}
-                </dd>
-                <dt>Kolejka (BullMQ / Redis)</dt>
-                <dd style={{ marginBottom: 8 }}>
-                  {ksefConnector.queue.redisAvailable ?
-                    <>
-                      Zadanie cykliczne: <span className="mono">{ksefConnector.queue.autoDedupeJobId || '—'}</span> —{' '}
-                      <strong>{formatBullMqState(ksefConnector.queue.autoJobState)}</strong>
-                      {ksefConnector.queue.pendingOrActiveOtherJobs > 0 ?
+                <>
+                  <div className="ksef-simple-status">
+                    <p>
+                      <strong>Ostatnia synchronizacja:</strong>{' '}
+                      {ksefConnector.lastSyncRunAt ?
+                        new Date(ksefConnector.lastSyncRunAt).toLocaleString('pl-PL')
+                      : 'jeszcze nie było'}
+                      {ksefConnector.lastSyncPhase ?
                         <>
                           {' '}
-                          · inne w kolejce / aktywne: <strong>{ksefConnector.queue.pendingOrActiveOtherJobs}</strong>
+                          ({formatKsefPhase(ksefConnector.lastSyncPhase)})
                         </>
                       : null}
-                    </>
-                  : 'API nie odczytało kolejki (np. brak Redis po stronie serwera aplikacji).'}
-                </dd>
-                <dt>Ostatni job worker</dt>
-                <dd className="mono" style={{ marginBottom: 8 }}>
-                  {ksefConnector.queue.lastJobId ?? '—'}
-                  {ksefConnector.queue.lastJobState ?
-                    <>
-                      {' '}
-                      · {ksefConnector.queue.lastJobState}
-                    </>
-                  : null}
-                  {ksefConnector.queue.lastJobFinishedAt ?
-                    <>
-                      {' '}
-                      · {new Date(ksefConnector.queue.lastJobFinishedAt).toLocaleString('pl-PL')}
-                    </>
-                  : null}
-                  {ksefConnector.queue.lastJobAttempts != null && ksefConnector.queue.lastJobMaxAttempts != null ?
-                    <>
-                      {' '}
-                      · próby {ksefConnector.queue.lastJobAttempts}/{ksefConnector.queue.lastJobMaxAttempts}
-                    </>
-                  : null}
-                </dd>
-                {ksefConnector.queue.lastJobError &&
-                  (ksefConnector.queue.lastJobState === 'failed' || ksefConnector.queue.lastJobState === 'retrying') && (
-                    <>
-                      <dt>Błąd joba (kolejka)</dt>
-                      <dd className="workspace-panel__err" style={{ marginBottom: 8, whiteSpace: 'pre-wrap' }}>
-                        {ksefConnector.queue.lastJobError}
-                        {ksefConnector.queue.lastJobFinalFailure === true ?
-                          ' — wyczerpano ponowienia (ostateczne niepowodzenie).'
-                        : ksefConnector.queue.lastJobState === 'retrying' ?
-                          ' — planowane ponowienie przez workera.'
+                      {ksefConnector.lastSyncOk != null ?
+                        <>
+                          {' '}
+                          — <strong>{ksefConnector.lastSyncOk ? 'ukończona poprawnie' : 'był problem'}</strong>
+                        </>
+                      : null}
+                    </p>
+                    <p>
+                      <strong>Faktury z KSeF w aplikacji:</strong> {ksefConnector.invoiceCount}
+                    </p>
+                    <p>
+                      <strong>Automatyczne pobieranie:</strong>{' '}
+                      {ksefConnector.autoSyncIntervalMs > 0 ?
+                        `co ok. ${Math.max(1, Math.round(ksefConnector.autoSyncIntervalMs / 60000))} min`
+                      : 'wyłączone'}
+                    </p>
+                    {!ksefConnector.queue.redisAvailable && (
+                      <p className="workspace-panel__err">
+                        Serwer nie może teraz obsłużyć kolejki synchronizacji — skontaktuj się z administratorem aplikacji.
+                      </p>
+                    )}
+                    {ksefConnector.lastSyncSkippedReason && (
+                      <p className="workspace-panel__muted">
+                        <strong>Uwaga:</strong> {ksefConnector.lastSyncSkippedReason}
+                      </p>
+                    )}
+                    {ksefConnector.lastSyncErrorPreview && (
+                      <p className="workspace-panel__err" style={{ whiteSpace: 'pre-wrap' }}>
+                        {ksefConnector.lastSyncErrorPreview}
+                      </p>
+                    )}
+                    {ksefConnector.queue.lastJobError &&
+                      (ksefConnector.queue.lastJobState === 'failed' || ksefConnector.queue.lastJobState === 'retrying') && (
+                        <p className="workspace-panel__err" style={{ whiteSpace: 'pre-wrap' }}>
+                          {ksefConnector.queue.lastJobError}
+                          {ksefConnector.queue.lastJobFinalFailure === true ?
+                            ' (wyczerpano ponowienia.)'
+                          : ksefConnector.queue.lastJobState === 'retrying' ?
+                            ' (planowane ponowienie.)'
+                          : null}
+                        </p>
+                      )}
+                  </div>
+
+                  <details className="ksef-tech-details">
+                    <summary>Szczegóły techniczne (opcjonalnie)</summary>
+                    <dl className="detail-dl ksef-tech-details__dl">
+                      <dt>Znacznik przyrostu (HWM)</dt>
+                      <dd className="mono" style={{ marginBottom: 8 }}>
+                        {ksefConnector.lastSyncHwmDate != null && ksefConnector.lastSyncHwmDate !== ''
+                          ? String(ksefConnector.lastSyncHwmDate)
+                          : '— (pierwszy sync pobierze od domyślnego okna)'}
+                      </dd>
+                      <dt>Ostatni przebieg sync</dt>
+                      <dd style={{ marginBottom: 8 }}>
+                        {ksefConnector.lastSyncRunAt ?
+                          new Date(ksefConnector.lastSyncRunAt).toLocaleString('pl-PL')
+                        : '—'}
+                        {ksefConnector.lastSyncPhase ?
+                          <>
+                            {' '}
+                            · faza: <strong>{formatKsefPhase(ksefConnector.lastSyncPhase)}</strong>
+                          </>
+                        : null}
+                        {ksefConnector.lastSyncOk != null ?
+                          <>
+                            {' '}
+                            · <strong>{ksefConnector.lastSyncOk ? 'OK' : 'problem'}</strong>
+                          </>
                         : null}
                       </dd>
-                    </>
-                  )}
-                </dl>
+                      {ksefConnector.lastSyncStats && (
+                        <>
+                          <dt>Statystyki ostatniego przebiegu</dt>
+                          <dd className="mono" style={{ marginBottom: 8 }}>
+                            metadane: {String(ksefConnector.lastSyncStats.fetched ?? '—')} · import:{' '}
+                            {String(ksefConnector.lastSyncStats.ingested ?? '—')} · dupl.:{' '}
+                            {String(ksefConnector.lastSyncStats.skippedDuplicate ?? '—')} · XML:{' '}
+                            {String(ksefConnector.lastSyncStats.refetched ?? '—')} · błędy:{' '}
+                            {String(ksefConnector.lastSyncStats.errorCount ?? '—')}
+                          </dd>
+                        </>
+                      )}
+                      <dt>Auto-sync (interwał serwera)</dt>
+                      <dd>
+                        {ksefConnector.autoSyncIntervalMs > 0 ?
+                          `${Math.round(ksefConnector.autoSyncIntervalMs / 1000)} s`
+                        : '0 (wyłączone)'}
+                      </dd>
+                      <dt>Kolejka</dt>
+                      <dd style={{ marginBottom: 8 }}>
+                        {ksefConnector.queue.redisAvailable ?
+                          <>
+                            Zadanie: <span className="mono">{ksefConnector.queue.autoDedupeJobId || '—'}</span> —{' '}
+                            <strong>{formatBullMqState(ksefConnector.queue.autoJobState)}</strong>
+                            {ksefConnector.queue.pendingOrActiveOtherJobs > 0 ?
+                              <>
+                                {' '}
+                                · inne aktywne: <strong>{ksefConnector.queue.pendingOrActiveOtherJobs}</strong>
+                              </>
+                            : null}
+                          </>
+                        : 'brak odczytu kolejki'}
+                      </dd>
+                      <dt>Ostatni job</dt>
+                      <dd className="mono" style={{ marginBottom: 8 }}>
+                        {ksefConnector.queue.lastJobId ?? '—'}
+                        {ksefConnector.queue.lastJobState ?
+                          <>
+                            {' '}
+                            · {ksefConnector.queue.lastJobState}
+                          </>
+                        : null}
+                        {ksefConnector.queue.lastJobFinishedAt ?
+                          <>
+                            {' '}
+                            · {new Date(ksefConnector.queue.lastJobFinishedAt).toLocaleString('pl-PL')}
+                          </>
+                        : null}
+                        {ksefConnector.queue.lastJobAttempts != null && ksefConnector.queue.lastJobMaxAttempts != null ?
+                          <>
+                            {' '}
+                            · próby {ksefConnector.queue.lastJobAttempts}/{ksefConnector.queue.lastJobMaxAttempts}
+                          </>
+                        : null}
+                      </dd>
+                    </dl>
+                  </details>
+                </>
               )}
               {syncMsg && (
                 <p
                   className={
-                    syncMsg.startsWith('Zadanie zapisane') || syncMsg.includes('już jest w kolejce')
+                    syncMsg.includes('Wysłano') || syncMsg.includes('w toku') || syncMsg.includes('kolejce')
                       ? 'workspace-panel__ok'
                       : 'workspace-panel__err'
                   }
@@ -435,7 +471,7 @@ export function PaymentsPanel(props: { embedded?: boolean }) {
                   disabled={syncRunBusy || syncRefreshing || !ksefConnector?.configured || ksefConnector?.environment === 'mock'}
                   onClick={() => void onRunKsefSync()}
                 >
-                  {syncRunBusy ? 'Kolejkowanie…' : 'Synchronizuj teraz'}
+                  {syncRunBusy ? 'Wysyłanie…' : 'Pobierz faktury teraz'}
                 </button>
                 <button type="button" className="btn-ghost" disabled={syncRefreshing || syncRunBusy} onClick={() => void onRefreshKsefSync()}>
                   {syncRefreshing ? 'Odświeżanie…' : 'Odśwież status'}
@@ -444,36 +480,21 @@ export function PaymentsPanel(props: { embedded?: boolean }) {
             </div>
 
             <div className="ksef-block ksef-block--credentials">
-              <h4 className="ksef-block__title">Poświadczenia tej firmy</h4>
+              <h4 className="ksef-block__title">Dane logowania do KSeF</h4>
               <p className="workspace-panel__muted">
-                Dane z portalu MF (token lub zaszyfrowany klucz + PIN) oraz opcjonalnie certyfikat X.509 są zapisywane
-                szyfrowane w bazie i używane wyłącznie dla tego konta. Aktywne API:{' '}
-                <strong>{ksefMeta?.environment ?? '—'}</strong>
-                {ksefMeta ?
-                  <>
-                    {' '}
-                    (serwer: <span className="mono">{ksefMeta.serverEnvironment}</span>
-                    {ksefMeta.ksefEnvOverride ?
-                      <>
-                        {' '}
-                        · nadpisanie: <strong>{ksefMeta.ksefEnvOverride}</strong>
-                      </>
-                    : null}
-                    ).
-                  </>
-                : null}
+                Skopiuj z portalu Ministerstwa Finansów. Opcjonalnie dołącz certyfikat, jeśli logujesz się w ten sposób.
               </p>
               {ksefMeta && (
                 <label className="settings-form" style={{ marginBottom: 12 }}>
-                  <span>Środowisko API KSeF dla tej firmy</span>
+                  <span>Środowisko</span>
                   <select
                     disabled={ksefEnvSaving}
                     value={ksefMeta.ksefEnvOverride ?? ''}
                     onChange={(e) => void onKsefEnvSelect(e.target.value)}
                   >
-                    <option value="">Domyślnie (jak KSEF_ENV na serwerze: {ksefMeta.serverEnvironment})</option>
-                    <option value="sandbox">Wymuszaj sandbox (testowe API MF)</option>
-                    <option value="production">Wymuszaj produkcję</option>
+                    <option value="">Jak ustawione na serwerze ({ksefMeta.serverEnvironment})</option>
+                    <option value="sandbox">Tryb testowy (sandbox)</option>
+                    <option value="production">Produkcja</option>
                   </select>
                 </label>
               )}
@@ -485,14 +506,13 @@ export function PaymentsPanel(props: { embedded?: boolean }) {
               )}
               {ksefMeta?.storedCredential && (
                 <p className="workspace-panel__muted">
-                  Zapisana konfiguracja: <strong>tak</strong>
-                  {ksefMeta.authMode ? (
+                  <strong>Status:</strong> poświadczenia zapisane w aplikacji.
+                  {ksefMeta.authMode ?
                     <>
                       {' '}
-                      · tryb: <strong>{ksefMeta.authMode}</strong>
+                      Tryb: <strong>{ksefMeta.authMode}</strong>.
                     </>
-                  ) : null}
-                  .
+                  : null}
                 </p>
               )}
               {ksefMsg && (
@@ -500,7 +520,7 @@ export function PaymentsPanel(props: { embedded?: boolean }) {
                   className={
                     ksefMsg.startsWith('Zapisano') ||
                     ksefMsg.startsWith('Usunięto') ||
-                    ksefMsg.startsWith('Połączenie OK')
+                    ksefMsg.startsWith('Połączenie z KSeF działa')
                       ? 'workspace-panel__ok'
                       : 'workspace-panel__err'
                   }
@@ -509,18 +529,18 @@ export function PaymentsPanel(props: { embedded?: boolean }) {
                 </p>
               )}
               <label className="settings-form">
-                <span>Token / zaszyfrowany klucz (z portalu KSeF lub PEM)</span>
+                <span>Klucz lub token z portalu KSeF</span>
                 <textarea
                   className="settings-form__textarea"
-                  rows={6}
+                  rows={5}
                   value={ksefToken}
                   onChange={(e) => setKsefToken(e.target.value)}
-                  placeholder="Wklej zaszyfrowany ciąg Base64 z MF, PEM klucza lub surowy token (gdy bez PIN)…"
+                  placeholder="Wklej tutaj dane skopiowane z portalu…"
                   autoComplete="off"
                 />
               </label>
               <label className="settings-form">
-                <span>Hasło / PIN do odszyfrowania (puste, jeśli token jest już jawny)</span>
+                <span>PIN lub hasło (jeśli portal tego wymaga)</span>
                 <input
                   type="password"
                   value={ksefPin}
@@ -529,46 +549,45 @@ export function PaymentsPanel(props: { embedded?: boolean }) {
                 />
               </label>
               <label className="settings-form">
-                <span>Certyfikat (opcjonalnie) — wklej PEM lub wybierz plik .pem / .crt</span>
-                <textarea
-                  className="settings-form__textarea"
-                  rows={4}
-                  value={ksefCertText}
-                  onChange={(e) => setKsefCertText(e.target.value)}
-                  placeholder="-----BEGIN CERTIFICATE----- … (tylko przy uwierzytelnianiu certyfikatem)"
-                />
-              </label>
-              <label className="settings-form">
-                <span>Plik certyfikatu</span>
+                <span>Plik certyfikatu (jeśli używasz certyfikatu)</span>
                 <input
                   type="file"
                   accept=".pem,.crt,.cer"
                   onChange={(e) => void onCertFile(e.target.files?.[0] ?? null)}
                 />
               </label>
-              <p className="workspace-panel__muted" style={{ marginTop: '0.5rem' }}>
-                <strong>Test połączenia</strong> wykonuje pełne logowanie do API MF (bez zapisu faktur). „Formularz” używa
-                pól powyżej — możesz sprawdzić dane przed zapisem.
-              </p>
+              <details className="ksef-cert-paste">
+                <summary>Wklej certyfikat zamiast pliku</summary>
+                <label className="settings-form">
+                  <span className="workspace-panel__muted">Treść certyfikatu (PEM)</span>
+                  <textarea
+                    className="settings-form__textarea"
+                    rows={4}
+                    value={ksefCertText}
+                    onChange={(e) => setKsefCertText(e.target.value)}
+                    placeholder="-----BEGIN CERTIFICATE----- …"
+                  />
+                </label>
+              </details>
               <div className="settings-form__actions">
-                <button type="button" className="btn-ghost" disabled={testBusy || ksefSaving} onClick={() => void onTestKsefSaved()}>
-                  {testBusy ? 'Test…' : 'Testuj zapisane'}
-                </button>
                 <button
                   type="button"
-                  className="btn-ghost"
-                  disabled={testBusy || ksefSaving || !ksefToken.trim()}
-                  onClick={() => void onTestKsefDraft()}
+                  className="btn-primary"
+                  disabled={testBusy || ksefSaving || (!ksefToken.trim() && !ksefMeta?.storedCredential)}
+                  onClick={() => void onTestKsefSmart()}
                 >
-                  {testBusy ? 'Test…' : 'Testuj formularz (bez zapisu)'}
+                  {testBusy ? 'Sprawdzanie…' : 'Sprawdź połączenie'}
                 </button>
               </div>
+              <p className="workspace-panel__muted ksef-test-hint">
+                Sprawdza wpisane powyżej dane; gdy pole klucza jest puste — używa ostatnio zapisanych poświadczeń.
+              </p>
               <div className="settings-form__actions">
                 <button type="button" className="btn-primary" disabled={ksefSaving || testBusy || !ksefToken.trim()} onClick={() => void onSaveKsef()}>
-                  {ksefSaving ? 'Zapis…' : 'Zapisz KSeF'}
+                  {ksefSaving ? 'Zapis…' : 'Zapisz'}
                 </button>
                 <button type="button" className="btn-ghost" disabled={ksefSaving || testBusy || !ksefMeta?.storedCredential} onClick={() => void onRemoveKsef()}>
-                  Usuń poświadczenia KSeF
+                  Usuń zapisane dane
                 </button>
               </div>
             </div>

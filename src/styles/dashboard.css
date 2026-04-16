@@ -1759,6 +1759,67 @@ html[data-theme='dark'] .upload-bar__status--error { color: #f87171; }
   border-top: 1px solid var(--border-light);
 }
 
+.ksef-simple-status {
+  margin: 0.75rem 0 1rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: var(--radius-xs);
+  background: color-mix(in srgb, var(--surface-2) 88%, transparent);
+  border: 1px solid var(--border-light);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.ksef-simple-status p {
+  margin: 0 0 0.45rem;
+}
+
+.ksef-simple-status p:last-child {
+  margin-bottom: 0;
+}
+
+.ksef-tech-details {
+  margin: 0.5rem 0 0.75rem;
+  font-size: 0.85rem;
+}
+
+.ksef-tech-details summary {
+  cursor: pointer;
+  color: var(--text-muted);
+  user-select: none;
+}
+
+.ksef-tech-details summary:hover {
+  color: var(--text);
+}
+
+.ksef-tech-details__dl {
+  margin-top: 0.65rem;
+}
+
+.ksef-cert-paste {
+  margin: 0.35rem 0 0.75rem;
+  font-size: 0.88rem;
+}
+
+.ksef-cert-paste summary {
+  cursor: pointer;
+  color: var(--text-muted);
+  user-select: none;
+}
+
+.ksef-cert-paste summary:hover {
+  color: var(--text);
+}
+
+.ksef-cert-paste .settings-form {
+  margin-top: 0.5rem;
+}
+
+.ksef-test-hint {
+  margin: -0.25rem 0 0.85rem;
+  font-size: 0.82rem;
+}
+
 .bank-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
