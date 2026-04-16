@@ -72,6 +72,10 @@ html[data-theme='dark'] .app-shell {
 
 .app-banner { padding: 0.55rem 1rem; font-size: 13px; border-bottom: 1px solid var(--border); }
 .app-banner--error { background: color-mix(in srgb, var(--danger) 10%, var(--surface-1)); }
+.app-banner--warn {
+  background: color-mix(in srgb, #ca8a04 14%, var(--surface-1));
+  margin-bottom: 0.75rem;
+}
 .app-banner--impersonation {
   display: flex;
   flex-wrap: wrap;
@@ -2447,5 +2451,81 @@ html[data-theme='dark'] .report-chart__track {
   color: var(--text-heading);
   text-align: right;
   white-space: nowrap;
+}
+
+/* Plan tiles (Ustawienia → PRO / Free) */
+.settings-plan-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1rem;
+  margin-top: 0.5rem;
+}
+.settings-plan-tile {
+  border: 1px solid var(--border-subtle, #e5e7eb);
+  border-radius: 12px;
+  padding: 1rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-height: 220px;
+}
+html[data-theme='dark'] .settings-plan-tile {
+  border-color: color-mix(in srgb, var(--border-subtle, #374151) 90%, transparent);
+}
+.settings-plan-tile--current {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border-subtle, #e5e7eb));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+.settings-plan-tile--pro.settings-plan-tile--current {
+  border-color: color-mix(in srgb, var(--accent) 70%, #94a3b8);
+}
+.settings-plan-tile__title {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-heading);
+}
+.settings-plan-tile__price {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--text-heading);
+}
+.settings-plan-tile__list {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  flex: 1;
+}
+.settings-plan-tile__sub {
+  margin: 0;
+  font-size: 0.85rem;
+}
+.settings-plan-tile__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.settings-plan-tile__btn {
+  width: 100%;
+  justify-content: center;
+}
+.settings-plan-tile__btn--blik {
+  background: linear-gradient(135deg, #e11d48, #be123c);
+  border: none;
+  color: #fff;
+}
+.settings-plan-tile__btn--blik:hover {
+  filter: brightness(1.05);
+}
+.settings-plan-tile__cta {
+  margin-top: auto;
+  align-self: flex-start;
+}
+.settings-plan-tile__hint,
+.settings-plan-tile__portal {
+  margin-top: auto;
+  font-size: 0.85rem;
 }
 

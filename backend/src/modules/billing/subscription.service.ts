@@ -1,8 +1,9 @@
 import type { PrismaClient } from "@prisma/client";
 import { loadConfig } from "../../config.js";
 import { AppError } from "../../lib/errors.js";
+import { PRO_PLAN_PRICE_PLN, PRO_PREPAID_PERIOD_DAYS } from "./billing-constants.js";
 
-/** PRO w Stripe: produkt / cena **99 PLN / mies.** (`STRIPE_PRICE_ID_PRO` w Dashboard). */
+/** PRO w Stripe: cena miesięczna z `STRIPE_PRICE_ID_PRO` w Dashboard (np. 59 PLN / mies.). */
 
 type CheckoutProvider = "STRIPE" | "P24";
 type CheckoutPaymentMethod = "CARD" | "BLIK" | "GOOGLE_PAY" | "APPLE_PAY";
@@ -24,6 +25,55 @@ export async function getCurrentSubscription(prisma: PrismaClient, tenantId: str
   return row;
 }
 
+async function createStripePrepaidBlikSession(
+  prisma: PrismaClient,
+  tenantId: string,
+  input: { successUrl: string; cancelUrl: string },
+) {
+  const cfg = loadConfig();
+  if (!cfg.STRIPE_SECRET_KEY) throw AppError.unavailable("Missing STRIPE_SECRET_KEY");
+
+  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+  if (!tenant) throw AppError.notFound("Tenant not found");
+
+  const current = await prisma.subscription.findFirst({
+    where: { tenantId },
+    orderBy: { createdAt: "desc" },
+  });
+
+  const unitAmount = PRO_PLAN_PRICE_PLN * 100;
+  const params = new URLSearchParams({
+    mode: "payment",
+    locale: "pl",
+    success_url: input.successUrl,
+    cancel_url: input.cancelUrl,
+    "metadata[tenantId]": tenantId,
+    "metadata[purpose]": "pro_prepaid_month",
+    "line_items[0][quantity]": "1",
+    "line_items[0][price_data][currency]": "pln",
+    "line_items[0][price_data][unit_amount]": String(unitAmount),
+    "line_items[0][price_data][product_data][name]": `FV Control PRO (${PRO_PREPAID_PERIOD_DAYS} dni)`,
+  });
+  params.append("payment_method_types[]", "blik");
+  if (current?.providerCustomerId) params.set("customer", current.providerCustomerId);
+  if (tenant.nip) params.set("customer_email", `${tenantId.slice(0, 8)}+${tenant.nip}@example.invalid`);
+
+  const res = await fetch("https://api.stripe.com/v1/checkout/sessions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${cfg.STRIPE_SECRET_KEY}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: params.toString(),
+  });
+  const body = (await res.json()) as { id?: string; url?: string; customer?: string; error?: { message?: string } };
+  if (!res.ok || !body.id || !body.url) {
+    throw AppError.unavailable(body.error?.message ?? "Stripe BLIK checkout session failed");
+  }
+
+  return { checkoutUrl: body.url, sessionId: body.id };
+}
+
 export async function createCheckoutSession(
   prisma: PrismaClient,
   tenantId: string,
@@ -41,11 +91,12 @@ export async function createCheckoutSession(
   if (input.provider === "P24") {
     throw AppError.unavailable("P24 checkout session endpoint is not configured yet");
   }
-  // Stripe: BLIK nie jest obsługiwany w Checkout w trybie subscription (tylko one-time payment).
+
   if (input.paymentMethod === "BLIK") {
-    throw AppError.validation(
-      "BLIK nie jest dostępny dla subskrypcji w Stripe — wybierz kartę / Google Pay / Apple Pay albo skonfiguruj inną bramkę.",
-    );
+    return createStripePrepaidBlikSession(prisma, tenantId, {
+      successUrl: input.successUrl,
+      cancelUrl: input.cancelUrl,
+    });
   }
 
   const cfg = loadConfig();
@@ -71,7 +122,6 @@ export async function createCheckoutSession(
     "subscription_data[metadata][tenantId]": tenantId,
     "client_reference_id": tenantId,
   });
-  // Stripe Checkout renders Google Pay / Apple Pay in the card wallet sheet when eligible.
   params.append("payment_method_types[]", "card");
   if (current?.providerCustomerId) params.set("customer", current.providerCustomerId);
   if (tenant.nip) params.set("customer_email", `${tenantId.slice(0, 8)}+${tenant.nip}@example.invalid`);
@@ -96,6 +146,7 @@ export async function createCheckoutSession(
         provider: "STRIPE",
         planCode: input.planCode,
         status: current.status,
+        billingKind: "STRIPE_RECURRING",
         providerCustomerId: typeof body.customer === "string" ? body.customer : current.providerCustomerId,
       },
     });
@@ -106,6 +157,7 @@ export async function createCheckoutSession(
         provider: "STRIPE",
         planCode: input.planCode,
         status: "TRIALING",
+        billingKind: "STRIPE_RECURRING",
         providerCustomerId: typeof body.customer === "string" ? body.customer : null,
         currentPeriodStart: new Date(),
       },
@@ -128,8 +180,11 @@ export async function switchToFreePlan(prisma: PrismaClient, tenantId: string) {
         provider: "MANUAL",
         planCode: "free",
         status: "ACTIVE",
+        billingKind: null,
         trialEndsAt: null,
         currentPeriodStart: new Date(),
+        currentPeriodEnd: null,
+        providerSubscriptionId: null,
       },
     });
   }
@@ -160,6 +215,11 @@ export async function createBillingPortalSession(
   });
   if (!current?.providerCustomerId) {
     throw AppError.validation("No Stripe customer assigned for this tenant yet");
+  }
+  if (current.billingKind === "STRIPE_PREPAID_BLIK") {
+    throw AppError.validation(
+      "Portal Stripe dotyczy subskrypcji z kartą. Przy PRO na BLIK przedłuż dostęp przyciskiem „Zapłać BLIKiem”.",
+    );
   }
 
   const params = new URLSearchParams({

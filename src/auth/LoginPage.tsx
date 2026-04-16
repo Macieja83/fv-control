@@ -140,7 +140,7 @@ export default function LoginPage({ initialMode = 'login' }: LoginPageProps) {
                 <span className="login-field__label">Plan</span>
                 <select className="login-input" value={planCode} onChange={(e) => setPlanCode(e.target.value as 'free' | 'pro')} disabled={loading}>
                   <option value="free">Free - do 15 faktur / miesiąc</option>
-                  <option value="pro">Pro - bez limitu, 99 zł / miesiąc</option>
+                  <option value="pro">Pro - bez limitu, 59 zł / miesiąc</option>
                 </select>
               </label>
             </>

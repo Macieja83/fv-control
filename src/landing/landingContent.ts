@@ -115,7 +115,7 @@ export const planTiers: LandingPlanTier[] = [
   },
   {
     name: 'PRO',
-    priceLabel: '99 zł / mies.',
+    priceLabel: '59 zł / mies.',
     highlighted: true,
     bullets: [
       'Bez limitu dokumentów (faktury + umowy)',

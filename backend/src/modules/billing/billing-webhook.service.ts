@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import type { PrismaClient, SubscriptionStatus } from "@prisma/client";
 import { AppError } from "../../lib/errors.js";
+import { PRO_PREPAID_PERIOD_DAYS } from "./billing-constants.js";
 
 const inMemoryWebhookDedup = new Set<string>();
 let canUseBillingWebhookTable: boolean | null = null;
@@ -76,11 +77,15 @@ async function claimWebhookEvent(
 }
 
 export async function handleStripeWebhookEvent(prisma: PrismaClient, payload: Record<string, unknown>, eventId: string) {
+  const eventType = typeof payload.type === "string" ? payload.type : "unknown";
+  if (eventType === "checkout.session.completed") {
+    return handleStripeCheckoutSessionCompleted(prisma, payload, eventId);
+  }
+
   const claimed = await claimWebhookEvent(prisma, "STRIPE", eventId, payload);
   if (!claimed) {
     return { accepted: true, duplicated: true as const, updated: false };
   }
-  const eventType = typeof payload.type === "string" ? payload.type : "unknown";
   const dataObj =
     payload.data && typeof payload.data === "object"
       ? ((payload.data as { object?: unknown }).object as Record<string, unknown> | undefined)
@@ -155,6 +160,90 @@ export async function handleStripeWebhookEvent(prisma: PrismaClient, payload: Re
   });
 
   return { accepted: true, eventType, updated: true };
+}
+
+/** Jednorazowa płatność BLIK (Checkout mode=payment) — przedłużenie PRO o PRO_PREPAID_PERIOD_DAYS dni. */
+export async function handleStripeCheckoutSessionCompleted(
+  prisma: PrismaClient,
+  payload: Record<string, unknown>,
+  eventId: string,
+) {
+  const claimed = await claimWebhookEvent(prisma, "STRIPE", eventId, payload);
+  if (!claimed) {
+    return { accepted: true, duplicated: true as const, updated: false };
+  }
+
+  const session =
+    payload.data && typeof payload.data === "object"
+      ? ((payload.data as { object?: unknown }).object as Record<string, unknown> | undefined)
+      : undefined;
+  if (!session) {
+    return { accepted: true, eventType: "checkout.session.completed", updated: false, reason: "missing_session" as const };
+  }
+
+  const mode = session.mode;
+  const paymentStatus = session.payment_status;
+  const meta =
+    session.metadata && typeof session.metadata === "object" ? (session.metadata as Record<string, unknown>) : null;
+  const tenantId = meta && typeof meta.tenantId === "string" ? meta.tenantId.trim() : "";
+  const purpose = meta && typeof meta.purpose === "string" ? meta.purpose.trim() : "";
+
+  if (mode !== "payment" || paymentStatus !== "paid" || purpose !== "pro_prepaid_month" || !tenantId) {
+    return {
+      accepted: true,
+      eventType: "checkout.session.completed",
+      updated: false,
+      reason: "not_pro_prepaid" as const,
+    };
+  }
+
+  const customerId = typeof session.customer === "string" && session.customer ? session.customer : null;
+
+  const existing = await prisma.subscription.findFirst({
+    where: { tenantId },
+    orderBy: { createdAt: "desc" },
+  });
+
+  const now = new Date();
+  const base =
+    existing?.currentPeriodEnd && existing.currentPeriodEnd.getTime() > now.getTime()
+      ? existing.currentPeriodEnd
+      : now;
+  const newEnd = new Date(base.getTime());
+  newEnd.setUTCDate(newEnd.getUTCDate() + PRO_PREPAID_PERIOD_DAYS);
+
+  if (existing) {
+    await prisma.subscription.update({
+      where: { id: existing.id },
+      data: {
+        planCode: "pro",
+        status: "ACTIVE",
+        provider: "STRIPE",
+        billingKind: "STRIPE_PREPAID_BLIK",
+        currentPeriodStart: now,
+        currentPeriodEnd: newEnd,
+        providerSubscriptionId: null,
+        trialEndsAt: null,
+        ...(customerId ? { providerCustomerId: customerId } : {}),
+      },
+    });
+  } else {
+    await prisma.subscription.create({
+      data: {
+        tenantId,
+        planCode: "pro",
+        status: "ACTIVE",
+        provider: "STRIPE",
+        billingKind: "STRIPE_PREPAID_BLIK",
+        currentPeriodStart: now,
+        currentPeriodEnd: newEnd,
+        providerCustomerId: customerId,
+        providerSubscriptionId: null,
+      },
+    });
+  }
+
+  return { accepted: true, eventType: "checkout.session.completed", updated: true };
 }
 
 function mapP24Status(raw: unknown): SubscriptionStatus | null {

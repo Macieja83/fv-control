@@ -17,7 +17,7 @@ const checkoutSchema = z.object({
   planCode: z.enum(["free", "pro"]),
   successUrl: z.string().url(),
   cancelUrl: z.string().url(),
-  paymentMethod: z.enum(["CARD", "GOOGLE_PAY", "APPLE_PAY"]).optional(),
+  paymentMethod: z.enum(["CARD", "BLIK", "GOOGLE_PAY", "APPLE_PAY"]).optional(),
 });
 
 const portalSchema = z.object({
@@ -60,7 +60,26 @@ const billingRoutes: FastifyPluginAsync = async (app) => {
       const tenantId = request.authUser!.tenantId;
       const row = await getCurrentSubscription(app.prisma, tenantId);
       const workspace = await getWorkspaceUsage(app.prisma, tenantId);
-      return { data: { subscription: row, workspace } };
+      let prepaid: {
+        prepaidBilling: boolean;
+        prepaidEndsAt: string;
+        prepaidDaysRemaining: number;
+        prepaidRenewSoon: boolean;
+        prepaidExpired: boolean;
+      } | null = null;
+      if (row?.billingKind === "STRIPE_PREPAID_BLIK" && row.currentPeriodEnd) {
+        const end = row.currentPeriodEnd.getTime();
+        const msLeft = end - Date.now();
+        const daysLeft = Math.max(0, Math.ceil(msLeft / 86_400_000));
+        prepaid = {
+          prepaidBilling: true,
+          prepaidEndsAt: row.currentPeriodEnd.toISOString(),
+          prepaidDaysRemaining: daysLeft,
+          prepaidRenewSoon: msLeft > 0 && msLeft <= 7 * 86_400_000,
+          prepaidExpired: msLeft <= 0,
+        };
+      }
+      return { data: { subscription: row, workspace, prepaid } };
     },
   );
 

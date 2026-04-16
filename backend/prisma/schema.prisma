@@ -231,6 +231,12 @@ enum SubscriptionProvider {
   STRIPE
 }
 
+/** null = legacy (infer recurring if providerSubscriptionId set) */
+enum SubscriptionBillingKind {
+  STRIPE_RECURRING
+  STRIPE_PREPAID_BLIK
+}
+
 enum BillingWebhookProvider {
   STRIPE
   P24
@@ -348,6 +354,8 @@ model Subscription {
   status              SubscriptionStatus
   provider            SubscriptionProvider @default(MANUAL)
   planCode            String               @default("starter")
+  /** null = legacy; PREPAID_BLIK = jednorazowe płatności BLIK, okres w currentPeriodEnd */
+  billingKind         SubscriptionBillingKind?
   providerCustomerId  String?
   providerSubscriptionId String?
   currentPeriodStart  DateTime?

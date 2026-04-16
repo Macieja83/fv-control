@@ -3,8 +3,17 @@ export type SubscriptionRow = {
   status: string
   provider: string
   planCode: string
+  billingKind?: string | null
   currentPeriodEnd?: string | null
   trialEndsAt?: string | null
+}
+
+export type PrepaidInfo = {
+  prepaidBilling: boolean
+  prepaidEndsAt: string
+  prepaidDaysRemaining: number
+  prepaidRenewSoon: boolean
+  prepaidExpired: boolean
 }
 
 export type WorkspaceUsage = {
@@ -36,10 +45,15 @@ export async function fetchBillingStripePublic(token: string): Promise<BillingSt
 export async function fetchBillingSubscriptionState(token: string): Promise<{
   subscription: SubscriptionRow | null
   workspace: WorkspaceUsage
+  prepaid: PrepaidInfo | null
 }> {
   const res = await fetch('/api/v1/billing/subscription', { headers: authHeader(token) })
   const body = (await res.json()) as {
-    data?: { subscription: SubscriptionRow | null; workspace: WorkspaceUsage }
+    data?: {
+      subscription: SubscriptionRow | null
+      workspace: WorkspaceUsage
+      prepaid: PrepaidInfo | null
+    }
     error?: { message?: string }
   }
   if (!res.ok || !body.data) {
@@ -55,7 +69,7 @@ export async function createSubscriptionCheckout(
     planCode: 'free' | 'pro'
     successUrl: string
     cancelUrl: string
-    paymentMethod?: 'CARD' | 'GOOGLE_PAY' | 'APPLE_PAY'
+    paymentMethod?: 'CARD' | 'BLIK' | 'GOOGLE_PAY' | 'APPLE_PAY'
   },
 ): Promise<{ checkoutUrl: string }> {
   const res = await fetch('/api/v1/billing/subscription/checkout', {
