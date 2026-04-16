@@ -216,10 +216,19 @@ export function DetailPanel({
         <div className="modal-header">
           <div>
             <h2 className="detail-panel__title">Szczegóły faktury</h2>
-            <p className="detail-panel__id mono">Faktura: {row.id}</p>
-            {row.primary_document_id ? (
-              <p className="detail-panel__id mono detail-panel__id--secondary">Dokument: {row.primary_document_id}</p>
-            ) : null}
+            <p className="detail-panel__subtitle">
+              <span className="detail-hero__supplier">
+                {row.supplier_name?.trim() && row.supplier_name.trim() !== '—' ? row.supplier_name : '—'}
+              </span>
+              <span className="mono"> · {row.invoice_number}</span>
+            </p>
+            <details className="detail-panel__techids">
+              <summary>Identyfikatory techniczne</summary>
+              <p className="detail-panel__id mono">Faktura: {row.id}</p>
+              {row.primary_document_id ? (
+                <p className="detail-panel__id mono detail-panel__id--secondary">Dokument: {row.primary_document_id}</p>
+              ) : null}
+            </details>
           </div>
           <button type="button" className="modal-close" onClick={onClose} aria-label="Zamknij">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
@@ -278,41 +287,36 @@ export function DetailPanel({
             </div>
 
             <div className="modal-grid__right">
-              <section className="detail-section">
-                <h3>Dane faktury</h3>
+              <div className="detail-hero">
+                <div className="detail-hero__amount">{money(row.gross_amount, row.currency)}</div>
+                <div className="detail-hero__meta">
+                  netto {money(row.net_amount, row.currency)} · wystawienie {row.issue_date} · płatność do {row.due_date}
+                </div>
+                <div className="detail-hero__badges">
+                  <PaymentBadge status={row.payment_status} />
+                  <ScopeBadge scope={row.document_scope} />
+                  <DuplicateBadge row={row} />
+                </div>
+              </div>
+
+              <section className="detail-section detail-section--tight">
+                <h3>Dane</h3>
                 <dl className="detail-dl">
-                  <dt>{row.ledger_kind === 'sale' ? 'Nabywca' : 'Dostawca'}</dt>
-                  <dd>
-                    {row.supplier_name?.trim() && row.supplier_name.trim() !== '—' ? row.supplier_name : '—'}
-                  </dd>
                   <dt>NIP</dt>
                   <dd className="mono">{row.supplier_nip?.trim() || '—'}</dd>
-                  <dt>Numer faktury</dt>
-                  <dd className="mono">{row.invoice_number}</dd>
                   <dt>Rejestr</dt>
                   <dd>{row.ledger_kind === 'sale' ? 'Sprzedaż (nasza faktura)' : 'Koszt (zakup)'}</dd>
                   <dt>KSeF — numer</dt>
                   <dd className="mono">{row.ksef_number ?? '—'}</dd>
                   <dt>KSeF — workflow</dt>
                   <dd className="mono">{row.ksef_status ?? '—'}</dd>
-                  <dt>Daty</dt>
-                  <dd>wystawienie {row.issue_date} · płatność do {row.due_date}</dd>
-                  <dt>Kwota netto</dt>
-                  <dd>{money(row.net_amount, row.currency)}</dd>
-                  <dt>Kwota brutto</dt>
-                  <dd className="cell-strong">{money(row.gross_amount, row.currency)}</dd>
                   <dt>Restauracja</dt>
                   <dd>{row.restaurant_name}</dd>
                   <dt>Kategoria</dt>
                   <dd>{row.category ?? '—'}</dd>
-                  <dt>Typ</dt>
-                  <dd><ScopeBadge scope={row.document_scope} /></dd>
-                  <dt>Płatność</dt>
-                  <dd><PaymentBadge status={row.payment_status} /></dd>
                   <dt>Duplikat</dt>
                   <dd>
-                    <DuplicateBadge row={row} />
-                    {row.duplicate_reason && <p className="detail-reason">{row.duplicate_reason}</p>}
+                    {row.duplicate_reason ? <p className="detail-reason">{row.duplicate_reason}</p> : '—'}
                   </dd>
                 </dl>
                 {row.needs_contractor_verification && row.ledger_kind !== 'sale' && (
@@ -422,6 +426,217 @@ export function DetailPanel({
                 </section>
               )}
 
+              {row.ledger_kind === 'purchase' && row.payment_status !== 'paid' && (
+                <section className="detail-section detail-payment-panel">
+                  <h3>Przelew do wystawcy</h3>
+                  <p className="workspace-panel__muted" style={{ margin: '0 0 0.75rem' }}>
+                    Środki idą <strong>bezpośrednio na konto kontrahenta</strong> z faktury. Możesz zeskanować{' '}
+                    <strong>kod QR (EPC)</strong> w aplikacji banku albo skopiować pola.{' '}
+                    <strong>PISP</strong> — po podłączeniu open banking; status na dole sekcji.
+                  </p>
+                  {row.transfer?.transferBankAccount ? (
+                    <dl className="detail-dl">
+                      <dt>Odbiorca</dt>
+                      <dd>{row.transfer.transferRecipient ?? '—'}</dd>
+                      <dt>Bank</dt>
+                      <dd>{row.transfer.transferBankName ?? '—'}</dd>
+                      <dt>Numer rachunku</dt>
+                      <dd className="mono wrap">
+                        {row.transfer.transferBankAccount}{' '}
+                        <button
+                          type="button"
+                          className="btn-ghost"
+                          onClick={() => void navigator.clipboard.writeText(row.transfer!.transferBankAccount!)}
+                        >
+                          Kopiuj
+                        </button>
+                      </dd>
+                      <dt>Tytuł</dt>
+                      <dd className="mono wrap">
+                        {row.transfer.transferTitle ?? '—'}{' '}
+                        {row.transfer.transferTitle ? (
+                          <button
+                            type="button"
+                            className="btn-ghost"
+                            onClick={() => void navigator.clipboard.writeText(row.transfer!.transferTitle!)}
+                          >
+                            Kopiuj
+                          </button>
+                        ) : null}
+                      </dd>
+                      <dt>Kwota</dt>
+                      <dd>
+                        {money(Number.parseFloat(row.transfer.transferAmount) || 0, row.currency)}{' '}
+                        <button
+                          type="button"
+                          className="btn-ghost"
+                          onClick={() =>
+                            void navigator.clipboard.writeText(
+                              `${row.transfer!.transferAmount} ${row.transfer!.transferCurrency}`,
+                            )
+                          }
+                        >
+                          Kopiuj
+                        </button>
+                      </dd>
+                    </dl>
+                  ) : null}
+                  {row.transfer?.transferBankAccount && epcQrPayload ? (
+                    <div>
+                      <p className="workspace-panel__muted" style={{ margin: '0.75rem 0 0.35rem' }}>
+                        <strong>Kod QR przelewu</strong> (EPC / SEPA) — PLN i EUR. Bez QR użyj pól powyżej.
+                      </p>
+                      <div className="detail-qr-wrap">
+                        <SafeQrCode value={epcQrPayload} size={200} level="M" />
+                      </div>
+                    </div>
+                  ) : row.transfer?.transferBankAccount && row.currency !== 'PLN' && row.currency !== 'EUR' ? (
+                    <p className="workspace-panel__muted" style={{ marginTop: '0.75rem' }} role="status">
+                      Kod QR EPC jest dla PLN i EUR — ta faktura jest w {row.currency}; użyj przelewu ręcznego.
+                    </p>
+                  ) : null}
+                  {row.transfer?.transferBankAccount &&
+                  !epcQrPayload &&
+                  (row.currency === 'PLN' || row.currency === 'EUR') ? (
+                    <p className="workspace-panel__muted" style={{ marginTop: '0.5rem' }} role="status">
+                      Nie udało się złożyć poprawnego IBAN — QR niedostępny. Wykonaj przelew ręcznie.
+                    </p>
+                  ) : null}
+                  {!row.transfer?.transferBankAccount ? (
+                    <p className="workspace-panel__muted" role="status">
+                      Brak numeru rachunku w danych faktury — sprawdź dokument lub ponów ekstrakcję (OCR).
+                    </p>
+                  ) : null}
+                  {pispLoading ? (
+                    <p className="workspace-panel__muted" style={{ marginTop: '0.75rem' }} role="status">
+                      Sprawdzanie statusu PISP…
+                    </p>
+                  ) : pispState ? (
+                    <p className="workspace-panel__muted" style={{ marginTop: '0.75rem' }} role="status">
+                      <strong>PISP:</strong> {pispState.message}
+                    </p>
+                  ) : null}
+                </section>
+              )}
+
+              <div className="detail-actions">
+                <div className="detail-actions__group">
+                  <span className="detail-actions__label">Płatność</span>
+                  <div className="detail-actions__row">
+                    <button type="button" className="btn btn--primary btn--sm" onClick={() => onPaid(row.id)}>
+                      Zapłacona
+                    </button>
+                    <button type="button" className="btn btn--sm" onClick={() => onUnpaid(row.id)}>
+                      Niezapłacona
+                    </button>
+                  </div>
+                </div>
+                <div className="detail-actions__group">
+                  <span className="detail-actions__label">Przegląd</span>
+                  <div className="detail-actions__row">
+                    <button type="button" className="btn btn--sm" onClick={() => onNeedsReview(row.id)}>
+                      Do sprawdzenia
+                    </button>
+                    <button type="button" className="btn btn--sm" onClick={() => onClearReview(row.id)}>
+                      Wyczyść przegląd
+                    </button>
+                  </div>
+                </div>
+                <div className="detail-actions__group">
+                  <span className="detail-actions__label">Kategoria i typ</span>
+                  <div className="detail-actions__row">
+                    <label className="field field--inline">
+                      <span className="field__label">Kategoria</span>
+                      <select
+                        className="input"
+                        title={
+                          categoryLocalOnly
+                            ? 'W trybie demo kategoria jest tylko w tej przeglądarce.'
+                            : 'Zapis w bazie — widoczna w Raportach wg kategorii.'
+                        }
+                        value={row.category ?? ''}
+                        onChange={(e) => void onCategory(row.id, e.target.value || null)}
+                      >
+                        <option value="">— brak —</option>
+                        {categoryOptions.map((c) => (
+                          <option key={c} value={c}>
+                            {c}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <button type="button" className="btn btn--sm" onClick={() => onBusiness(row.id)}>
+                      Firma
+                    </button>
+                    <button type="button" className="btn btn--sm" onClick={() => onPrivate(row.id)}>
+                      Prywatna
+                    </button>
+                  </div>
+                </div>
+                <div className="detail-actions__group">
+                  <span className="detail-actions__label">Duplikaty</span>
+                  <div className="detail-actions__row">
+                    <button type="button" className="btn btn--sm btn--danger-outline" onClick={() => onConfirmDup(row.id)}>
+                      Potwierdź
+                    </button>
+                    <button type="button" className="btn btn--sm" onClick={() => onRejectDup(row.id)}>
+                      Odrzuć
+                    </button>
+                    {row.duplicate_of_id && linkedRow && (
+                      <button type="button" className="btn btn--sm btn--link" onClick={() => onGoTo(row.duplicate_of_id!)}>
+                        Oryginał ({row.duplicate_canonical_number?.trim() || linkedRow.invoice_number})
+                      </button>
+                    )}
+                  </div>
+                  {row.duplicate_of_id && (
+                    <p className="detail-hint" style={{ marginTop: 6 }}>
+                      Powiązany duplikat — możesz usunąć ten wpis lub użyć „Usuń duplikaty” nad tabelą.
+                    </p>
+                  )}
+                </div>
+                {onRetryExtraction && row.source_type !== 'ksef' && (
+                  <div className="detail-actions__group">
+                    <span className="detail-actions__label">Plik źródłowy</span>
+                    <div className="detail-actions__row">
+                      <button
+                        type="button"
+                        className="btn btn--sm btn--warning"
+                        disabled={ocrBusy || row.invoice_status === 'INGESTING'}
+                        onClick={async () => {
+                          setOcrBusy(true)
+                          try {
+                            await onRetryExtraction(row.id)
+                          } finally {
+                            setOcrBusy(false)
+                          }
+                        }}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                        {' '}
+                        {ocrBusy
+                          ? 'Kolejkowanie…'
+                          : row.invoice_status === 'INGESTING'
+                            ? 'OCR…'
+                            : 'Ponów OCR'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+                <div className="detail-actions__danger">
+                  <button
+                    type="button"
+                    className="btn btn--sm btn--danger-solid"
+                    onClick={() => {
+                      if (window.confirm(`Usunąć tę fakturę z listy?\n${row.invoice_number} · ${row.supplier_name}`)) {
+                        onDeleteInvoice(row.id)
+                      }
+                    }}
+                  >
+                    Usuń z listy
+                  </button>
+                </div>
+              </div>
+
               <section className="detail-section">
                 <h3>Źródło wpływu</h3>
                 <dl className="detail-dl">
@@ -447,188 +662,6 @@ export function DetailPanel({
                     if (draftNotes !== row.notes) onNotes(row.id, draftNotes)
                   }}
                 />
-              </section>
-
-              <section className="detail-section">
-                <h3>Akcje operatora</h3>
-                {row.ledger_kind === 'purchase' && row.payment_status !== 'paid' && (
-                  <div className="detail-section detail-section--nested" style={{ marginBottom: '1rem' }}>
-                    <h4 style={{ margin: '0 0 0.5rem', fontSize: '0.95rem' }}>Płatność przelewem do wystawcy</h4>
-                    <p className="workspace-panel__muted" style={{ margin: '0 0 0.75rem' }}>
-                      Środki idą <strong>bezpośrednio na konto kontrahenta</strong> z faktury. Możesz zeskanować{' '}
-                      <strong>kod QR (standard EPC)</strong> w aplikacji banku albo skopiować pola ręcznie.{' '}
-                      <strong>PISP</strong> (przelew z aplikacji przez bank) — po podłączeniu dostawcy open banking; status poniżej.
-                    </p>
-                    {row.transfer?.transferBankAccount ? (
-                      <dl className="detail-dl">
-                        <dt>Odbiorca</dt>
-                        <dd>{row.transfer.transferRecipient ?? '—'}</dd>
-                        <dt>Bank</dt>
-                        <dd>{row.transfer.transferBankName ?? '—'}</dd>
-                        <dt>Numer rachunku</dt>
-                        <dd className="mono wrap">
-                          {row.transfer.transferBankAccount}{' '}
-                          <button
-                            type="button"
-                            className="btn-ghost"
-                            onClick={() => void navigator.clipboard.writeText(row.transfer!.transferBankAccount!)}
-                          >
-                            Kopiuj
-                          </button>
-                        </dd>
-                        <dt>Tytuł</dt>
-                        <dd className="mono wrap">
-                          {row.transfer.transferTitle ?? '—'}{' '}
-                          {row.transfer.transferTitle ? (
-                            <button
-                              type="button"
-                              className="btn-ghost"
-                              onClick={() => void navigator.clipboard.writeText(row.transfer!.transferTitle!)}
-                            >
-                              Kopiuj
-                            </button>
-                          ) : null}
-                        </dd>
-                        <dt>Kwota</dt>
-                        <dd>
-                          {money(Number.parseFloat(row.transfer.transferAmount) || 0, row.currency)}{' '}
-                          <button
-                            type="button"
-                            className="btn-ghost"
-                            onClick={() =>
-                              void navigator.clipboard.writeText(
-                                `${row.transfer!.transferAmount} ${row.transfer!.transferCurrency}`,
-                              )
-                            }
-                          >
-                            Kopiuj
-                          </button>
-                        </dd>
-                      </dl>
-                    ) : null}
-                    {row.transfer?.transferBankAccount && epcQrPayload ? (
-                      <div style={{ marginTop: '1rem' }}>
-                        <p className="workspace-panel__muted" style={{ margin: '0 0 0.5rem' }}>
-                          <strong>Kod QR przelewu</strong> (EPC / SEPA) — zeskanuj w banku (np. „Płatności”, „Przelew z kodu”).
-                          Obsługuje <strong>PLN</strong> i <strong>EUR</strong>. Gdy bank nie czyta QR, użyj pól powyżej.
-                        </p>
-                        <div
-                          style={{
-                            display: 'inline-block',
-                            padding: 12,
-                            background: '#fff',
-                            borderRadius: 8,
-                            border: '1px solid var(--color-border, #ddd)',
-                          }}
-                        >
-                          <SafeQrCode value={epcQrPayload} size={200} level="M" />
-                        </div>
-                      </div>
-                    ) : row.transfer?.transferBankAccount &&
-                      row.currency !== 'PLN' &&
-                      row.currency !== 'EUR' ? (
-                      <p className="workspace-panel__muted" style={{ marginTop: '0.75rem' }} role="status">
-                        Kod QR EPC jest dostępny dla walut PLN i EUR — ta faktura jest w {row.currency}; użyj danych do przelewu
-                        ręcznie.
-                      </p>
-                    ) : null}
-                    {row.transfer?.transferBankAccount &&
-                    !epcQrPayload &&
-                    (row.currency === 'PLN' || row.currency === 'EUR') ? (
-                      <p className="workspace-panel__muted" style={{ marginTop: '0.5rem' }} role="status">
-                        Nie udało się złożyć poprawnego IBAN z numeru rachunku — kod QR jest niedostępny. Sprawdź cyfry lub wykonaj
-                        przelew ręcznie z pól powyżej.
-                      </p>
-                    ) : null}
-                    {!row.transfer?.transferBankAccount ? (
-                      <p className="workspace-panel__muted" role="status">
-                        Brak numeru rachunku w danych faktury — sprawdź dokument lub ponów ekstrakcję (OCR).
-                      </p>
-                    ) : null}
-                    {pispLoading ? (
-                      <p className="workspace-panel__muted" style={{ marginTop: '0.75rem' }} role="status">
-                        Sprawdzanie statusu PISP…
-                      </p>
-                    ) : pispState ? (
-                      <p className="workspace-panel__muted" style={{ marginTop: '0.75rem' }} role="status">
-                        <strong>PISP:</strong> {pispState.message}
-                      </p>
-                    ) : null}
-                  </div>
-                )}
-                <div className="action-grid action-grid--modal">
-                  <button type="button" className="btn btn--primary" onClick={() => onPaid(row.id)}>Oznacz zapłaconą</button>
-                  <button type="button" className="btn" onClick={() => onUnpaid(row.id)}>Oznacz niezapłaconą</button>
-                  <button type="button" className="btn" onClick={() => onNeedsReview(row.id)}>Do sprawdzenia</button>
-                  <button type="button" className="btn" onClick={() => onClearReview(row.id)}>Wyczyść przegląd</button>
-                  <label className="field field--inline">
-                    <span className="field__label">Kategoria</span>
-                    <select
-                      className="input"
-                      title={
-                        categoryLocalOnly
-                          ? 'W trybie demo kategoria jest tylko w tej przeglądarce.'
-                          : 'Zapis w bazie — widoczna w Raportach wg kategorii.'
-                      }
-                      value={row.category ?? ''}
-                      onChange={(e) => void onCategory(row.id, e.target.value || null)}
-                    >
-                      <option value="">— brak —</option>
-                      {categoryOptions.map((c) => (
-                        <option key={c} value={c}>{c}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <button type="button" className="btn" onClick={() => onBusiness(row.id)}>Typ: firmowa</button>
-                  <button type="button" className="btn" onClick={() => onPrivate(row.id)}>Typ: prywatna</button>
-                  <button type="button" className="btn btn--danger-outline" onClick={() => onConfirmDup(row.id)}>Potwierdź duplikat</button>
-                  <button type="button" className="btn" onClick={() => onRejectDup(row.id)}>Odrzuć duplikat</button>
-                  {row.duplicate_of_id && linkedRow && (
-                    <button type="button" className="btn btn--link" onClick={() => onGoTo(row.duplicate_of_id!)}>
-                      Przejdź do oryginału ({row.duplicate_canonical_number?.trim() || linkedRow.invoice_number})
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    className="btn btn--danger-solid"
-                    onClick={() => {
-                      if (window.confirm(`Usunąć tę fakturę z listy?\n${row.invoice_number} · ${row.supplier_name}`)) {
-                        onDeleteInvoice(row.id)
-                      }
-                    }}
-                  >
-                    Usuń fakturę z listy
-                  </button>
-                  {row.duplicate_of_id && (
-                    <p className="detail-hint">
-                      Ten rekord jest powiązany jako duplikat — możesz go usunąć i zostawić pierwotny wpis, albo użyć „Usuń duplikaty" nad tabelą.
-                    </p>
-                  )}
-
-                  {onRetryExtraction && row.source_type !== 'ksef' && (
-                    <button
-                      type="button"
-                      className="btn btn--warning"
-                      disabled={ocrBusy || row.invoice_status === 'INGESTING'}
-                      onClick={async () => {
-                        setOcrBusy(true)
-                        try {
-                          await onRetryExtraction(row.id)
-                        } finally {
-                          setOcrBusy(false)
-                        }
-                      }}
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-                      {' '}
-                      {ocrBusy
-                        ? 'Kolejkowanie…'
-                        : row.invoice_status === 'INGESTING'
-                          ? 'OCR w toku…'
-                          : 'Ponów OCR / ekstrakcję'}
-                    </button>
-                  )}
-                </div>
               </section>
 
               <section className="detail-section">
