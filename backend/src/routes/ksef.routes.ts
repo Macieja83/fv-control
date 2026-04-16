@@ -203,7 +203,7 @@ const ksefRoutes: FastifyPluginAsync = async (app) => {
         return reply.status(400).send({
           error: {
             message:
-              "KSeF nie jest skonfigurowany: zapisz poświadczenia w Płatnościach (sekcja KSeF) lub ustaw KSEF_TOKEN i KSEF_NIP w .env serwera.",
+              "KSeF nie jest skonfigurowany: zapisz poświadczenia w Ustawieniach (sekcja KSeF) lub ustaw KSEF_TOKEN i KSEF_NIP w .env serwera.",
           },
         });
       }

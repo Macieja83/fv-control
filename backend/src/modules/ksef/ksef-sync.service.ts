@@ -147,7 +147,7 @@ export async function runKsefSyncJob(
   const client = await loadKsefClientForTenant(prisma, data.tenantId);
   if (!client) {
     console.warn(
-      "KSeF sync skipped: brak realnego API (mock / brak nadpisania środowiska) lub brak poświadczeń (Płatności / KSeF albo KSEF_TOKEN+KSEF_NIP w .env).",
+      "KSeF sync skipped: brak realnego API (mock / brak nadpisania środowiska) lub brak poświadczeń (Ustawienia / KSeF albo KSEF_TOKEN+KSEF_NIP w .env).",
     );
     await mergeKsefSyncRunTelemetry(prisma, data.tenantId, {
       runAt: syncRunAt(),

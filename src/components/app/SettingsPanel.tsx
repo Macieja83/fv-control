@@ -21,8 +21,7 @@ import { fetchTenantProfile, patchTenantProfile, type TenantProfileResponse } fr
 import { changePasswordRequest, setInitialPasswordRequest } from '../../auth/authApi'
 import { getStoredToken } from '../../auth/session'
 import { useAuth } from '../../auth/AuthContext'
-
-
+import { PaymentsPanel } from './PaymentsPanel'
 
 export function SettingsPanel() {
   const { user, refreshUser } = useAuth()
@@ -429,9 +428,11 @@ export function SettingsPanel() {
 
         <div>
 
-          <h2 className="workspace-panel__title">Ustawienia firmy</h2>
+          <h2 className="workspace-panel__title">Ustawienia</h2>
 
-          <p className="workspace-panel__lead">Nazwa, NIP, plan i płatność za abonament (Stripe).</p>
+          <p className="workspace-panel__lead">
+            Dane firmy, hasło, integracje (bank, KSeF), plan i abonament PRO (Stripe).
+          </p>
 
         </div>
 
@@ -465,7 +466,8 @@ export function SettingsPanel() {
               {nip.replace(/\s/g, '').length >= 10 ? '✅' : '⬜'} Uzupełniony NIP firmy
             </li>
             <li>
-              {tenantProfile?.portalIntegrations.ksefConfigured ? '✅' : '⬜'} Zapisane poświadczenia KSeF (Płatności)
+              {tenantProfile?.portalIntegrations.ksefConfigured ? '✅' : '⬜'} Zapisane poświadczenia KSeF (sekcja Bank i
+              KSeF poniżej)
             </li>
             <li>
               {(subscription?.status === 'ACTIVE' || subscription?.status === 'TRIALING') ? '✅' : '⬜'} Aktywna subskrypcja (trial/active)
@@ -589,7 +591,7 @@ export function SettingsPanel() {
 
       )}
 
-
+      <PaymentsPanel embedded />
 
       <section className="integration-card integration-card--tight">
 
@@ -730,24 +732,6 @@ export function SettingsPanel() {
           </>
 
         )}
-
-      </section>
-
-
-
-      <section className="integration-card integration-card--tight">
-
-        <h3 className="workspace-panel__h3">Integracje</h3>
-
-        <p className="workspace-panel__muted">
-
-          Bank i poświadczenia KSeF (token, PIN, certyfikat) konfigurujesz w <strong>Płatnościach</strong>. Zmienne{' '}
-
-          <span className="mono">KSEF_*</span> na serwerze mogą służyć jako wspólny fallback dla tenantów bez własnego
-
-          zapisu.
-
-        </p>
 
       </section>
 

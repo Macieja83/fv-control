@@ -55,7 +55,7 @@ export function OnboardingChecklistBanner(props: {
       { id: 'email', label: 'Potwierdzony e-mail konta', done: props.user?.emailVerified === true, nav: 'settings' },
       { id: 'pwd', label: 'Hasło do logowania (oprócz Google)', done: props.user?.hasPassword === true, nav: 'settings' },
       { id: 'nip', label: 'Uzupełniony NIP firmy', done: nipOk, nav: 'settings' },
-      { id: 'ksef', label: 'Skonfigurowane poświadczenia KSeF', done: ksefOk, nav: 'payments' },
+      { id: 'ksef', label: 'Skonfigurowane poświadczenia KSeF', done: ksefOk, nav: 'settings' },
       { id: 'sub', label: 'Aktywna subskrypcja (trial/active)', done: subOk, nav: 'settings' },
     ]
   }, [
@@ -85,7 +85,7 @@ export function OnboardingChecklistBanner(props: {
       <div className="app-banner__actions">
         {remaining.slice(0, 2).map((s) => (
           <button key={s.id} type="button" className="btn-ghost" onClick={() => props.onGoToNav(s.nav)}>
-            Uzupełnij: {s.nav === 'payments' ? 'Płatności' : 'Firma'}
+            Uzupełnij: {s.label}
           </button>
         ))}
         <button type="button" className="btn-ghost" onClick={() => void load()} disabled={loading}>

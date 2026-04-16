@@ -11,7 +11,6 @@ import {
 } from './components/app/appNav'
 import { ContractorsPanel } from './components/app/ContractorsPanel'
 import { DocumentsPanel } from './components/app/DocumentsPanel'
-import { PaymentsPanel } from './components/app/PaymentsPanel'
 import { ReportsPanel } from './components/app/ReportsPanel'
 import { SettingsPanel } from './components/app/SettingsPanel'
 import { Topbar } from './components/dashboard/Topbar'
@@ -29,12 +28,11 @@ function readNavFromLocation(): AppNavKey {
   if (typeof window === 'undefined') return 'invoices'
   const q = new URLSearchParams(window.location.search)
   const raw = q.get('nav')
-  if (raw === 'plan') return 'settings'
+  if (raw === 'plan' || raw === 'payments') return 'settings'
   const keys: AppNavKey[] = [
     'invoices',
     'reports',
     'documents',
-    'payments',
     'contractors',
     'settings',
     'admin',
@@ -217,11 +215,6 @@ export default function DashboardApp() {
       {nav === 'documents' && (
         <main className="main-content main-content--padded">
           <DocumentsPanel />
-        </main>
-      )}
-      {nav === 'payments' && (
-        <main className="main-content main-content--padded">
-          <PaymentsPanel />
         </main>
       )}
       {nav === 'contractors' && (

@@ -192,7 +192,7 @@ const envSchema = z.object({
   KSEF_ISSUANCE_MODE: z.enum(["stub", "live"]).default("stub"),
   /**
    * SaaS multi-tenant: gdy `true`, KSeF **nie** używa globalnych `KSEF_TOKEN` / `KSEF_NIP` z `.env` —
-   * tylko poświadczeń zapisanych przez tenanta (Płatności). Zalecane na produkcji współdzielonym hoście.
+   * tylko poświadczeń zapisanych przez tenanta (Ustawienia). Zalecane na produkcji współdzielonym hoście.
    */
   KSEF_DISABLE_GLOBAL_FALLBACK: z.coerce.boolean().default(false),
   RESTA_API_BASE_URL: z.string().optional(),

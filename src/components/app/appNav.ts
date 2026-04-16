@@ -2,7 +2,6 @@ export type AppNavKey =
   | 'invoices'
   | 'reports'
   | 'documents'
-  | 'payments'
   | 'contractors'
   | 'settings'
   | 'admin'
@@ -14,9 +13,8 @@ export const APP_NAV_ITEMS: AppNavItem[] = [
   { key: 'invoices', label: 'Faktury', short: 'FV' },
   { key: 'reports', label: 'Raporty', short: 'Rap.' },
   { key: 'documents', label: 'Umowy', short: 'Umowy' },
-  { key: 'payments', label: 'Płatności', short: 'Płat.' },
   { key: 'contractors', label: 'Kontrahenci', short: 'Kontr.' },
-  { key: 'settings', label: 'Firma', short: 'Firma' },
+  { key: 'settings', label: 'Ustawienia', short: 'Ustaw.' },
 ]
 
 /** Tylko konto operatora platformy (`PLATFORM_ADMIN_EMAIL` w API). */

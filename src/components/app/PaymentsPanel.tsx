@@ -98,7 +98,8 @@ function fileToCertField(file: File): Promise<string> {
   })
 }
 
-export function PaymentsPanel() {
+export function PaymentsPanel(props: { embedded?: boolean }) {
+  const { embedded = false } = props
   const [state, setState] = useState<TenantProfileResponse['portalIntegrations'] | null>(null)
   const [ksefMeta, setKsefMeta] = useState<TenantKsefCredentialsPublic | null>(null)
   const [loading, setLoading] = useState(true)
@@ -306,18 +307,8 @@ export function PaymentsPanel() {
     }
   }
 
-  return (
-    <div className="workspace-panel">
-      <header className="workspace-panel__head">
-        <div>
-          <h2 className="workspace-panel__title">Płatności</h2>
-          <p className="workspace-panel__lead">
-            Płatności <strong>za faktury do kontrahentów</strong> to przelew na konto z faktury (szczegóły faktury) lub
-            przyszła integracja <strong>PISP</strong>. Abonament aplikacji (Stripe) jest w zakładce <strong>Firma</strong>.
-          </p>
-        </div>
-      </header>
-
+  const body = (
+    <>
       {loading && <p className="workspace-panel__muted">Ładowanie…</p>}
       {err && <p className="workspace-panel__err">{err}</p>}
 
@@ -535,7 +526,8 @@ export function PaymentsPanel() {
             )}
             {ksefMeta && !ksefMeta.tenantNipOk && (
               <p className="workspace-panel__err">
-                Uzupełnij poprawny 10-cyfrowy NIP w zakładce <strong>Firma</strong> — bez tego KSeF nie zadziała.
+                Uzupełnij poprawny 10-cyfrowy NIP w sekcji <strong>Nazwa firmy / NIP</strong> powyżej — bez tego KSeF nie
+                zadziała.
               </p>
             )}
             {ksefMeta?.storedCredential && (
@@ -629,6 +621,25 @@ export function PaymentsPanel() {
           </section>
         </>
       )}
+    </>
+  )
+
+  if (embedded) {
+    return <div className="settings-embedded-payments">{body}</div>
+  }
+
+  return (
+    <div className="workspace-panel">
+      <header className="workspace-panel__head">
+        <div>
+          <h2 className="workspace-panel__title">Płatności</h2>
+          <p className="workspace-panel__lead">
+            Płatności <strong>za faktury do kontrahentów</strong> to przelew na konto z faktury (szczegóły faktury) lub
+            przyszła integracja <strong>PISP</strong>. Abonament aplikacji (Stripe) jest w zakładce <strong>Ustawienia</strong>.
+          </p>
+        </div>
+      </header>
+      {body}
     </div>
   )
 }

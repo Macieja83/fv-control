@@ -88,7 +88,7 @@ export const steps: LandingStep[] = [
   },
   {
     title: 'Połącz KSeF',
-    description: 'W sekcji Płatności wklej token z portalu MF, PIN oraz opcjonalnie certyfikat — potem synchronizacja faktur.',
+    description: 'W Ustawieniach wklej token z portalu MF, PIN oraz opcjonalnie certyfikat — potem synchronizacja faktur.',
   },
   {
     title: 'Kontroluj dokumenty i subskrypcję',

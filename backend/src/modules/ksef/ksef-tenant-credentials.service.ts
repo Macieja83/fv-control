@@ -389,7 +389,7 @@ export async function testTenantKsefConnection(
       credentialSource: "none",
       probe: "saved",
       message:
-        "Brak poświadczeń: zapisz KSeF w Płatnościach lub ustaw na serwerze zmienne KSEF_TOKEN i KSEF_NIP (oraz ewent. KSEF_TOKEN_PASSWORD / KSEF_CERT).",
+        "Brak poświadczeń: zapisz KSeF w Ustawieniach lub ustaw na serwerze zmienne KSEF_TOKEN i KSEF_NIP (oraz ewent. KSEF_TOKEN_PASSWORD / KSEF_CERT).",
     };
   }
   try {

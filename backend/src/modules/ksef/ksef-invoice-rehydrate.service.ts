@@ -92,7 +92,7 @@ export async function rehydrateKsefInvoiceFromApi(
   const client = await loadKsefClientForTenant(prisma, tenantId);
   if (!client) {
     throw AppError.validation(
-      "KSeF nie jest skonfigurowany: ustaw poświadczenia w Płatnościach (KSeF) lub zmienne KSEF_TOKEN i KSEF_NIP na serwerze.",
+      "KSeF nie jest skonfigurowany: ustaw poświadczenia w Ustawieniach (KSeF) lub zmienne KSEF_TOKEN i KSEF_NIP na serwerze.",
     );
   }
   await client.authenticate();
