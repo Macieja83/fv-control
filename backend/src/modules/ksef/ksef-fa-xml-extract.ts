@@ -310,7 +310,11 @@ export function tryExtractDraftFromKsefFaXml(
   if (!fa) fa = deepFindFaBlock(parsed);
   if (!fa) return null;
 
-  const num = pickText(fa.P_2 ?? fa.p_2);
+  let num = pickText(fa.P_2 ?? fa.p_2);
+  if (!num) {
+    const withP2 = deepFindRecordContainingKey(parsed, "P_2");
+    if (withP2) num = pickText(withP2.P_2 ?? withP2.p_2);
+  }
   if (!num) return null;
 
   /** Tylko P_1 = data wystawienia wg FA. P_6 to data sprzedaży/usługi — portal KSeF pokazuje „wystawienie” inaczej niż my, gdy mieszamy z P_6. */

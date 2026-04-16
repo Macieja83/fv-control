@@ -6,6 +6,10 @@ import { AppError } from "../../lib/errors.js";
 import { getPipelineQueue } from "../../lib/pipeline-queue.js";
 import { PIPELINE_QUEUE_NAME } from "../../lib/queue-constants.js";
 import { loadKsefClientForTenant } from "./ksef-tenant-credentials.service.js";
+import {
+  recoverStaleInflightPipelineJobsForInvoice,
+  repairOrphanIngestingInvoiceWithoutInflightJobs,
+} from "../pipeline/pipeline-stale-inflight.service.js";
 
 export type RehydrateKsefInvoiceResult = {
   invoiceId: string;
@@ -27,12 +31,23 @@ export async function rehydrateKsefInvoiceFromApi(
 ): Promise<RehydrateKsefInvoiceResult> {
   const cfg = loadConfig();
 
-  const invoice = await prisma.invoice.findFirst({
+  let invoice = await prisma.invoice.findFirst({
     where: { id: invoiceId, tenantId },
     include: { primaryDoc: true },
   });
   if (!invoice) {
     throw AppError.notFound("Nie znaleziono faktury.");
+  }
+
+  await recoverStaleInflightPipelineJobsForInvoice(prisma, tenantId, invoice.id);
+  if (await repairOrphanIngestingInvoiceWithoutInflightJobs(prisma, tenantId, invoice.id)) {
+    invoice = await prisma.invoice.findFirst({
+      where: { id: invoiceId, tenantId },
+      include: { primaryDoc: true },
+    });
+    if (!invoice) {
+      throw AppError.notFound("Nie znaleziono faktury.");
+    }
   }
 
   if (invoice.intakeSourceType !== "KSEF_API") {

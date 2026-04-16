@@ -4,6 +4,7 @@ import { loadConfig } from "../../config.js";
 import { AppError } from "../../lib/errors.js";
 import { getPipelineQueue } from "../../lib/pipeline-queue.js";
 import { PIPELINE_QUEUE_NAME } from "../../lib/queue-constants.js";
+import { recoverStaleInflightPipelineJobsForInvoice } from "./pipeline-stale-inflight.service.js";
 
 export type RetryInvoiceExtractionResult = {
   invoiceId: string;
@@ -40,6 +41,7 @@ export async function retryInvoiceExtraction(
     );
   }
 
+  await recoverStaleInflightPipelineJobsForInvoice(prisma, tenantId, invoice.id);
   const inflight = await prisma.processingJob.findFirst({
     where: {
       tenantId,

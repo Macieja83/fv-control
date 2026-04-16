@@ -237,7 +237,7 @@ export function DetailPanel({
                       <button
                         type="button"
                         className="btn btn--primary btn--sm"
-                        disabled={ksefPullBusy || row.invoice_status === 'INGESTING'}
+                        disabled={ksefPullBusy}
                         onClick={async () => {
                           setKsefPullBusy(true)
                           try {
@@ -251,7 +251,7 @@ export function DetailPanel({
                         {ksefPullBusy
                           ? 'Pobieranie z KSeF…'
                           : row.invoice_status === 'INGESTING'
-                            ? 'Przetwarzanie w tle…'
+                            ? 'Ponów pobranie z KSeF'
                             : 'Pobierz z KSeF i przetwórz'}
                       </button>
                       {onRefreshList ? (
@@ -261,8 +261,9 @@ export function DetailPanel({
                       ) : null}
                     </div>
                     <p className="detail-ksef-toolbar__hint workspace-panel__muted">
-                      Pobiera aktualny plik z KSeF i kolejkuje ekstrakcję. Jeśli widzisz „Przetwarzanie w tle…”, użyj
-                      „Odśwież dane”, żeby odświeżyć status bez ponownego pobierania.
+                      Pobiera aktualny plik FA XML z KSeF i kolejkuje ekstrakcję. Lista odświeża się automatycznie, gdy
+                      worker skończy pracę. Jeśli status utknie w „przetwarzanie”, użyj ponownie przycisku powyżej —
+                      serwer zwolni zawieszone zadanie i pobierze fakturę od nowa.
                     </p>
                   </div>
                 ) : null}

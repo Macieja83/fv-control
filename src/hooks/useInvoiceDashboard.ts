@@ -141,14 +141,17 @@ export function useInvoiceDashboard() {
     setSelectedId(null)
   }, [invoiceLedger])
 
-  /** Dopóki któraś faktura jest w INGESTING, odświeżaj listę (worker kończy OCR w tle). */
+  /** Dopóki któraś faktura jest w INGESTING, odświeżaj listę (worker kończy OCR w tle). Uwzględnij też zaznaczoną fakturę (np. po filtrze dat). */
   useEffect(() => {
     if (USE_MOCK_INVOICES) return
-    const ingesting = invoices.some((r) => r.invoice_status === 'INGESTING')
+    const selectedRow = selectedId ? invoices.find((r) => r.id === selectedId) : undefined
+    const ingesting =
+      invoices.some((r) => r.invoice_status === 'INGESTING') ||
+      selectedRow?.invoice_status === 'INGESTING'
     if (!ingesting) return
     const id = window.setInterval(() => void refreshFromApi(), 4000)
     return () => window.clearInterval(id)
-  }, [invoices, refreshFromApi])
+  }, [invoices, selectedId, refreshFromApi])
 
   const ledgerScoped = useMemo(() => {
     if (USE_MOCK_INVOICES) {

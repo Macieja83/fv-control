@@ -96,6 +96,21 @@ export async function runPipelineJob(prisma: PrismaClient, processingJobId: stri
   });
   if (!jobRow?.document || !jobRow.invoice) {
     pipelineJobsTotal.inc({ result: "missing_job" });
+    if (jobRow) {
+      await prisma.processingJob.update({
+        where: { id: processingJobId },
+        data: {
+          status: "FAILED",
+          lastError: "Pipeline: brak dokumentu lub faktury dla tego zadania (spójność danych).",
+        },
+      });
+      if (jobRow.invoiceId) {
+        await prisma.invoice.updateMany({
+          where: { id: jobRow.invoiceId, status: "INGESTING" },
+          data: { status: "FAILED_NEEDS_REVIEW" },
+        });
+      }
+    }
     return;
   }
 
@@ -197,6 +212,20 @@ export async function runPipelineJob(prisma: PrismaClient, processingJobId: stri
       },
     });
     await recordAttempt(prisma, processingJobId, attemptNo, "EXTRACT", "extracted");
+
+    if (
+      fromKsefSource &&
+      (!workingDraft.number || typeof workingDraft.number !== "string" || !String(workingDraft.number).trim())
+    ) {
+      const extId =
+        document.sourceExternalId?.trim() ||
+        invoice.sourceExternalId?.trim() ||
+        invoice.ksefNumber?.trim() ||
+        "";
+      if (extId) {
+        workingDraft = { ...workingDraft, number: extId };
+      }
+    }
 
     if (!workingDraft.number || typeof workingDraft.number !== "string") {
       throw new Error(
@@ -514,7 +543,10 @@ export async function runPipelineJob(prisma: PrismaClient, processingJobId: stri
       data: { status: "FAILED", lastError: msg },
     });
     await prisma.invoice.updateMany({
-      where: { id: invoice.id, status: "INGESTING" },
+      where: {
+        id: invoice.id,
+        status: { in: ["INGESTING", "PENDING_REVIEW", "FAILED_NEEDS_REVIEW"] },
+      },
       data: { status: "FAILED_NEEDS_REVIEW" },
     });
     pipelineJobsTotal.inc({ result: "failed" });
