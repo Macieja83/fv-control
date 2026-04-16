@@ -446,6 +446,42 @@ export async function listInvoiceEvents(prisma: PrismaClient, tenantId: string, 
   });
 }
 
+/** Usuwa prefiks `[GTU_xx]` doklejany przy zapisie faktury sprzedaży — spójnie z polem „Nazwa” w formularzu. */
+const STORED_LINE_GTU_PREFIX = /^\[[^\]]+\]\s*/;
+
+function stripGtuPrefixFromStoredLineName(stored: string): string {
+  return stored.replace(STORED_LINE_GTU_PREFIX, "").trim();
+}
+
+const SALES_LINE_NAME_SUGGESTIONS_LIMIT = 150;
+const SALES_LINE_NAME_SUGGESTIONS_RAW_FETCH = 4000;
+
+/** Unikalne nazwy pozycji z faktur sprzedaży (tenant), od najnowszej daty wystawienia. */
+export async function listSalesLineNameSuggestions(prisma: PrismaClient, tenantId: string) {
+  const rows = await prisma.invoiceItem.findMany({
+    where: {
+      invoice: { tenantId, ledgerKind: "SALE" },
+      NOT: { name: "" },
+    },
+    select: { name: true },
+    orderBy: { invoice: { issueDate: "desc" } },
+    take: SALES_LINE_NAME_SUGGESTIONS_RAW_FETCH,
+  });
+
+  const best = new Map<string, string>();
+  for (const row of rows) {
+    const display = stripGtuPrefixFromStoredLineName(row.name);
+    const trimmed = display.trim();
+    if (!trimmed) continue;
+    const key = trimmed.toLowerCase();
+    if (best.has(key)) continue;
+    best.set(key, trimmed);
+    if (best.size >= SALES_LINE_NAME_SUGGESTIONS_LIMIT) break;
+  }
+
+  return { names: Array.from(best.values()) };
+}
+
 async function assertContractor(prisma: PrismaClient, tenantId: string, contractorId: string) {
   const c = await prisma.contractor.findFirst({
     where: { id: contractorId, tenantId, deletedAt: null },

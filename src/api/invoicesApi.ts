@@ -90,6 +90,16 @@ export async function fetchInvoicesList(
   return (await res.json()) as InvoicesListResponse
 }
 
+export type SalesLineNameSuggestionsResponse = { names: string[] }
+
+export async function fetchSalesLineNameSuggestions(token: string): Promise<SalesLineNameSuggestionsResponse> {
+  const res = await fetch(`${API}/invoices/sales-line-name-suggestions`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) throw new Error(await readApiErrorMessage(res))
+  return (await res.json()) as SalesLineNameSuggestionsResponse
+}
+
 /** Pobiera wszystkie strony listy (limit max. 100/strona wg API), żeby widok miesiąca nie ucinał rekordów. */
 export async function fetchInvoicesListAllPages(
   token: string,

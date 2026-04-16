@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createContractor, fetchContractors, type ContractorDto } from '../../api/contractorsApi'
 import { fetchGusByNip } from '../../api/gusApi'
+import { fetchSalesLineNameSuggestions } from '../../api/invoicesApi'
 import { fetchKsefConnectorStatus, type KsefConnectorStatus } from '../../api/ksefApi'
 import { getStoredToken } from '../../auth/session'
 import {
@@ -67,6 +68,12 @@ function parseNum(s: string): number {
   return Number.isFinite(x) ? x : 0
 }
 
+function filterLineNameSuggestions(query: string, pool: string[]): string[] {
+  const q = query.trim().toLowerCase()
+  if (!q) return pool
+  return pool.filter((n) => n.toLowerCase().includes(q))
+}
+
 type Props = {
   open: boolean
   onClose: () => void
@@ -99,6 +106,7 @@ export function SalesInvoiceDialog({ open, onClose, onSubmit }: Props) {
   const [previewOpen, setPreviewOpen] = useState(false)
   const [ksefConnector, setKsefConnector] = useState<KsefConnectorStatus | null>(null)
   const [sendKsefAfterSave, setSendKsefAfterSave] = useState(false)
+  const [lineNameSuggestions, setLineNameSuggestions] = useState<string[]>([])
 
   useEffect(() => {
     if (!issueDate) return
@@ -127,6 +135,9 @@ export function SalesInvoiceDialog({ open, onClose, onSubmit }: Props) {
         setContractorId((prev) => prev || (c[0]?.id ?? ''))
       })
       .catch(() => setContractors([]))
+    void fetchSalesLineNameSuggestions(token)
+      .then((r) => setLineNameSuggestions(r.names))
+      .catch(() => setLineNameSuggestions([]))
   }, [open])
 
   useEffect(() => {
@@ -329,6 +340,12 @@ export function SalesInvoiceDialog({ open, onClose, onSubmit }: Props) {
         buildPayload(status),
         status === 'RECEIVED' && invoiceType === 'VAT' ? { sendToKsef: sendKsefAfterSave } : undefined,
       )
+      const t = getStoredToken()
+      if (t) {
+        void fetchSalesLineNameSuggestions(t)
+          .then((r) => setLineNameSuggestions(r.names))
+          .catch(() => {})
+      }
       onClose()
       setNumber('')
       setNotes('')
@@ -534,6 +551,11 @@ export function SalesInvoiceDialog({ open, onClose, onSubmit }: Props) {
           </div>
 
           <div className="sales-inv__lines-wrap">
+            <datalist id="sales-inv-line-names-datalist">
+              {lineNameSuggestions.map((n) => (
+                <option key={n} value={n} />
+              ))}
+            </datalist>
             <div className="sales-inv__lines-head">Nazwa towaru lub usługi · GTU · ilość · cena · VAT</div>
             <div className="sales-inv__lines-scroll">
               <table className="sales-inv__table">
@@ -554,10 +576,34 @@ export function SalesInvoiceDialog({ open, onClose, onSubmit }: Props) {
                 <tbody>
                   {lines.map((l, idx) => {
                     const { netValue, grossValue } = lineComputed[idx] ?? { netValue: 0, grossValue: 0 }
+                    const namePick = filterLineNameSuggestions(l.name, lineNameSuggestions)
                     return (
                       <tr key={l.id}>
-                        <td>
-                          <input className="input input--table" value={l.name} onChange={(e) => patchLine(l.id, { name: e.target.value })} />
+                        <td className="sales-inv__line-name-td">
+                          <div className="sales-inv__line-name-wrap">
+                            <input
+                              className="input input--table"
+                              value={l.name}
+                              list="sales-inv-line-names-datalist"
+                              placeholder="Nazwa lub wybierz z historii"
+                              onChange={(e) => patchLine(l.id, { name: e.target.value })}
+                            />
+                            {l.name.trim().length > 0 && namePick.length > 0 && (
+                              <ul className="sales-inv__pick-list">
+                                {namePick.slice(0, 8).map((n) => (
+                                  <li key={n}>
+                                    <button
+                                      type="button"
+                                      className="sales-inv__pick-item"
+                                      onClick={() => patchLine(l.id, { name: n })}
+                                    >
+                                      <span className="sales-inv__pick-name">{n}</span>
+                                    </button>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
                         </td>
                         <td>
                           <select className="input input--table" value={l.gtu} onChange={(e) => patchLine(l.id, { gtu: e.target.value })}>

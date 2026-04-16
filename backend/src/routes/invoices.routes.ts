@@ -37,6 +37,19 @@ const invoicesRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
+  app.get(
+    "/invoices/sales-line-name-suggestions",
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        tags: ["Invoices"],
+        summary: "Distinct line names from sales invoices (tenant), newest first",
+      },
+    },
+    async (request) =>
+      invoiceService.listSalesLineNameSuggestions(app.prisma, request.authUser!.tenantId),
+  );
+
   app.post(
     "/invoices",
     {
