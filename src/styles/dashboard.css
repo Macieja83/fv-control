@@ -1736,6 +1736,29 @@ html[data-theme='dark'] .upload-bar__status--error { color: #f87171; }
   margin-top: 1.5rem;
 }
 
+.integration-card--ksef {
+  max-width: 52rem;
+}
+
+.ksef-block {
+  min-width: 0;
+}
+
+.ksef-block__title {
+  margin: 0 0 0.55rem;
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text-heading);
+}
+
+.ksef-block--credentials {
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border-light);
+}
+
 .bank-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));

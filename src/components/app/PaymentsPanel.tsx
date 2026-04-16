@@ -286,19 +286,25 @@ export function PaymentsPanel(props: { embedded?: boolean }) {
             </p>
           </section>
 
-          <section className="integration-card">
-            <h3 className="workspace-panel__h3">KSeF — synchronizacja faktur (import z API)</h3>
+          <section className="integration-card integration-card--ksef">
+            <h3 className="workspace-panel__h3">KSeF</h3>
             <p className="workspace-panel__muted">
-              Worker okresowo pobiera metadane i XML z KSeF. Tu widzisz ostatni przebieg i możesz wymusić kolejkę ręcznie
-              (wymaga skonfigurowanych poświadczeń i worker + Redis na serwerze).
+              Jedna integracja: <strong>poświadczenia</strong> do API MF oraz <strong>import faktur</strong> (worker
+              okresowo pobiera metadane i XML). Wymaga działającego workera i Redis po stronie serwera.
             </p>
-            {!ksefConnector?.configured && (
+
+            <div className="ksef-block">
+              <h4 className="ksef-block__title">Synchronizacja (import z API)</h4>
               <p className="workspace-panel__muted">
-                Najpierw zapisz poświadczenia KSeF poniżej — bez tego synchronizacja się nie uruchomi.
+                Stan ostatniego przebiegu i kolejki — możesz wymusić synchronizację ręcznie (gdy poświadczenia są zapisane).
               </p>
-            )}
-            {ksefConnector && (
-              <dl className="detail-dl" style={{ marginBottom: 12 }}>
+              {!ksefConnector?.configured && (
+                <p className="workspace-panel__muted">
+                  Najpierw zapisz poświadczenia w sekcji niżej — bez tego synchronizacja się nie uruchomi.
+                </p>
+              )}
+              {ksefConnector && (
+                <dl className="detail-dl" style={{ marginBottom: 12 }}>
                 <dt>Znacznik przyrostu (HWM)</dt>
                 <dd className="mono" style={{ marginBottom: 8 }}>
                   {ksefConnector.lastSyncHwmDate != null && ksefConnector.lastSyncHwmDate !== ''
@@ -409,161 +415,162 @@ export function PaymentsPanel(props: { embedded?: boolean }) {
                       </dd>
                     </>
                   )}
-              </dl>
-            )}
-            {syncMsg && (
-              <p
-                className={
-                  syncMsg.startsWith('Zadanie zapisane') || syncMsg.includes('już jest w kolejce')
-                    ? 'workspace-panel__ok'
-                    : 'workspace-panel__err'
-                }
-              >
-                {syncMsg}
-              </p>
-            )}
-            <div className="settings-form__actions">
-              <button
-                type="button"
-                className="btn-primary"
-                disabled={syncRunBusy || syncRefreshing || !ksefConnector?.configured || ksefConnector?.environment === 'mock'}
-                onClick={() => void onRunKsefSync()}
-              >
-                {syncRunBusy ? 'Kolejkowanie…' : 'Synchronizuj teraz'}
-              </button>
-              <button type="button" className="btn-ghost" disabled={syncRefreshing || syncRunBusy} onClick={() => void onRefreshKsefSync()}>
-                {syncRefreshing ? 'Odświeżanie…' : 'Odśwież status'}
-              </button>
-            </div>
-          </section>
-
-          <section className="integration-card">
-            <h3 className="workspace-panel__h3">KSeF — poświadczenia tej firmy</h3>
-            <p className="workspace-panel__muted">
-              Dane z portalu MF (token lub zaszyfrowany klucz + PIN) oraz opcjonalnie certyfikat X.509 są zapisywane
-              szyfrowane w bazie i używane wyłącznie dla tego konta. Aktywne API:{' '}
-              <strong>{ksefMeta?.environment ?? '—'}</strong>
-              {ksefMeta ?
-                <>
-                  {' '}
-                  (serwer: <span className="mono">{ksefMeta.serverEnvironment}</span>
-                  {ksefMeta.ksefEnvOverride ?
-                    <>
-                      {' '}
-                      · nadpisanie: <strong>{ksefMeta.ksefEnvOverride}</strong>
-                    </>
-                  : null}
-                  ).
-                </>
-              : null}
-            </p>
-            {ksefMeta && (
-              <label className="settings-form" style={{ marginBottom: 12 }}>
-                <span>Środowisko API KSeF dla tej firmy</span>
-                <select
-                  disabled={ksefEnvSaving}
-                  value={ksefMeta.ksefEnvOverride ?? ''}
-                  onChange={(e) => void onKsefEnvSelect(e.target.value)}
+                </dl>
+              )}
+              {syncMsg && (
+                <p
+                  className={
+                    syncMsg.startsWith('Zadanie zapisane') || syncMsg.includes('już jest w kolejce')
+                      ? 'workspace-panel__ok'
+                      : 'workspace-panel__err'
+                  }
                 >
-                  <option value="">Domyślnie (jak KSEF_ENV na serwerze: {ksefMeta.serverEnvironment})</option>
-                  <option value="sandbox">Wymuszaj sandbox (testowe API MF)</option>
-                  <option value="production">Wymuszaj produkcję</option>
-                </select>
-              </label>
-            )}
-            {ksefMeta && !ksefMeta.tenantNipOk && (
-              <p className="workspace-panel__err">
-                Uzupełnij poprawny 10-cyfrowy NIP w sekcji <strong>Nazwa firmy / NIP</strong> powyżej — bez tego KSeF nie
-                zadziała.
-              </p>
-            )}
-            {ksefMeta?.storedCredential && (
+                  {syncMsg}
+                </p>
+              )}
+              <div className="settings-form__actions">
+                <button
+                  type="button"
+                  className="btn-primary"
+                  disabled={syncRunBusy || syncRefreshing || !ksefConnector?.configured || ksefConnector?.environment === 'mock'}
+                  onClick={() => void onRunKsefSync()}
+                >
+                  {syncRunBusy ? 'Kolejkowanie…' : 'Synchronizuj teraz'}
+                </button>
+                <button type="button" className="btn-ghost" disabled={syncRefreshing || syncRunBusy} onClick={() => void onRefreshKsefSync()}>
+                  {syncRefreshing ? 'Odświeżanie…' : 'Odśwież status'}
+                </button>
+              </div>
+            </div>
+
+            <div className="ksef-block ksef-block--credentials">
+              <h4 className="ksef-block__title">Poświadczenia tej firmy</h4>
               <p className="workspace-panel__muted">
-                Zapisana konfiguracja: <strong>tak</strong>
-                {ksefMeta.authMode ? (
+                Dane z portalu MF (token lub zaszyfrowany klucz + PIN) oraz opcjonalnie certyfikat X.509 są zapisywane
+                szyfrowane w bazie i używane wyłącznie dla tego konta. Aktywne API:{' '}
+                <strong>{ksefMeta?.environment ?? '—'}</strong>
+                {ksefMeta ?
                   <>
                     {' '}
-                    · tryb: <strong>{ksefMeta.authMode}</strong>
+                    (serwer: <span className="mono">{ksefMeta.serverEnvironment}</span>
+                    {ksefMeta.ksefEnvOverride ?
+                      <>
+                        {' '}
+                        · nadpisanie: <strong>{ksefMeta.ksefEnvOverride}</strong>
+                      </>
+                    : null}
+                    ).
                   </>
-                ) : null}
-                .
+                : null}
               </p>
-            )}
-            {ksefMsg && (
-              <p
-                className={
-                  ksefMsg.startsWith('Zapisano') ||
-                  ksefMsg.startsWith('Usunięto') ||
-                  ksefMsg.startsWith('Połączenie OK')
-                    ? 'workspace-panel__ok'
-                    : 'workspace-panel__err'
-                }
-              >
-                {ksefMsg}
+              {ksefMeta && (
+                <label className="settings-form" style={{ marginBottom: 12 }}>
+                  <span>Środowisko API KSeF dla tej firmy</span>
+                  <select
+                    disabled={ksefEnvSaving}
+                    value={ksefMeta.ksefEnvOverride ?? ''}
+                    onChange={(e) => void onKsefEnvSelect(e.target.value)}
+                  >
+                    <option value="">Domyślnie (jak KSEF_ENV na serwerze: {ksefMeta.serverEnvironment})</option>
+                    <option value="sandbox">Wymuszaj sandbox (testowe API MF)</option>
+                    <option value="production">Wymuszaj produkcję</option>
+                  </select>
+                </label>
+              )}
+              {ksefMeta && !ksefMeta.tenantNipOk && (
+                <p className="workspace-panel__err">
+                  Uzupełnij poprawny 10-cyfrowy NIP w sekcji <strong>Nazwa firmy / NIP</strong> powyżej — bez tego KSeF nie
+                  zadziała.
+                </p>
+              )}
+              {ksefMeta?.storedCredential && (
+                <p className="workspace-panel__muted">
+                  Zapisana konfiguracja: <strong>tak</strong>
+                  {ksefMeta.authMode ? (
+                    <>
+                      {' '}
+                      · tryb: <strong>{ksefMeta.authMode}</strong>
+                    </>
+                  ) : null}
+                  .
+                </p>
+              )}
+              {ksefMsg && (
+                <p
+                  className={
+                    ksefMsg.startsWith('Zapisano') ||
+                    ksefMsg.startsWith('Usunięto') ||
+                    ksefMsg.startsWith('Połączenie OK')
+                      ? 'workspace-panel__ok'
+                      : 'workspace-panel__err'
+                  }
+                >
+                  {ksefMsg}
+                </p>
+              )}
+              <label className="settings-form">
+                <span>Token / zaszyfrowany klucz (z portalu KSeF lub PEM)</span>
+                <textarea
+                  className="settings-form__textarea"
+                  rows={6}
+                  value={ksefToken}
+                  onChange={(e) => setKsefToken(e.target.value)}
+                  placeholder="Wklej zaszyfrowany ciąg Base64 z MF, PEM klucza lub surowy token (gdy bez PIN)…"
+                  autoComplete="off"
+                />
+              </label>
+              <label className="settings-form">
+                <span>Hasło / PIN do odszyfrowania (puste, jeśli token jest już jawny)</span>
+                <input
+                  type="password"
+                  value={ksefPin}
+                  onChange={(e) => setKsefPin(e.target.value)}
+                  autoComplete="new-password"
+                />
+              </label>
+              <label className="settings-form">
+                <span>Certyfikat (opcjonalnie) — wklej PEM lub wybierz plik .pem / .crt</span>
+                <textarea
+                  className="settings-form__textarea"
+                  rows={4}
+                  value={ksefCertText}
+                  onChange={(e) => setKsefCertText(e.target.value)}
+                  placeholder="-----BEGIN CERTIFICATE----- … (tylko przy uwierzytelnianiu certyfikatem)"
+                />
+              </label>
+              <label className="settings-form">
+                <span>Plik certyfikatu</span>
+                <input
+                  type="file"
+                  accept=".pem,.crt,.cer"
+                  onChange={(e) => void onCertFile(e.target.files?.[0] ?? null)}
+                />
+              </label>
+              <p className="workspace-panel__muted" style={{ marginTop: '0.5rem' }}>
+                <strong>Test połączenia</strong> wykonuje pełne logowanie do API MF (bez zapisu faktur). „Formularz” używa
+                pól powyżej — możesz sprawdzić dane przed zapisem.
               </p>
-            )}
-            <label className="settings-form">
-              <span>Token / zaszyfrowany klucz (z portalu KSeF lub PEM)</span>
-              <textarea
-                className="settings-form__textarea"
-                rows={6}
-                value={ksefToken}
-                onChange={(e) => setKsefToken(e.target.value)}
-                placeholder="Wklej zaszyfrowany ciąg Base64 z MF, PEM klucza lub surowy token (gdy bez PIN)…"
-                autoComplete="off"
-              />
-            </label>
-            <label className="settings-form">
-              <span>Hasło / PIN do odszyfrowania (puste, jeśli token jest już jawny)</span>
-              <input
-                type="password"
-                value={ksefPin}
-                onChange={(e) => setKsefPin(e.target.value)}
-                autoComplete="new-password"
-              />
-            </label>
-            <label className="settings-form">
-              <span>Certyfikat (opcjonalnie) — wklej PEM lub wybierz plik .pem / .crt</span>
-              <textarea
-                className="settings-form__textarea"
-                rows={4}
-                value={ksefCertText}
-                onChange={(e) => setKsefCertText(e.target.value)}
-                placeholder="-----BEGIN CERTIFICATE----- … (tylko przy uwierzytelnianiu certyfikatem)"
-              />
-            </label>
-            <label className="settings-form">
-              <span>Plik certyfikatu</span>
-              <input
-                type="file"
-                accept=".pem,.crt,.cer"
-                onChange={(e) => void onCertFile(e.target.files?.[0] ?? null)}
-              />
-            </label>
-            <p className="workspace-panel__muted" style={{ marginTop: '0.5rem' }}>
-              <strong>Test połączenia</strong> wykonuje pełne logowanie do API MF (bez zapisu faktur). „Formularz” używa
-              pól powyżej — możesz sprawdzić dane przed zapisem.
-            </p>
-            <div className="settings-form__actions">
-              <button type="button" className="btn-ghost" disabled={testBusy || ksefSaving} onClick={() => void onTestKsefSaved()}>
-                {testBusy ? 'Test…' : 'Testuj zapisane'}
-              </button>
-              <button
-                type="button"
-                className="btn-ghost"
-                disabled={testBusy || ksefSaving || !ksefToken.trim()}
-                onClick={() => void onTestKsefDraft()}
-              >
-                {testBusy ? 'Test…' : 'Testuj formularz (bez zapisu)'}
-              </button>
-            </div>
-            <div className="settings-form__actions">
-              <button type="button" className="btn-primary" disabled={ksefSaving || testBusy || !ksefToken.trim()} onClick={() => void onSaveKsef()}>
-                {ksefSaving ? 'Zapis…' : 'Zapisz KSeF'}
-              </button>
-              <button type="button" className="btn-ghost" disabled={ksefSaving || testBusy || !ksefMeta?.storedCredential} onClick={() => void onRemoveKsef()}>
-                Usuń poświadczenia KSeF
-              </button>
+              <div className="settings-form__actions">
+                <button type="button" className="btn-ghost" disabled={testBusy || ksefSaving} onClick={() => void onTestKsefSaved()}>
+                  {testBusy ? 'Test…' : 'Testuj zapisane'}
+                </button>
+                <button
+                  type="button"
+                  className="btn-ghost"
+                  disabled={testBusy || ksefSaving || !ksefToken.trim()}
+                  onClick={() => void onTestKsefDraft()}
+                >
+                  {testBusy ? 'Test…' : 'Testuj formularz (bez zapisu)'}
+                </button>
+              </div>
+              <div className="settings-form__actions">
+                <button type="button" className="btn-primary" disabled={ksefSaving || testBusy || !ksefToken.trim()} onClick={() => void onSaveKsef()}>
+                  {ksefSaving ? 'Zapis…' : 'Zapisz KSeF'}
+                </button>
+                <button type="button" className="btn-ghost" disabled={ksefSaving || testBusy || !ksefMeta?.storedCredential} onClick={() => void onRemoveKsef()}>
+                  Usuń poświadczenia KSeF
+                </button>
+              </div>
             </div>
           </section>
         </>
