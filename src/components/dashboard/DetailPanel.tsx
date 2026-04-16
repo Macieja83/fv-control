@@ -513,16 +513,15 @@ export function DetailPanel({
 
               <section className="detail-section">
                 <h3>Źródło wpływu</h3>
-                <dl className="detail-dl">
-                  <dt>Typ</dt>
-                  <dd><SourceBadge type={row.source_type} /></dd>
-                  <dt>Konto / integracja</dt>
-                  <dd>{row.source_account}</dd>
-                  <dt>Message ID</dt>
-                  <dd className="mono wrap">{row.message_id ?? '—'}</dd>
-                  <dt>Hash załącznika</dt>
-                  <dd className="mono wrap">{row.attachment_hash ?? '—'}</dd>
-                </dl>
+                <div className="detail-source-channel">
+                  {row.invoice_status === 'INGESTING' ? (
+                    <span className="badge badge--source" title="Przetwarzanie OCR / kolejka">
+                      OCR
+                    </span>
+                  ) : (
+                    <SourceBadge type={row.source_type} />
+                  )}
+                </div>
               </section>
 
               <section className="detail-section">
