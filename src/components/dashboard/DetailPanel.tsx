@@ -426,8 +426,8 @@ export function DetailPanel({
                 </div>
                 <div className="detail-actions__group">
                   <span className="detail-actions__label">Kategoria i typ</span>
-                  <div className="detail-actions__row">
-                    <label className="field field--inline">
+                  <div className="detail-actions__row detail-actions__row--category-scope">
+                    <label className="field detail-actions__field-category">
                       <span className="field__label">Kategoria</span>
                       <select
                         className="input"

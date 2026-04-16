@@ -997,6 +997,27 @@ html[data-theme='dark'] .btn-icon-del { color: #f87171; }
 }
 .detail-actions__row .field--inline { margin: 0; flex: 1 1 140px; min-width: 0; }
 .detail-actions__row .field__label { font-size: 0.68rem; }
+
+/* Kategoria + Firma/Prywatna: select na całą szerokość wiersza, przyciski pod spodem — bez nachodzenia */
+.detail-actions__row--category-scope {
+  align-items: stretch;
+}
+.detail-actions__field-category.field {
+  flex: 1 1 100%;
+  width: 100%;
+  min-width: 0;
+}
+.detail-actions__field-category .input,
+.detail-actions__field-category select.input {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.detail-actions__row--category-scope > .btn {
+  flex: 0 0 auto;
+  align-self: flex-start;
+}
 .detail-actions__danger {
   padding-top: 0.35rem;
   border-top: 1px dashed var(--border-light);
