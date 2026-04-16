@@ -2,6 +2,8 @@ export type PlatformTenantRow = {
   id: string
   name: string
   nip: string | null
+  /** null = aktywny; data ISO gdy tenant oznaczony jako usunięty (soft delete). */
+  deletedAt?: string | null
   createdAt: string
   userCount: number
   invoiceCount: number
@@ -11,6 +13,7 @@ export type PlatformTenantRow = {
     provider: string
     providerCustomerId: string | null
     providerSubscriptionId: string | null
+    currentPeriodStart?: string | null
     currentPeriodEnd: string | null
     trialEndsAt: string | null
   } | null

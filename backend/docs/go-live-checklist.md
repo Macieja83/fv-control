@@ -8,8 +8,8 @@ Ten dokument jest listą **go/no-go** pod start sprzedaży subskrypcji.
 - [ ] Ustaw `FEATURE_AI_EXTRACTION_MOCK=false` (w prod start API powinien failować, jeśli true).
 - [ ] Ustaw silne sekrety: `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`.
 - [ ] Ustaw `ENCRYPTION_KEY` jako base64 32B.
-- [ ] Ustaw `WEBHOOK_SIGNING_SECRET` (inbound podpisy webhooków).
 - [ ] Ustaw `METRICS_BEARER_TOKEN` i ogranicz `/metrics` w ingress (private/alowlist).
+- [ ] (Opcjonalnie) Zewnętrzna automatyzacja: **nie** używamy już n8n ani `webhooks_outbox` — integracje są w aplikacji (KSeF, IMAP, billing Stripe).
 - [ ] Ustaw `PLATFORM_ADMIN_EMAIL`.
 - [ ] Zweryfikuj `CORS_ORIGINS` tylko dla produkcyjnych domen.
 
@@ -36,10 +36,10 @@ Ten dokument jest listą **go/no-go** pod start sprzedaży subskrypcji.
 
 ## D-3: monitoring i alerty
 
-- [ ] Dashboard metryk: 5xx, latency, dead-letter webhooków, queue health.
+- [ ] Dashboard metryk: 5xx, latency, kolejki BullMQ / worker, błędy KSeF.
 - [ ] Alerty:
   - [ ] `/ready != 200` > X minut,
-  - [ ] rosnące `fvcontrol_webhook_dead_letter_total`,
+  - [ ] rosnące `processing_jobs` w stanie `DEAD_LETTER` lub zatory kolejek,
   - [ ] skok 401/403 auth.
 - [ ] Zespół zna runbooki z `docs/runbooks.md`.
 

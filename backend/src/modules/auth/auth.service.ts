@@ -358,6 +358,7 @@ export async function listTenantsForSuperAdmin(prisma: PrismaClient, limit = 200
     id: t.id,
     name: t.name,
     nip: t.nip,
+    deletedAt: t.deletedAt,
     createdAt: t.createdAt,
     userCount: t._count.users,
     invoiceCount: t._count.invoices,
@@ -370,6 +371,7 @@ export async function listTenantsForSuperAdmin(prisma: PrismaClient, limit = 200
         provider: s.provider,
         providerCustomerId: s.providerCustomerId,
         providerSubscriptionId: s.providerSubscriptionId,
+        currentPeriodStart: s.currentPeriodStart,
         currentPeriodEnd: s.currentPeriodEnd,
         trialEndsAt: s.trialEndsAt,
       };

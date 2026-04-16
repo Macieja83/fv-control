@@ -50,7 +50,7 @@ describe("billing webhooks idempotency", () => {
       },
     });
     const payload = {
-      id: "evt_test_dedupe_1",
+      id: `evt_test_dedupe_${Date.now()}_${Math.random().toString(16).slice(2)}`,
       type: "invoice.paid",
       data: {
         object: {
@@ -96,7 +96,7 @@ describe("billing webhooks idempotency", () => {
   it("deduplicates repeated P24 event id", async () => {
     const tenant = await prisma.tenant.findFirstOrThrow({ orderBy: { createdAt: "asc" } });
     const payload = {
-      eventId: "p24_evt_dedupe_1",
+      eventId: `p24_evt_dedupe_${Date.now()}_${Math.random().toString(16).slice(2)}`,
       tenantId: tenant.id,
       status: "PAID",
       planCode: "pro",

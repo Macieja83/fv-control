@@ -5,7 +5,7 @@ Stan na teraz po wdrożeniach z audytu.
 ## 1) Zamknięte w kodzie (DONE)
 
 - [x] Wymuszenie `FEATURE_AI_EXTRACTION_MOCK=false` w `production` (fail-fast).
-- [x] Wymuszenie `WEBHOOK_SIGNING_SECRET` w `production`.
+- [x] Usunięto zależność od n8n / `webhooks_outbox` (brak wychodzących webhooków automatyzacji).
 - [x] Ochrona `/metrics` + wymagany `METRICS_BEARER_TOKEN` w `production`.
 - [x] Dodatkowe rate-limity auth: `register`, `refresh`, `verify-email`, `resend-verification`.
 - [x] Idempotencja webhooków billingowych (Stripe/P24) po `eventId`.
@@ -23,7 +23,7 @@ Stan na teraz po wdrożeniach z audytu.
 - [ ] Ustawić produkcyjne sekrety i potwierdzić ich poprawność:
   - [ ] `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`
   - [ ] `ENCRYPTION_KEY` (base64 32B)
-  - [ ] `WEBHOOK_SIGNING_SECRET`
+  - [ ] (pominięte) `WEBHOOK_SIGNING_SECRET` — nie jest już wymagane w konfiguracji produkcyjnej
   - [ ] `METRICS_BEARER_TOKEN`
   - [ ] `STRIPE_SECRET_KEY`, `STRIPE_BILLING_WEBHOOK_SECRET`, `STRIPE_PRICE_ID_PRO`
 - [ ] Ograniczyć dostęp do `/metrics` na poziomie ingress (allowlist/private).
