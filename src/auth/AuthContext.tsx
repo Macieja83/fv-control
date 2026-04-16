@@ -52,6 +52,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let cancelled = false
     const run = async () => {
+      if (typeof window !== 'undefined' && window.location.hash.startsWith('#fv_oauth=')) {
+        try {
+          const raw = decodeURIComponent(window.location.hash.slice('#fv_oauth='.length))
+          const parsed = JSON.parse(raw) as { accessToken?: string }
+          if (parsed.accessToken) {
+            setStoredToken(parsed.accessToken)
+            const url = new URL(window.location.href)
+            url.hash = ''
+            window.history.replaceState(null, '', url.pathname + url.search)
+          }
+        } catch {
+          /* ignore malformed oauth hash */
+        }
+      }
+
       const token = getStoredToken()
       if (!token) {
         if (!cancelled) setStatus('guest')

@@ -1,20 +1,48 @@
 import crypto from "node:crypto";
 import jwt from "jsonwebtoken";
 import type { PrismaClient, UserRole } from "@prisma/client";
-import { isPlatformAdminEmail, loadConfig } from "../../config.js";
+import {
+  type AppConfig,
+  isPlatformAdminEmail,
+  isSmtpConfigured,
+  loadConfig,
+  shouldExposeVerificationToken,
+} from "../../config.js";
 import { AppError } from "../../lib/errors.js";
+import { sendTenantVerificationEmail } from "../../lib/mailer.js";
 import { signAccessToken } from "../../lib/jwt.js";
 import { hashPassword, verifyPassword } from "../../lib/password.js";
 import { generateRefreshToken, hashOpaqueToken } from "../../lib/token-hash.js";
 import type { BillingPlanCode } from "../billing/subscription-plans.js";
 import type { LoginInput, RegisterInput } from "./auth.schema.js";
 
-type GoogleStatePayload = {
-  typ: "google_state";
-  nonce: string;
-};
+export type GoogleOAuthLoginResult =
+  | {
+      outcome: "session";
+      user: ReturnType<typeof sanitizeUser>;
+      accessToken: string;
+      refreshToken: string;
+      expiresIn: number;
+    }
+  | { outcome: "verify_email_pending"; email: string };
+
+export function buildGoogleOAuthCallbackRedirect(cfg: AppConfig, result: GoogleOAuthLoginResult): string {
+  const base = cfg.WEB_APP_URL.replace(/\/$/, "");
+  if (result.outcome === "verify_email_pending") {
+    return `${base}/login?verify_pending=1`;
+  }
+  const hashPayload = JSON.stringify({ accessToken: result.accessToken });
+  return `${base}/login#fv_oauth=${encodeURIComponent(hashPayload)}`;
+}
 
 export async function registerTenantAccount(prisma: PrismaClient, input: RegisterInput) {
+  const cfg = loadConfig();
+  if (cfg.NODE_ENV === "production" && !isSmtpConfigured(cfg)) {
+    throw AppError.unavailable(
+      "Wysyłka e-maili nie jest skonfigurowana. Ustaw SMTP (SMTP_HOST, EMAIL_FROM) na serwerze.",
+    );
+  }
+
   const exists = await prisma.user.findUnique({ where: { email: input.email.toLowerCase() } });
   if (exists) throw AppError.conflict("Email already exists");
 
@@ -52,11 +80,18 @@ export async function registerTenantAccount(prisma: PrismaClient, input: Registe
 
   const verificationToken = await issueEmailVerificationToken(prisma, result.user.id, result.user.tenantId);
 
+  try {
+    await sendTenantVerificationEmail(cfg, result.user.email, verificationToken);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    throw AppError.internal(`Nie udało się wysłać wiadomości e-mail: ${msg}`);
+  }
+
   return {
     tenant: { id: result.tenant.id, name: result.tenant.name, nip: result.tenant.nip },
     user: sanitizeUser(result.user),
     needsEmailVerification: true,
-    ...(loadConfig().NODE_ENV !== "production" ? { verificationToken } : {}),
+    ...(shouldExposeVerificationToken(cfg) ? { verificationToken } : {}),
   };
 }
 
@@ -236,11 +271,23 @@ export async function verifyEmail(prisma: PrismaClient, token: string) {
 }
 
 export async function resendEmailVerification(prisma: PrismaClient, email: string) {
+  const cfg = loadConfig();
   const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
   if (!user) return { sent: true };
   if (user.emailVerified) return { sent: true };
+  if (cfg.NODE_ENV === "production" && !isSmtpConfigured(cfg)) {
+    throw AppError.unavailable(
+      "Wysyłka e-maili nie jest skonfigurowana. Ustaw SMTP (SMTP_HOST, EMAIL_FROM) na serwerze.",
+    );
+  }
   const token = await issueEmailVerificationToken(prisma, user.id, user.tenantId);
-  return { sent: true, ...(loadConfig().NODE_ENV !== "production" ? { verificationToken: token } : {}) };
+  try {
+    await sendTenantVerificationEmail(cfg, user.email, token);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    throw AppError.internal(`Nie udało się wysłać wiadomości e-mail: ${msg}`);
+  }
+  return { sent: true, ...(shouldExposeVerificationToken(cfg) ? { verificationToken: token } : {}) };
 }
 
 export function buildGoogleAuthUrl(mode: "login" | "register"): string {
@@ -249,7 +296,7 @@ export function buildGoogleAuthUrl(mode: "login" | "register"): string {
     throw AppError.unavailable("Google OAuth is not configured");
   }
   const state = jwt.sign(
-    { typ: "google_state", nonce: crypto.randomUUID(), mode } as GoogleStatePayload & { mode: string },
+    { typ: "google_state", nonce: crypto.randomUUID(), mode },
     cfg.JWT_ACCESS_SECRET,
     { expiresIn: "10m", algorithm: "HS256" },
   );
@@ -263,7 +310,11 @@ export function buildGoogleAuthUrl(mode: "login" | "register"): string {
   return url.toString();
 }
 
-export async function loginWithGoogleCode(prisma: PrismaClient, code: string, state: string) {
+export async function loginWithGoogleCode(
+  prisma: PrismaClient,
+  code: string,
+  state: string,
+): Promise<GoogleOAuthLoginResult> {
   const cfg = loadConfig();
   if (!cfg.GOOGLE_CLIENT_ID || !cfg.GOOGLE_CLIENT_SECRET || !cfg.GOOGLE_OAUTH_REDIRECT_URI) {
     throw AppError.unavailable("Google OAuth is not configured");
@@ -325,6 +376,11 @@ export async function loginWithGoogleCode(prisma: PrismaClient, code: string, st
       });
       await prisma.user.update({ where: { id: existing.id }, data: { emailVerified: true } });
     } else {
+      if (cfg.NODE_ENV === "production" && !isSmtpConfigured(cfg)) {
+        throw AppError.unavailable(
+          "Wysyłka e-maili nie jest skonfigurowana. Ustaw SMTP (SMTP_HOST, EMAIL_FROM), aby aktywować konta przez link.",
+        );
+      }
       const tenantBase = (userInfo.name?.trim() || email.split("@")[0] || "Nowa firma").slice(0, 180);
       const created = await prisma.$transaction(async (tx) => {
         const selectedPlan: BillingPlanCode = "free";
@@ -336,7 +392,7 @@ export async function loginWithGoogleCode(prisma: PrismaClient, code: string, st
             passwordHash: null,
             role: "OWNER",
             isActive: true,
-            emailVerified: true,
+            emailVerified: false,
           },
         });
         await tx.subscription.create({
@@ -368,8 +424,28 @@ export async function loginWithGoogleCode(prisma: PrismaClient, code: string, st
 
   if (!identity) throw AppError.internal("Google identity not found after login flow");
   if (!identity.user.isActive) throw AppError.unauthorized("User inactive");
+
+  if (!identity.user.emailVerified) {
+    const verificationToken = await issueEmailVerificationToken(
+      prisma,
+      identity.user.id,
+      identity.user.tenantId,
+    );
+    try {
+      await sendTenantVerificationEmail(cfg, identity.user.email, verificationToken);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw AppError.internal(`Nie udało się wysłać wiadomości e-mail: ${msg}`);
+    }
+    return { outcome: "verify_email_pending", email: identity.user.email };
+  }
+
   const tokens = await issueTokens(prisma, identity.user.id, identity.user.tenantId, identity.user.role);
-  return { user: sanitizeUser(identity.user), ...tokens };
+  return {
+    outcome: "session",
+    user: sanitizeUser(identity.user),
+    ...tokens,
+  };
 }
 
 export async function listTenantsForSuperAdmin(prisma: PrismaClient, limit = 200) {

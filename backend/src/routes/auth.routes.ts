@@ -225,9 +225,26 @@ const authRoutes: FastifyPluginAsync = async (app) => {
   app.get(
     "/auth/google/callback",
     { schema: { tags: ["Auth"], summary: "Google OAuth callback" } },
-    async (request) => {
-      const q = parseOrThrow(googleCallbackSchema, request.query ?? {});
-      return authService.loginWithGoogleCode(app.prisma, q.code, q.state);
+    async (request, reply) => {
+      const cfg = loadConfig();
+      const base = cfg.WEB_APP_URL.replace(/\/$/, "");
+      const q = request.query as Record<string, string | undefined>;
+      if (q.error) {
+        const desc = (q.error_description ?? q.error ?? "oauth_error").slice(0, 500);
+        return reply.redirect(`${base}/login?oauth_error=${encodeURIComponent(desc)}`, 302);
+      }
+      if (!q.code?.trim() || !q.state?.trim()) {
+        return reply.redirect(`${base}/login?oauth_error=${encodeURIComponent("missing_oauth_code")}`, 302);
+      }
+      try {
+        const parsed = parseOrThrow(googleCallbackSchema, { code: q.code, state: q.state });
+        const result = await authService.loginWithGoogleCode(app.prisma, parsed.code, parsed.state);
+        const url = authService.buildGoogleOAuthCallbackRedirect(cfg, result);
+        return reply.redirect(url, 302);
+      } catch (e) {
+        const msg = e instanceof AppError ? e.message : "oauth_failed";
+        return reply.redirect(`${base}/login?oauth_error=${encodeURIComponent(msg)}`, 302);
+      }
     },
   );
 

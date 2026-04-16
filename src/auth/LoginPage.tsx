@@ -27,6 +27,26 @@ export default function LoginPage({ initialMode = 'login' }: LoginPageProps) {
 
   useEffect(() => {
     const q = new URLSearchParams(window.location.search)
+    if (q.get('verify_pending') === '1') {
+      setMode('verify')
+      setOk('Konto utworzone. Otwórz skrzynkę e-mail i kliknij link aktywacyjny (także po rejestracji przez Google).')
+      const url = new URL(window.location.href)
+      url.searchParams.delete('verify_pending')
+      const search = url.searchParams.toString()
+      window.history.replaceState(null, '', `${url.pathname}${search ? `?${search}` : ''}`)
+    }
+    const oauthErr = q.get('oauth_error')
+    if (oauthErr) {
+      setError(oauthErr)
+      const url = new URL(window.location.href)
+      url.searchParams.delete('oauth_error')
+      const search = url.searchParams.toString()
+      window.history.replaceState(null, '', `${url.pathname}${search ? `?${search}` : ''}`)
+    }
+  }, [])
+
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search)
     const tokenFromUrl = q.get('token')?.trim() ?? ''
     if (!tokenFromUrl) return
     setMode('verify')
@@ -64,7 +84,7 @@ export default function LoginPage({ initialMode = 'login' }: LoginPageProps) {
         })
         setMode('verify')
         setOk('Konto utworzone. Potwierdź e-mail, aby aktywować dostęp.')
-        setDevTokenHint(reg.verificationToken ?? null)
+        setDevTokenHint(import.meta.env.DEV ? (reg.verificationToken ?? null) : null)
       } else {
         await loginWithVerificationToken(verificationToken.trim())
       }
@@ -92,7 +112,7 @@ export default function LoginPage({ initialMode = 'login' }: LoginPageProps) {
     try {
       const data = await resendVerificationRequest(email.trim())
       setOk('Wysłano ponownie link weryfikacyjny.')
-      setDevTokenHint(data.verificationToken ?? null)
+      setDevTokenHint(import.meta.env.DEV ? (data.verificationToken ?? null) : null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Nie udało się wysłać ponownie.')
     } finally {
@@ -192,9 +212,9 @@ export default function LoginPage({ initialMode = 'login' }: LoginPageProps) {
             </p>
           )}
           {ok && <p className="login-ok">{ok}</p>}
-          {devTokenHint && mode === 'verify' && (
+          {import.meta.env.DEV && devTokenHint && mode === 'verify' && (
             <p className="login-dev-token">
-              DEV token: <code>{devTokenHint}</code>
+              DEV token (tylko lokalnie): <code>{devTokenHint}</code>
             </p>
           )}
 

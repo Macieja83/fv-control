@@ -72,6 +72,23 @@ const envSchema = z.object({
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   GOOGLE_OAUTH_REDIRECT_URI: z.string().url().optional(),
   WEB_APP_URL: z.string().url().default("http://localhost:5173"),
+
+  /** Wysyłka e-maili weryfikacyjnych (nodemailer). Na produkcji ustaw SMTP_HOST + EMAIL_FROM. */
+  SMTP_HOST: z.preprocess((v) => (v === "" || v === undefined ? undefined : String(v).trim()), z.string().min(1).optional()),
+  SMTP_PORT: z.coerce.number().int().positive().default(587),
+  SMTP_SECURE: z.coerce.boolean().default(false),
+  SMTP_USER: z.preprocess((v) => (v === "" || v === undefined ? undefined : String(v)), z.string().optional()),
+  SMTP_PASS: z.preprocess((v) => (v === "" || v === undefined ? undefined : String(v)), z.string().optional()),
+  /** Nadawca (np. "FV Resta <noreply@twojadomena.pl>"). */
+  EMAIL_FROM: z.string().min(3).default("FV Resta <noreply@example.com>"),
+  /**
+   * Gdy "true", API rejestracji zwraca verificationToken (tylko testy / smoke).
+   * Gdy "false" lub brak: w produkcji nigdy nie zwracaj; w development bez ustawienia — zwraca jak dotąd (wygoda lokalna).
+   */
+  AUTH_EXPOSE_VERIFICATION_TOKEN: z.preprocess(
+    (v) => (v === "" || v === undefined ? undefined : String(v)),
+    z.enum(["true", "false"]).optional(),
+  ),
   /**
    * Jedno konto operatora platformy (lista tenantów, impersonacja, /platform-admin/*).
    * Produkcja: ustaw na adres operatora (np. kontakt@tuttopizza.pl).
@@ -264,6 +281,17 @@ export function loadConfig(): AppConfig {
 
 export function getCorsOriginList(): string[] {
   return parseCorsOrigins(loadConfig().CORS_ORIGINS);
+}
+
+export function isSmtpConfigured(cfg: AppConfig): boolean {
+  return Boolean(cfg.SMTP_HOST && cfg.SMTP_HOST.length > 0);
+}
+
+/** Czy API może zwracać verificationToken w JSON (wyłącz na VPS / produkcji). */
+export function shouldExposeVerificationToken(cfg: AppConfig): boolean {
+  if (cfg.AUTH_EXPOSE_VERIFICATION_TOKEN === "true") return true;
+  if (cfg.AUTH_EXPOSE_VERIFICATION_TOKEN === "false") return false;
+  return cfg.NODE_ENV !== "production";
 }
 
 /** E-maile z uprawnieniami operatora platformy (zakładka Admin + API platform-admin). */

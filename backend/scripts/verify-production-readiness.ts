@@ -44,6 +44,9 @@ function main() {
   const web = process.env.WEB_APP_URL?.trim() ?? "";
   if (!web.startsWith("https://")) warn("WEB_APP_URL powinien używać https:// na produkcji.");
 
+  const smtpHost = process.env.SMTP_HOST?.trim() ?? "";
+  if (!smtpHost) fail("SMTP_HOST jest wymagany do wysyłki linków weryfikacyjnych (rejestracja e-mail i Google).");
+
   const ksefNoGlobal = process.env.KSEF_DISABLE_GLOBAL_FALLBACK === "true";
   if (!ksefNoGlobal) {
     warn("Ustaw KSEF_DISABLE_GLOBAL_FALLBACK=true dla SaaS wielotenancyjnego (bez globalnego KSEF_TOKEN dla klientów).");
