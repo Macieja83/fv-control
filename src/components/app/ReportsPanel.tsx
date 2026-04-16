@@ -57,7 +57,7 @@ export function ReportsPanel() {
   const { status } = useAuth()
   const [filters, setFilters] = useState<InvoiceFilters>(() => ({
     ...EMPTY_FILTERS,
-    ...defaultReportsDateRange(92),
+    ...defaultReportsDateRange(),
   }))
   const [rawRows, setRawRows] = useState<InvoiceRecord[]>([])
   /** Ostatnie poprawne pobranie było z API — nie stosuj ponownie filtra dat po stronie klienta. */
@@ -197,7 +197,8 @@ export function ReportsPanel() {
           <p className="workspace-panel__lead">
             Wykresy sum brutto według kategorii — dane z <strong>API / bazy</strong> po zalogowaniu (jak lista faktur,
             bez podziału na koszt/sprzedaż w zapytaniu). Te same filtry co na fakturach: dostawca, kategoria, płatność,
-            typ… Domyślnie ostatnie ~92 dni — możesz zmienić <strong>Od–Do</strong> i kliknąć „Odśwież z API”.
+            typ… Domyślnie od <strong>początku bieżącego miesiąca do dzisiaj</strong> — możesz zmienić <strong>Od–Do</strong> i
+            kliknąć „Odśwież z API”.
             Faktury w imporcie (INGESTING) są pomijane.
           </p>
         </header>

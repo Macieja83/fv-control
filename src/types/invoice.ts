@@ -130,13 +130,12 @@ export const EMPTY_FILTERS: InvoiceFilters = {
   restaurant: '',
 }
 
-/** Domyślny zakres pod Raporty (ostatnie N dni) — szerszy niż bieżący miesiąc, żeby API zwracało dane z bazy. */
-export function defaultReportsDateRange(days = 92): Pick<InvoiceFilters, 'dateFrom' | 'dateTo'> {
-  const end = new Date()
-  const start = new Date()
-  start.setDate(start.getDate() - days)
+/** Domyślny zakres pod Raporty: od 1. dnia bieżącego miesiąca do dzisiaj (lokalna data przeglądarki). */
+export function defaultReportsDateRange(): Pick<InvoiceFilters, 'dateFrom' | 'dateTo'> {
+  const now = new Date()
+  const first = new Date(now.getFullYear(), now.getMonth(), 1)
   return {
-    dateFrom: localYmd(start),
-    dateTo: localYmd(end),
+    dateFrom: localYmd(first),
+    dateTo: localYmd(now),
   }
 }
