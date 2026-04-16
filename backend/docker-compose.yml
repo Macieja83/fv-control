@@ -1,3 +1,5 @@
+# Lokalny stack: Postgres + Redis + API + worker.
+# Migracje Prisma: uruchamiane przy starcie kontenera **api** (Dockerfile CMD) — worker nie powtarza `migrate deploy`.
 services:
   postgres:
     image: postgres:16-alpine
@@ -41,6 +43,18 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
     environment:
       NODE_ENV: production
       HOST: 0.0.0.0
@@ -62,9 +76,11 @@ services:
       S3_SECRET_KEY: ${S3_SECRET_KEY:-minio123456}
       S3_BUCKET: ${S3_BUCKET:-fvcontrol-documents}
       S3_FORCE_PATH_STYLE: "true"
-      FEATURE_AI_EXTRACTION_MOCK: ${FEATURE_AI_EXTRACTION_MOCK:-true}
+      # NODE_ENV=production: loadConfig() wymaga false + METRICS_BEARER_TOKEN (min. 24 znaki).
+      FEATURE_AI_EXTRACTION_MOCK: ${FEATURE_AI_EXTRACTION_MOCK:-false}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      METRICS_BEARER_TOKEN: ${METRICS_BEARER_TOKEN:-compose-local-metrics-bearer-token!!}
     ports:
       - "3000:3000"
     volumes:
@@ -75,11 +91,12 @@ services:
       redis:
         condition: service_healthy
 
+  # Worker startuje po healthy API — wtedy `prisma migrate deploy` w CMD obrazu API już się wykonał.
   worker:
     build:
       context: .
       dockerfile: Dockerfile
-    command: ["sh", "-c", "npx prisma migrate deploy && node dist/worker.js"]
+    command: ["node", "dist/worker.js"]
     environment:
       NODE_ENV: production
       DATABASE_URL: postgresql://fvresta:fvresta@postgres:5432/fvresta?schema=public
@@ -98,9 +115,10 @@ services:
       S3_SECRET_KEY: ${S3_SECRET_KEY:-minio123456}
       S3_BUCKET: ${S3_BUCKET:-fvcontrol-documents}
       S3_FORCE_PATH_STYLE: "true"
-      FEATURE_AI_EXTRACTION_MOCK: ${FEATURE_AI_EXTRACTION_MOCK:-true}
+      FEATURE_AI_EXTRACTION_MOCK: ${FEATURE_AI_EXTRACTION_MOCK:-false}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      METRICS_BEARER_TOKEN: ${METRICS_BEARER_TOKEN:-compose-local-metrics-bearer-token!!}
       IMAP_AUTO_SYNC_INTERVAL_MS: ${IMAP_AUTO_SYNC_INTERVAL_MS:-300000}
       HOUSEKEEPING_INTERVAL_MS: ${HOUSEKEEPING_INTERVAL_MS:-60000}
     volumes:
@@ -109,6 +127,8 @@ services:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      api:
         condition: service_healthy
 
 volumes:

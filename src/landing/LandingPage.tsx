@@ -1,17 +1,37 @@
 import {
   benefits,
   features,
+  planTiers,
   stats,
   steps,
   testimonials,
   trustItems,
   type LandingFeature,
+  type LandingPlanTier,
   type LandingStep,
 } from './landingContent'
 import './landing.css'
 
 type LandingPageProps = {
   onNavigateAuth: (target: 'login' | 'register') => void
+  onNavigateLegal: (target: 'terms' | 'privacy') => void
+}
+
+function PlanCard(tier: LandingPlanTier) {
+  return (
+    <article
+      className={`landing-plan${tier.highlighted ? ' landing-plan--pro' : ''}`}
+      aria-label={`Plan ${tier.name}`}
+    >
+      <h3>{tier.name}</h3>
+      <p className="landing-plan__price">{tier.priceLabel}</p>
+      <ul>
+        {tier.bullets.map((b) => (
+          <li key={b}>{b}</li>
+        ))}
+      </ul>
+    </article>
+  )
 }
 
 function FeatureCard({ icon, title, description }: LandingFeature) {
@@ -40,7 +60,11 @@ function StepCard({ title, description }: LandingStep) {
   )
 }
 
-export default function LandingPage({ onNavigateAuth }: LandingPageProps) {
+export default function LandingPage({ onNavigateAuth, onNavigateLegal }: LandingPageProps) {
+  const supportEmail =
+    typeof import.meta.env.VITE_PUBLIC_SUPPORT_EMAIL === 'string' && import.meta.env.VITE_PUBLIC_SUPPORT_EMAIL.trim()
+      ? import.meta.env.VITE_PUBLIC_SUPPORT_EMAIL.trim()
+      : 'kontakt@tuttopizza.pl'
   return (
     <div className="landing-page">
       <main id="main-content">
@@ -77,6 +101,21 @@ export default function LandingPage({ onNavigateAuth }: LandingPageProps) {
                   <h3>{benefit.title}</h3>
                   <p>{benefit.description}</p>
                 </article>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="landing-section" aria-labelledby="landing-pricing-title">
+          <div className="landing-container">
+            <h2 id="landing-pricing-title">Plany i subskrypcja</h2>
+            <p className="landing-lead landing-lead--narrow">
+              Limit na planie Free liczy <strong>faktury oraz umowy</strong> razem. Abonament PRO rozliczany jest w
+              aplikacji — nie mylić z płatnościami za faktury do kontrahentów (to przelew z faktury).
+            </p>
+            <div className="landing-grid landing-grid--plans">
+              {planTiers.map((tier) => (
+                <PlanCard key={tier.name} {...tier} />
               ))}
             </div>
           </div>
@@ -145,9 +184,13 @@ export default function LandingPage({ onNavigateAuth }: LandingPageProps) {
       <footer className="landing-footer">
         <div className="landing-container landing-footer__inner">
           <nav className="landing-footer__links" aria-label="Linki informacyjne">
-            <a href="#">Polityka prywatnosci</a>
-            <a href="#">Regulamin</a>
-            <a href="#">Kontakt</a>
+            <button type="button" className="landing-footer__linkbtn" onClick={() => onNavigateLegal('privacy')}>
+              Polityka prywatności
+            </button>
+            <button type="button" className="landing-footer__linkbtn" onClick={() => onNavigateLegal('terms')}>
+              Regulamin
+            </button>
+            <a href={`mailto:${supportEmail}`}>Kontakt</a>
           </nav>
           <p className="landing-footer__note">
             Dane Twojej firmy są chronione zgodnie z dobrymi praktykami bezpieczeństwa i polityką ochrony danych.

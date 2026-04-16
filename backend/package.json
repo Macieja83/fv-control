@@ -37,7 +37,10 @@
     "pipeline:cleanup-broken-jobs": "tsx scripts/cleanup-broken-pipeline-jobs.ts",
     "repair:ksef-primary-xml": "tsx scripts/repair-ksef-primary-xml.ts",
     "smoke:tenant-journey": "tsx scripts/smoke-tenant-journey.ts",
-    "smoke:ksef-readiness": "tsx scripts/smoke-ksef-readiness.ts"
+    "smoke:ksef-readiness": "tsx scripts/smoke-ksef-readiness.ts",
+    "verify:production-readiness": "tsx scripts/verify-production-readiness.ts",
+    "verify:billing-config": "tsx scripts/verify-stripe-billing-config.ts",
+    "print:go-live-checklist": "tsx scripts/print-go-live-checklist.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

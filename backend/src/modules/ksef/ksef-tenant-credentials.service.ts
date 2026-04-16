@@ -106,11 +106,13 @@ export async function loadKsefClientForTenant(
   prisma: PrismaClient,
   tenantId: string,
 ): Promise<KsefClient | null> {
+  const cfg = loadConfig();
   const effective = await getEffectiveKsefApiEnv(prisma, tenantId);
   if (effective === "mock") return null;
   const tenantClient = await tryLoadTenantOnlyKsefClient(prisma, tenantId, effective);
   if (tenantClient) return tenantClient;
-  return buildGlobalKsefClient(loadConfig(), effective);
+  if (cfg.KSEF_DISABLE_GLOBAL_FALLBACK) return null;
+  return buildGlobalKsefClient(cfg, effective);
 }
 
 export type KsefCredentialSource = "tenant" | "global" | "none";
@@ -119,11 +121,13 @@ export async function resolveKsefCredentialSource(
   prisma: PrismaClient,
   tenantId: string,
 ): Promise<{ source: KsefCredentialSource; client: KsefClient | null }> {
+  const cfg = loadConfig();
   const effective = await getEffectiveKsefApiEnv(prisma, tenantId);
   if (effective === "mock") return { source: "none", client: null };
   const tenantClient = await tryLoadTenantOnlyKsefClient(prisma, tenantId, effective);
   if (tenantClient) return { source: "tenant", client: tenantClient };
-  const global = buildGlobalKsefClient(loadConfig(), effective);
+  if (cfg.KSEF_DISABLE_GLOBAL_FALLBACK) return { source: "none", client: null };
+  const global = buildGlobalKsefClient(cfg, effective);
   if (global) return { source: "global", client: global };
   return { source: "none", client: null };
 }

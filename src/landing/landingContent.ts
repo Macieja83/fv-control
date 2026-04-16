@@ -84,15 +84,44 @@ export const features: LandingFeature[] = [
 export const steps: LandingStep[] = [
   {
     title: 'Załóż konto',
-    description: 'Uruchom konto firmowe i skonfiguruj podstawowe dane organizacji.',
+    description: 'E-mail i hasło lub Google. Uzupełnij NIP firmy w ustawieniach.',
   },
   {
-    title: 'Dodaj faktury i kontrahentów',
-    description: 'Wprowadź dokumenty kosztowe i sprzedażowe oraz przypisz je do partnerów.',
+    title: 'Połącz KSeF',
+    description: 'W sekcji Płatności wklej token z portalu MF, PIN oraz opcjonalnie certyfikat — potem synchronizacja faktur.',
   },
   {
-    title: 'Monitoruj wyniki i terminy w jednym panelu',
-    description: 'Na bieżąco kontroluj statusy płatności, saldo oraz kluczowe wskaźniki finansowe.',
+    title: 'Kontroluj dokumenty i subskrypcję',
+    description: 'Plan Free: do 15 dokumentów (faktury + umowy). PRO: bez limitu — abonament w aplikacji (Stripe).',
+  },
+]
+
+export type LandingPlanTier = {
+  name: string
+  priceLabel: string
+  bullets: string[]
+  highlighted?: boolean
+}
+
+export const planTiers: LandingPlanTier[] = [
+  {
+    name: 'Free',
+    priceLabel: '0 zł',
+    bullets: [
+      'Do 15 dokumentów łącznie: faktury i umowy w jednym workspace',
+      'Integracja KSeF po stronie klienta (własne poświadczenia MF)',
+      'Logowanie e-mailem i hasłem lub przez Google',
+    ],
+  },
+  {
+    name: 'PRO',
+    priceLabel: '99 zł / mies.',
+    highlighted: true,
+    bullets: [
+      'Bez limitu dokumentów (faktury + umowy)',
+      'Subskrypcja rozliczana w aplikacji (karta / Google Pay / Apple Pay przez Stripe)',
+      'Customer Portal Stripe do zarządzania płatnością',
+    ],
   },
 ]
 
