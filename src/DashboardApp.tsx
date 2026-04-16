@@ -57,7 +57,6 @@ export default function DashboardApp() {
     filters,
     setFilters,
     pickKpi,
-    quickFilter,
     invoiceLedger,
     setInvoiceLedger,
     kpi,
@@ -187,7 +186,6 @@ export default function DashboardApp() {
             review={kpi.review}
             noCat={kpi.noCat}
             unknownVendor={kpi.unknownVendor}
-            activeFilter={quickFilter ?? 'all'}
             onPickFilter={pickKpi}
           />
           <FilterBar

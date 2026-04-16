@@ -385,10 +385,20 @@ export function DetailPanel({
                 <div className="detail-actions__group">
                   <span className="detail-actions__label">Płatność</span>
                   <div className="detail-actions__row">
-                    <button type="button" className="btn btn--primary btn--sm" onClick={() => onPaid(row.id)}>
+                    <button
+                      type="button"
+                      className={`btn btn--primary btn--sm${row.payment_status === 'paid' ? ' detail-actions__btn--on' : ''}`}
+                      aria-pressed={row.payment_status === 'paid'}
+                      onClick={() => onPaid(row.id)}
+                    >
                       Zapłacona
                     </button>
-                    <button type="button" className="btn btn--sm" onClick={() => onUnpaid(row.id)}>
+                    <button
+                      type="button"
+                      className={`btn btn--sm${row.payment_status === 'unpaid' ? ' detail-actions__btn--on' : ''}`}
+                      aria-pressed={row.payment_status === 'unpaid'}
+                      onClick={() => onUnpaid(row.id)}
+                    >
                       Niezapłacona
                     </button>
                   </div>
@@ -396,10 +406,20 @@ export function DetailPanel({
                 <div className="detail-actions__group">
                   <span className="detail-actions__label">Przegląd</span>
                   <div className="detail-actions__row">
-                    <button type="button" className="btn btn--sm" onClick={() => onNeedsReview(row.id)}>
+                    <button
+                      type="button"
+                      className={`btn btn--sm${row.review_status === 'needs_review' ? ' detail-actions__btn--on' : ''}`}
+                      aria-pressed={row.review_status === 'needs_review'}
+                      onClick={() => onNeedsReview(row.id)}
+                    >
                       Do sprawdzenia
                     </button>
-                    <button type="button" className="btn btn--sm" onClick={() => onClearReview(row.id)}>
+                    <button
+                      type="button"
+                      className={`btn btn--sm${row.review_status === 'cleared' ? ' detail-actions__btn--on' : ''}`}
+                      aria-pressed={row.review_status === 'cleared'}
+                      onClick={() => onClearReview(row.id)}
+                    >
                       Wyczyść przegląd
                     </button>
                   </div>
@@ -427,10 +447,20 @@ export function DetailPanel({
                         ))}
                       </select>
                     </label>
-                    <button type="button" className="btn btn--sm" onClick={() => onBusiness(row.id)}>
+                    <button
+                      type="button"
+                      className={`btn btn--sm${row.document_scope === 'business' ? ' detail-actions__btn--on' : ''}`}
+                      aria-pressed={row.document_scope === 'business'}
+                      onClick={() => onBusiness(row.id)}
+                    >
                       Firma
                     </button>
-                    <button type="button" className="btn btn--sm" onClick={() => onPrivate(row.id)}>
+                    <button
+                      type="button"
+                      className={`btn btn--sm${row.document_scope === 'private' ? ' detail-actions__btn--on' : ''}`}
+                      aria-pressed={row.document_scope === 'private'}
+                      onClick={() => onPrivate(row.id)}
+                    >
                       Prywatna
                     </button>
                   </div>
@@ -438,10 +468,20 @@ export function DetailPanel({
                 <div className="detail-actions__group">
                   <span className="detail-actions__label">Duplikaty</span>
                   <div className="detail-actions__row">
-                    <button type="button" className="btn btn--sm btn--danger-outline" onClick={() => onConfirmDup(row.id)}>
+                    <button
+                      type="button"
+                      className={`btn btn--sm btn--danger-outline${row.duplicate_resolution === 'confirmed' ? ' detail-actions__btn--on' : ''}`}
+                      aria-pressed={row.duplicate_resolution === 'confirmed'}
+                      onClick={() => onConfirmDup(row.id)}
+                    >
                       Potwierdź
                     </button>
-                    <button type="button" className="btn btn--sm" onClick={() => onRejectDup(row.id)}>
+                    <button
+                      type="button"
+                      className={`btn btn--sm${row.duplicate_resolution === 'rejected' ? ' detail-actions__btn--on' : ''}`}
+                      aria-pressed={row.duplicate_resolution === 'rejected'}
+                      onClick={() => onRejectDup(row.id)}
+                    >
                       Odrzuć
                     </button>
                     {row.duplicate_of_id && linkedRow && (
