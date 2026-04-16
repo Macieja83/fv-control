@@ -39,5 +39,15 @@ export const googleCallbackSchema = z.object({
   state: z.string().min(10),
 });
 
+/** Pierwsze hasło dla konta utworzonego wyłącznie przez Google (passwordHash = null). */
+export const setInitialPasswordSchema = z.object({
+  password: passwordSchema,
+});
+
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1).max(128),
+  password: passwordSchema,
+});
+
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;

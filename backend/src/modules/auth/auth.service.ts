@@ -60,6 +60,33 @@ export async function registerTenantAccount(prisma: PrismaClient, input: Registe
   };
 }
 
+export async function setInitialPassword(prisma: PrismaClient, userId: string, password: string): Promise<void> {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user?.isActive) throw AppError.unauthorized();
+  if (user.passwordHash) {
+    throw AppError.conflict("Hasło jest już ustawione — użyj zmiany hasła.");
+  }
+  const passwordHash = await hashPassword(password);
+  await prisma.user.update({ where: { id: userId }, data: { passwordHash } });
+}
+
+export async function changePassword(
+  prisma: PrismaClient,
+  userId: string,
+  currentPassword: string,
+  newPassword: string,
+): Promise<void> {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user?.isActive) throw AppError.unauthorized();
+  if (!user.passwordHash) {
+    throw AppError.validation("Najpierw ustaw hasło (konto powstało przez Google).");
+  }
+  const ok = await verifyPassword(currentPassword, user.passwordHash);
+  if (!ok) throw AppError.unauthorized("Aktualne hasło jest nieprawidłowe.");
+  const passwordHash = await hashPassword(newPassword);
+  await prisma.user.update({ where: { id: userId }, data: { passwordHash } });
+}
+
 export async function login(prisma: PrismaClient, input: LoginInput) {
   try {
     const user = await prisma.user.findUnique({
@@ -448,7 +475,9 @@ function sanitizeUser(user: {
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
+  passwordHash?: string | null;
 }) {
+  const hasPassword = user.passwordHash != null && user.passwordHash.length > 0;
   return {
     id: user.id,
     tenantId: user.tenantId,
@@ -457,6 +486,7 @@ function sanitizeUser(user: {
     emailVerified: user.emailVerified,
     isPlatformAdmin: isPlatformAdminEmail(user.email),
     isActive: user.isActive,
+    hasPassword,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
   };

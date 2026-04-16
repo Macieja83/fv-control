@@ -19,6 +19,8 @@ export type LoginSuccess = {
     tenantId: string
     emailVerified: boolean
     isPlatformAdmin: boolean
+    /** false tylko dla kont wyłącznie Google (do ustawienia hasła w Ustawieniach). */
+    hasPassword: boolean
   }
 }
 
@@ -27,6 +29,7 @@ type BackendLoginUser = {
   tenantId?: string
   emailVerified?: boolean
   isSuperAdmin?: boolean
+  hasPassword?: boolean
 }
 
 type BackendLoginBody = {
@@ -79,6 +82,8 @@ export async function loginRequest(email: string, password: string): Promise<Log
   }
   const expiresIn = typeof data.expiresIn === 'number' ? data.expiresIn : 0
   const resolvedEmail = typeof data.user?.email === 'string' ? data.user.email : email
+  const hasPassword =
+    typeof data.user?.hasPassword === 'boolean' ? data.user.hasPassword : true
   return {
     accessToken,
     expiresIn,
@@ -87,6 +92,7 @@ export async function loginRequest(email: string, password: string): Promise<Log
       tenantId: typeof data.user?.tenantId === 'string' ? data.user.tenantId : '',
       emailVerified: data.user?.emailVerified === true,
       isPlatformAdmin: readIsPlatformAdmin(data.user),
+      hasPassword,
     },
   }
 }
@@ -98,6 +104,7 @@ export async function sessionRequest(token: string): Promise<{
     tenantId: string
     emailVerified: boolean
     isPlatformAdmin: boolean
+    hasPassword: boolean
     tenantName?: string | null
     impersonation?: SessionImpersonation
   }
@@ -113,6 +120,7 @@ export async function sessionRequest(token: string): Promise<{
     emailVerified?: boolean
     isPlatformAdmin?: boolean
     isSuperAdmin?: boolean
+    hasPassword?: boolean
     tenantName?: string | null
     impersonation?: SessionImpersonation
   }
@@ -129,6 +137,7 @@ export async function sessionRequest(token: string): Promise<{
               typeof imp.effectiveTenantNip === 'string' || imp.effectiveTenantNip === null ? imp.effectiveTenantNip : undefined,
           }
         : null
+    const hasPassword = typeof data.hasPassword === 'boolean' ? data.hasPassword : true
     return {
       valid: true,
       user: {
@@ -136,6 +145,7 @@ export async function sessionRequest(token: string): Promise<{
         tenantId: typeof data.tenantId === 'string' ? data.tenantId : '',
         emailVerified: data.emailVerified === true,
         isPlatformAdmin: readIsPlatformAdmin(data),
+        hasPassword,
         tenantName: typeof data.tenantName === 'string' || data.tenantName === null ? data.tenantName : undefined,
         impersonation,
       },
@@ -189,6 +199,8 @@ export async function verifyEmailRequest(token: string): Promise<LoginSuccess> {
   if (!res.ok) throw new Error(readLoginErrorMessage(body, res.status))
   const accessToken = body.accessToken
   if (!accessToken || !body.user?.email) throw new Error('Brak poprawnej odpowiedzi weryfikacji.')
+  const hasPassword =
+    typeof body.user.hasPassword === 'boolean' ? body.user.hasPassword : true
   return {
     accessToken,
     expiresIn: typeof body.expiresIn === 'number' ? body.expiresIn : 0,
@@ -197,8 +209,55 @@ export async function verifyEmailRequest(token: string): Promise<LoginSuccess> {
       tenantId: typeof body.user.tenantId === 'string' ? body.user.tenantId : '',
       emailVerified: body.user.emailVerified === true,
       isPlatformAdmin: readIsPlatformAdmin(body.user),
+      hasPassword,
     },
   }
+}
+
+export async function setInitialPasswordRequest(token: string, password: string): Promise<void> {
+  const res = await fetch('/api/v1/auth/set-initial-password', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ password }),
+  })
+  if (res.ok || res.status === 204) return
+  const raw = await res.text()
+  let msg = `Nie udało się zapisać hasła (${res.status})`
+  try {
+    const j = raw ? (JSON.parse(raw) as BackendErrorBody) : {}
+    msg = readLoginErrorMessage(j, res.status)
+  } catch {
+    /* ignore */
+  }
+  throw new Error(msg)
+}
+
+export async function changePasswordRequest(
+  token: string,
+  currentPassword: string,
+  password: string,
+): Promise<void> {
+  const res = await fetch('/api/v1/auth/change-password', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ currentPassword, password }),
+  })
+  if (res.ok || res.status === 204) return
+  const raw = await res.text()
+  let msg = `Zmiana hasła nieudana (${res.status})`
+  try {
+    const j = raw ? (JSON.parse(raw) as BackendErrorBody) : {}
+    msg = readLoginErrorMessage(j, res.status)
+  } catch {
+    /* ignore */
+  }
+  throw new Error(msg)
 }
 
 export async function resendVerificationRequest(email: string): Promise<{ verificationToken?: string }> {

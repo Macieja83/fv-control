@@ -18,13 +18,14 @@ import {
 
 import { fetchTenantProfile, patchTenantProfile, type TenantProfileResponse } from '../../api/tenantApi'
 
+import { changePasswordRequest, setInitialPasswordRequest } from '../../auth/authApi'
 import { getStoredToken } from '../../auth/session'
 import { useAuth } from '../../auth/AuthContext'
 
 
 
 export function SettingsPanel() {
-  const { user } = useAuth()
+  const { user, refreshUser } = useAuth()
 
   const [name, setName] = useState('')
 
@@ -38,6 +39,20 @@ export function SettingsPanel() {
   const [err, setErr] = useState<string | null>(null)
 
   const [ok, setOk] = useState(false)
+
+  const [pwdInitial, setPwdInitial] = useState('')
+
+  const [pwdInitial2, setPwdInitial2] = useState('')
+
+  const [pwdCurrent, setPwdCurrent] = useState('')
+
+  const [pwdNew, setPwdNew] = useState('')
+
+  const [pwdNew2, setPwdNew2] = useState('')
+
+  const [pwdBusy, setPwdBusy] = useState(false)
+
+  const [pwdMsg, setPwdMsg] = useState<string | null>(null)
 
 
 
@@ -298,6 +313,112 @@ export function SettingsPanel() {
 
   }
 
+  const onSetInitialPassword = async (e: React.FormEvent) => {
+
+    e.preventDefault()
+
+    const token = getStoredToken()
+
+    if (!token) return
+
+    setPwdMsg(null)
+
+    if (pwdInitial.length < 8) {
+
+      setPwdMsg('Hasło musi mieć co najmniej 8 znaków.')
+
+      return
+
+    }
+
+    if (pwdInitial !== pwdInitial2) {
+
+      setPwdMsg('Powtórzone hasło jest inne.')
+
+      return
+
+    }
+
+    setPwdBusy(true)
+
+    try {
+
+      await setInitialPasswordRequest(token, pwdInitial)
+
+      setPwdInitial('')
+
+      setPwdInitial2('')
+
+      setPwdMsg('Hasło zapisane. Możesz logować się także e-mailem i hasłem.')
+
+      await refreshUser()
+
+    } catch (err: unknown) {
+
+      setPwdMsg(err instanceof Error ? err.message : String(err))
+
+    } finally {
+
+      setPwdBusy(false)
+
+    }
+
+  }
+
+  const onChangePassword = async (e: React.FormEvent) => {
+
+    e.preventDefault()
+
+    const token = getStoredToken()
+
+    if (!token) return
+
+    setPwdMsg(null)
+
+    if (pwdNew.length < 8) {
+
+      setPwdMsg('Nowe hasło musi mieć co najmniej 8 znaków.')
+
+      return
+
+    }
+
+    if (pwdNew !== pwdNew2) {
+
+      setPwdMsg('Powtórzone nowe hasło jest inne.')
+
+      return
+
+    }
+
+    setPwdBusy(true)
+
+    try {
+
+      await changePasswordRequest(token, pwdCurrent, pwdNew)
+
+      setPwdCurrent('')
+
+      setPwdNew('')
+
+      setPwdNew2('')
+
+      setPwdMsg('Hasło zostało zmienione.')
+
+      await refreshUser()
+
+    } catch (err: unknown) {
+
+      setPwdMsg(err instanceof Error ? err.message : String(err))
+
+    } finally {
+
+      setPwdBusy(false)
+
+    }
+
+  }
+
 
 
   return (
@@ -337,6 +458,10 @@ export function SettingsPanel() {
               {user?.emailVerified ? '✅' : '⬜'} Weryfikacja e-mail właściciela konta
             </li>
             <li>
+              {user?.hasPassword ? '✅' : '⬜'} Hasło do logowania (e-mail){' '}
+              {!user?.hasPassword && <span className="workspace-panel__muted">— wymagane przy koncie tylko z Google</span>}
+            </li>
+            <li>
               {nip.replace(/\s/g, '').length >= 10 ? '✅' : '⬜'} Uzupełniony NIP firmy
             </li>
             <li>
@@ -346,6 +471,87 @@ export function SettingsPanel() {
               {(subscription?.status === 'ACTIVE' || subscription?.status === 'TRIALING') ? '✅' : '⬜'} Aktywna subskrypcja (trial/active)
             </li>
           </ul>
+        </section>
+      )}
+
+      {!loading && user && (
+        <section className="integration-card integration-card--tight" style={{ marginBottom: 16 }}>
+          <h3 className="workspace-panel__h3">Hasło do konta</h3>
+          <p className="workspace-panel__muted">
+            Logowanie przez Google pozostaje bez zmian. Hasło pozwala zalogować się tym samym e-mailem z ekranu logowania.
+          </p>
+          {pwdMsg && <p className={pwdMsg.includes('zapisane') || pwdMsg.includes('zmienione') ? 'workspace-panel__ok' : 'workspace-panel__err'}>{pwdMsg}</p>}
+          {!user.hasPassword ? (
+            <form className="settings-form" onSubmit={onSetInitialPassword}>
+              <label>
+                <span>Nowe hasło (min. 8 znaków)</span>
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  value={pwdInitial}
+                  onChange={(e) => setPwdInitial(e.target.value)}
+                  disabled={pwdBusy}
+                  minLength={8}
+                />
+              </label>
+              <label>
+                <span>Powtórz hasło</span>
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  value={pwdInitial2}
+                  onChange={(e) => setPwdInitial2(e.target.value)}
+                  disabled={pwdBusy}
+                  minLength={8}
+                />
+              </label>
+              <div className="settings-form__actions">
+                <button type="submit" className="btn-primary" disabled={pwdBusy}>
+                  {pwdBusy ? 'Zapis…' : 'Ustaw hasło'}
+                </button>
+              </div>
+            </form>
+          ) : (
+            <form className="settings-form" onSubmit={onChangePassword}>
+              <label>
+                <span>Aktualne hasło</span>
+                <input
+                  type="password"
+                  autoComplete="current-password"
+                  value={pwdCurrent}
+                  onChange={(e) => setPwdCurrent(e.target.value)}
+                  disabled={pwdBusy}
+                />
+              </label>
+              <label>
+                <span>Nowe hasło (min. 8 znaków)</span>
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  value={pwdNew}
+                  onChange={(e) => setPwdNew(e.target.value)}
+                  disabled={pwdBusy}
+                  minLength={8}
+                />
+              </label>
+              <label>
+                <span>Powtórz nowe hasło</span>
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  value={pwdNew2}
+                  onChange={(e) => setPwdNew2(e.target.value)}
+                  disabled={pwdBusy}
+                  minLength={8}
+                />
+              </label>
+              <div className="settings-form__actions">
+                <button type="submit" className="btn-primary" disabled={pwdBusy}>
+                  {pwdBusy ? 'Zapis…' : 'Zmień hasło'}
+                </button>
+              </div>
+            </form>
+          )}
         </section>
       )}
 

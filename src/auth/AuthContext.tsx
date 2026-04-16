@@ -7,12 +7,19 @@ import {
   useState,
 } from 'react'
 import { clearStoredToken, getStoredToken, setStoredToken } from './session'
-import { loginRequest, logoutRequest, sessionRequest, verifyEmailRequest } from './authApi'
+import {
+  loginRequest,
+  logoutRequest,
+  sessionRequest,
+  verifyEmailRequest,
+} from './authApi'
 
 export type AuthUser = {
   email: string
   tenantId: string
   emailVerified: boolean
+  /** false — konto tylko Google; ustaw hasło w Ustawieniach, by móc logować się e-mailem. */
+  hasPassword: boolean
   /** Konto operatora platformy — zakładka Admin, API /platform-admin/*. */
   isPlatformAdmin: boolean
   tenantName?: string | null
@@ -32,6 +39,8 @@ type AuthContextValue = {
   login: (email: string, password: string) => Promise<void>
   loginWithVerificationToken: (token: string) => Promise<void>
   logout: () => Promise<void>
+  /** Odświeża /auth/me (np. po ustawieniu hasła). */
+  refreshUser: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -94,6 +103,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setStatus('guest')
   }, [])
 
+  const refreshUser = useCallback(async () => {
+    const token = getStoredToken()
+    if (!token) return
+    try {
+      const s = await sessionRequest(token)
+      if (s.valid && s.user) setUser(s.user)
+    } catch {
+      /* ignore */
+    }
+  }, [])
+
   const value = useMemo(
     () => ({
       status,
@@ -101,8 +121,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       login,
       loginWithVerificationToken,
       logout,
+      refreshUser,
     }),
-    [status, user, login, loginWithVerificationToken, logout],
+    [status, user, login, loginWithVerificationToken, logout, refreshUser],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

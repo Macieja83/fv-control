@@ -53,11 +53,18 @@ export function OnboardingChecklistBanner(props: {
     const subOk = subscriptionStatus === 'ACTIVE' || subscriptionStatus === 'TRIALING'
     return [
       { id: 'email', label: 'Potwierdzony e-mail konta', done: props.user?.emailVerified === true, nav: 'settings' },
+      { id: 'pwd', label: 'Hasło do logowania (oprócz Google)', done: props.user?.hasPassword === true, nav: 'settings' },
       { id: 'nip', label: 'Uzupełniony NIP firmy', done: nipOk, nav: 'settings' },
       { id: 'ksef', label: 'Skonfigurowane poświadczenia KSeF', done: ksefOk, nav: 'payments' },
       { id: 'sub', label: 'Aktywna subskrypcja (trial/active)', done: subOk, nav: 'settings' },
     ]
-  }, [props.user?.emailVerified, subscriptionStatus, tenant?.nip, tenant?.portalIntegrations.ksefConfigured])
+  }, [
+    props.user?.emailVerified,
+    props.user?.hasPassword,
+    subscriptionStatus,
+    tenant?.nip,
+    tenant?.portalIntegrations.ksefConfigured,
+  ])
 
   const remaining = steps.filter((s) => !s.done)
   if (remaining.length === 0) return null

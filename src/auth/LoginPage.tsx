@@ -209,6 +209,11 @@ export default function LoginPage({ initialMode = 'login' }: LoginPageProps) {
           <button type="button" className="login-google" onClick={onGoogle} disabled={loading}>
             Kontynuuj przez Google
           </button>
+          {mode !== 'verify' && (
+            <p className="login-google-hint">
+              Po pierwszym logowaniu przez Google możesz ustawić hasło w <strong>Ustawieniach</strong>, żeby logować się także e-mailem.
+            </p>
+          )}
         </form>
       </div>
     </div>

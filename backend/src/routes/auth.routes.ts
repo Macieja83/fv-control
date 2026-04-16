@@ -1,13 +1,16 @@
 import type { FastifyPluginAsync } from "fastify";
 import { loadConfig } from "../config.js";
+import { AppError } from "../lib/errors.js";
 import { parseOrThrow } from "../lib/validate.js";
 import {
+  changePasswordSchema,
   googleCallbackSchema,
   googleStartSchema,
   loginSchema,
   logoutBodySchema,
   refreshSchema,
   registerSchema,
+  setInitialPasswordSchema,
   verifyEmailSchema,
 } from "../modules/auth/auth.schema.js";
 import * as authService from "../modules/auth/auth.service.js";
@@ -143,6 +146,69 @@ const authRoutes: FastifyPluginAsync = async (app) => {
       const userId = request.authUser!.id;
       const parsed = parseOrThrow(logoutBodySchema, request.body ?? {});
       await authService.logout(app.prisma, userId, parsed.refreshToken);
+      return reply.status(204).send();
+    },
+  );
+
+  app.post(
+    "/auth/set-initial-password",
+    {
+      preHandler: [app.authenticate],
+      config: {
+        rateLimit: {
+          max: loadConfig().RATE_LIMIT_LOGIN_MAX,
+          timeWindow: loadConfig().RATE_LIMIT_LOGIN_WINDOW_MS,
+        },
+      },
+      schema: {
+        tags: ["Auth"],
+        summary: "First password for Google-only account",
+        body: {
+          type: "object",
+          required: ["password"],
+          properties: { password: { type: "string" } },
+        },
+      },
+    },
+    async (request, reply) => {
+      if (request.authUser!.impersonatedByUserId) {
+        throw AppError.forbidden("Nie można ustawiać hasła podczas impersonacji.");
+      }
+      const body = parseOrThrow(setInitialPasswordSchema, request.body);
+      await authService.setInitialPassword(app.prisma, request.authUser!.id, body.password);
+      return reply.status(204).send();
+    },
+  );
+
+  app.post(
+    "/auth/change-password",
+    {
+      preHandler: [app.authenticate],
+      config: {
+        rateLimit: {
+          max: loadConfig().RATE_LIMIT_LOGIN_MAX,
+          timeWindow: loadConfig().RATE_LIMIT_LOGIN_WINDOW_MS,
+        },
+      },
+      schema: {
+        tags: ["Auth"],
+        summary: "Change password (e-mail login)",
+        body: {
+          type: "object",
+          required: ["currentPassword", "password"],
+          properties: {
+            currentPassword: { type: "string" },
+            password: { type: "string" },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      if (request.authUser!.impersonatedByUserId) {
+        throw AppError.forbidden("Nie można zmieniać hasła podczas impersonacji.");
+      }
+      const body = parseOrThrow(changePasswordSchema, request.body);
+      await authService.changePassword(app.prisma, request.authUser!.id, body.currentPassword, body.password);
       return reply.status(204).send();
     },
   );
