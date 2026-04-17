@@ -37,7 +37,7 @@ export function CategoryBarChart({ data, variant, formatMoney, emptyHint, motion
     setBarsReady(false)
     const id = requestAnimationFrame(() => setBarsReady(true))
     return () => cancelAnimationFrame(id)
-  }, [motion, data])
+  }, [motion])
 
   if (data.length === 0) {
     return (

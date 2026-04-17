@@ -32,16 +32,19 @@ export function ReportsVisualSummary({
   useEffect(() => {
     const id = requestAnimationFrame(() => setReady(true))
     return () => cancelAnimationFrame(id)
-  }, [totalPurchase, totalSale, profit])
+  }, [])
 
-  const maxScale = Math.max(totalPurchase, totalSale, 1)
-  const saleComparePct = (totalSale / maxScale) * 100
-  const purchaseComparePct = (totalPurchase / maxScale) * 100
-
-  /** Udział kosztów i zysku w przychodzie — suma = 100% przy zysku dodatnim */
-  const costOfRevPct = totalSale > 0 ? Math.min(100, (totalPurchase / totalSale) * 100) : 0
-  const profitOfRevPct = totalSale > 0 ? Math.max(0, (profit / totalSale) * 100) : 0
-  const hasLoss = profit < 0 && totalSale > 0
+  const trendMax = Math.max(totalSale, totalPurchase, 1)
+  const toY = (value: number) => 78 - (value / trendMax) * 58
+  let saleY = toY(totalSale)
+  let purchaseY = toY(totalPurchase)
+  // Gdy linie się pokrywają, rozsuń je minimalnie żeby obie były widoczne.
+  if (Math.abs(saleY - purchaseY) < 1.2) {
+    saleY = Math.max(8, saleY - 1.2)
+    purchaseY = Math.min(78, purchaseY + 1.2)
+  }
+  const salePath = `M 8 ${saleY.toFixed(2)} L 152 ${saleY.toFixed(2)}`
+  const purchasePath = `M 8 ${purchaseY.toFixed(2)} L 152 ${purchaseY.toFixed(2)}`
 
   const r = 54
   const c = 2 * Math.PI * r
@@ -123,73 +126,19 @@ export function ReportsVisualSummary({
         </div>
       </div>
 
-      <div className="reports-pl-compare">
-        <p className="reports-pl-compare__title">Skala (max = wyższa kwota)</p>
-        <div className="reports-pl-compare__row">
-          <span className="reports-pl-compare__name">Przychody</span>
-          <div className="reports-pl-compare__track">
-            <div
-              className="reports-pl-compare__fill reports-pl-compare__fill--sale"
-              style={{ width: ready ? `${saleComparePct}%` : '0%' }}
-            />
+      <div className="reports-pl-trend" role="img" aria-label="Liniowy trend wydatków i przychodów">
+        <div className="reports-pl-trend__head">
+          <p className="reports-pl-trend__title">Trend liniowy</p>
+          <div className="reports-pl-trend__legend">
+            <span className="reports-pl-trend__legend-item reports-pl-trend__legend-item--sale">Przychody</span>
+            <span className="reports-pl-trend__legend-item reports-pl-trend__legend-item--purchase">Wydatki</span>
           </div>
-          <span className="reports-pl-compare__pct mono">{formatPct(saleComparePct, 0)}%</span>
         </div>
-        <div className="reports-pl-compare__row">
-          <span className="reports-pl-compare__name">Wydatki</span>
-          <div className="reports-pl-compare__track">
-            <div
-              className="reports-pl-compare__fill reports-pl-compare__fill--purchase"
-              style={{ width: ready ? `${purchaseComparePct}%` : '0%' }}
-            />
-          </div>
-          <span className="reports-pl-compare__pct mono">{formatPct(purchaseComparePct, 0)}%</span>
-        </div>
+        <svg className="reports-pl-trend__svg" viewBox="0 0 160 86" preserveAspectRatio="none" aria-hidden>
+          <path className="reports-pl-trend__line reports-pl-trend__line--sale" d={salePath} />
+          <path className="reports-pl-trend__line reports-pl-trend__line--purchase" d={purchasePath} />
+        </svg>
       </div>
-
-      {totalSale > 0 ? (
-        hasLoss ? (
-          <div className="reports-pl-stack reports-pl-stack--warn">
-            <p className="reports-pl-stack__title">Koszty &gt; przychód</p>
-            <div className="reports-pl-stack__track" role="img" aria-label="Udział kosztów w przychodzie">
-              <div
-                className="reports-pl-stack__seg reports-pl-stack__seg--cost"
-                style={{ width: ready ? `${Math.min(100, costOfRevPct)}%` : '0%' }}
-              />
-            </div>
-            <ul className="reports-pl-legend">
-              <li>
-                <span className="reports-pl-legend__swatch reports-pl-legend__swatch--cost" /> Koszty{' '}
-                {formatPct(Math.min(100, costOfRevPct))}%
-              </li>
-            </ul>
-          </div>
-        ) : (
-          <div className="reports-pl-stack">
-            <p className="reports-pl-stack__title">Skład przychodu</p>
-            <div className="reports-pl-stack__track" role="img" aria-label="Podział przychodu na koszty i zysk">
-              <div
-                className="reports-pl-stack__seg reports-pl-stack__seg--cost"
-                style={{ width: ready ? `${costOfRevPct}%` : '0%' }}
-                title={`Koszty: ${formatPct(costOfRevPct)}% przychodu`}
-              />
-              <div
-                className="reports-pl-stack__seg reports-pl-stack__seg--profit"
-                style={{ width: ready ? `${profitOfRevPct}%` : '0%' }}
-                title={`Zysk: ${formatPct(profitOfRevPct)}% przychodu`}
-              />
-            </div>
-            <ul className="reports-pl-legend">
-              <li>
-                <span className="reports-pl-legend__swatch reports-pl-legend__swatch--cost" /> Koszty ({formatPct(costOfRevPct)}%)
-              </li>
-              <li>
-                <span className="reports-pl-legend__swatch reports-pl-legend__swatch--profit" /> Zysk ({formatPct(profitOfRevPct)}%)
-              </li>
-            </ul>
-          </div>
-        )
-      ) : null}
 
     </section>
   )
