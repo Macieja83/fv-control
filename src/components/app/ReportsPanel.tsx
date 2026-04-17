@@ -19,6 +19,12 @@ const USE_MOCK_INVOICES =
 
 const UNASSIGNED = 'Nieprzypisane'
 
+type TrendPoint = {
+  label: string
+  sale: number
+  purchase: number
+}
+
 function money(amount: number, currency: string) {
   const c = currency.length === 3 ? currency : 'PLN'
   try {
@@ -204,6 +210,19 @@ export function ReportsPanel({ invoiceListEpoch }: ReportsPanelProps) {
   const profitMarginPct =
     totalSaleGross > 0 ? (profitGross / totalSaleGross) * 100 : null
 
+  const trendPoints = useMemo<TrendPoint[]>(() => {
+    const grouped = new Map<string, TrendPoint>()
+    for (const r of filtered) {
+      if (r.currency !== effectiveCurrency) continue
+      const label = r.issue_date
+      const prev = grouped.get(label) ?? { label, sale: 0, purchase: 0 }
+      if (r.ledger_kind === 'sale') prev.sale += r.gross_amount
+      else prev.purchase += r.gross_amount
+      grouped.set(label, prev)
+    }
+    return [...grouped.values()].sort((a, b) => a.label.localeCompare(b.label))
+  }, [filtered, effectiveCurrency])
+
   return (
     <main className="main-content main-content--padded">
       <div className="workspace-panel reports-panel">
@@ -282,6 +301,7 @@ export function ReportsPanel({ invoiceListEpoch }: ReportsPanelProps) {
             totalSale={totalSaleGross}
             profit={profitGross}
             profitMarginPct={profitMarginPct}
+            trendPoints={trendPoints}
             formatMoney={money}
           />
         ) : null}

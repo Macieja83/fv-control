@@ -7,6 +7,7 @@ type Props = {
   profit: number
   /** Marża: profit / sale * 100, gdy sale > 0 */
   profitMarginPct: number | null
+  trendPoints: Array<{ label: string; sale: number; purchase: number }>
   formatMoney: (n: number, currency: string) => string
 }
 
@@ -23,6 +24,7 @@ export function ReportsVisualSummary({
   totalSale,
   profit,
   profitMarginPct,
+  trendPoints,
   formatMoney,
 }: Props) {
   const rawId = useId()
@@ -34,17 +36,37 @@ export function ReportsVisualSummary({
     return () => cancelAnimationFrame(id)
   }, [])
 
-  const trendMax = Math.max(totalSale, totalPurchase, 1)
-  const toY = (value: number) => 78 - (value / trendMax) * 58
-  let saleY = toY(totalSale)
-  let purchaseY = toY(totalPurchase)
-  // Gdy linie się pokrywają, rozsuń je minimalnie żeby obie były widoczne.
-  if (Math.abs(saleY - purchaseY) < 1.2) {
-    saleY = Math.max(8, saleY - 1.2)
-    purchaseY = Math.min(78, purchaseY + 1.2)
-  }
-  const salePath = `M 8 ${saleY.toFixed(2)} L 152 ${saleY.toFixed(2)}`
-  const purchasePath = `M 8 ${purchaseY.toFixed(2)} L 152 ${purchaseY.toFixed(2)}`
+  const series =
+    trendPoints.length > 1
+      ? trendPoints
+      : trendPoints.length === 1
+        ? [trendPoints[0], trendPoints[0]]
+        : [
+            { label: '0', sale: totalSale, purchase: totalPurchase },
+            { label: '1', sale: totalSale, purchase: totalPurchase },
+          ]
+  const chartMinX = 8
+  const chartMaxX = 152
+  const chartMinY = 8
+  const chartMaxY = 78
+  const trendMax = Math.max(
+    1,
+    ...series.map((p) => p.sale),
+    ...series.map((p) => p.purchase),
+  )
+  const toY = (value: number) => chartMaxY - (value / trendMax) * (chartMaxY - chartMinY)
+  const toPath = (pick: (p: (typeof series)[number]) => number) =>
+    series
+      .map((p, idx) => {
+        const x =
+          chartMinX +
+          (idx / Math.max(1, series.length - 1)) * (chartMaxX - chartMinX)
+        const y = toY(pick(p))
+        return `${idx === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`
+      })
+      .join(' ')
+  const salePath = toPath((p) => p.sale)
+  const purchasePath = toPath((p) => p.purchase)
 
   const r = 54
   const c = 2 * Math.PI * r
@@ -110,7 +132,7 @@ export function ReportsVisualSummary({
                 marginNegative ? (
                   <>
                     <span className="reports-pl-donut__pct reports-pl-donut__pct--neg mono">{formatPct(profitMarginPct)}%</span>
-                    <span className="reports-pl-donut__sub">ujemna</span>
+                    <span className="reports-pl-donut__sub">strata</span>
                   </>
                 ) : (
                   <>
