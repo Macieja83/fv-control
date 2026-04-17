@@ -27,6 +27,7 @@ type LineItem = {
   netValue: string
   pkwiu: string
   deliveryDate: string
+  index: string
 }
 
 type VatSummaryRow = {
@@ -153,6 +154,7 @@ function parseKsefXml(xmlText: string): KsefInvoiceData | null {
         netValue: n(txt(w, 'P_11')),
         pkwiu: txt(w, 'GTU') || txt(w, 'PKWIU'),
         deliveryDate: s(txt(w, 'P_6A') || txt(fa, 'P_6')).slice(0, 10),
+        index: txt(w, 'Indeks'),
       })
     }
 
@@ -191,7 +193,7 @@ function parseKsefXml(xmlText: string): KsefInvoiceData | null {
       ? '' : ''
 
     return {
-      invoiceNumber: txt(fa, 'P_2'),
+      invoiceNumber: txt(fa, 'P_2') || txt(fa, 'P_1M'),
       ksefNumber,
       invoiceType: INVOICE_TYPES[rodzaj] ?? `Faktura ${rodzaj}`,
       issueDate: s(txt(fa, 'P_1')).slice(0, 10),
@@ -362,8 +364,8 @@ export function KsefInvoicePreview({ xmlText, ksefNumber: ksefNumProp, onDownloa
                 {data.buyer.phone && <div className="kd-field">Tel.: {data.buyer.phone}</div>}
               </>
             )}
-            <div className="kd-field kd-field--sm">Faktura dotyczy jednostki podrzędnej JST: {data.jst ? 'NIE' : 'TAK'}</div>
-            <div className="kd-field kd-field--sm">Faktura dotyczy członka grupy GV: {data.gv ? 'NIE' : 'TAK'}</div>
+            <div className="kd-field kd-field--sm">Faktura dotyczy jednostki podrzędnej JST: {data.jst ? 'TAK' : 'NIE'}</div>
+            <div className="kd-field kd-field--sm">Faktura dotyczy członka grupy GV: {data.gv ? 'TAK' : 'NIE'}</div>
           </div>
         </div>
 
@@ -419,6 +421,26 @@ export function KsefInvoicePreview({ xmlText, ksefNumber: ksefNumProp, onDownloa
                   <td>{li.unit}</td>
                   <td className="kd-r">{li.vatRate}%</td>
                   <td className="kd-r">{n(li.netValue)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <table className="kd-table">
+            <thead>
+              <tr>
+                <th>Lp.</th>
+                <th>PKWiU</th>
+                <th>Data dostawy / wykonania</th>
+                <th>Indeks</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.lineItems.map((li) => (
+                <tr key={`meta-${li.no}`}>
+                  <td>{li.no}</td>
+                  <td>{li.pkwiu || '—'}</td>
+                  <td>{li.deliveryDate ? fmtDate(li.deliveryDate) : '—'}</td>
+                  <td>{li.index || '—'}</td>
                 </tr>
               ))}
             </tbody>

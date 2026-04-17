@@ -15,6 +15,7 @@ import { buildInvoiceTransferHints } from "./invoice-transfer-hints.js";
 import { extractVendorNipFromNormalizedPayload } from "./invoice-vendor-nip.js";
 import { serializeInvoiceDetail } from "./invoice-serialize.js";
 import { itemRowFromInput, sumTotalsFromItems } from "./invoice-totals.js";
+import { regenerateSalesInvoicePreviewDocuments } from "./sales-invoice-preview.service.js";
 
 export async function listInvoices(prisma: PrismaClient, tenantId: string, q: InvoiceListQuery) {
   const skip = (q.page - 1) * q.limit;
@@ -202,6 +203,8 @@ export async function createInvoice(
     { enqueueIngested: false },
   );
 
+  await regenerateSalesInvoicePreviewDocuments(prisma, tenantId, inv.id);
+
   const refreshed = await prisma.invoice.findFirst({
     where: { id: inv.id, tenantId },
     include: { contractor: true, items: { orderBy: { id: "asc" } }, files: true },
@@ -245,8 +248,8 @@ export async function updateInvoice(
     data.reportCategory = t && t.length > 0 ? t : null;
   }
 
-  const inv = await prisma.$transaction(async (tx) => {
-    const updated = await tx.invoice.update({
+  await prisma.$transaction(async (tx) => {
+    await tx.invoice.update({
       where: { id },
       data,
       include: {
@@ -261,10 +264,16 @@ export async function updateInvoice(
       type: "UPDATED",
       payload: { fields: Object.keys(input) },
     });
-    return updated;
   });
 
-  return serializeInvoiceDetail(inv);
+  await regenerateSalesInvoicePreviewDocuments(prisma, tenantId, id);
+
+  const refreshed = await prisma.invoice.findFirst({
+    where: { id, tenantId },
+    include: { contractor: true, items: { orderBy: { id: "asc" } }, files: true },
+  });
+  if (!refreshed) throw AppError.notFound("Invoice not found");
+  return serializeInvoiceDetail(refreshed);
 }
 
 export async function patchInvoiceStatus(
@@ -345,6 +354,7 @@ export async function addInvoiceItem(
     });
     return full;
   });
+  await regenerateSalesInvoicePreviewDocuments(prisma, tenantId, invoiceId);
   return serializeInvoiceDetail(updated);
 }
 
@@ -391,6 +401,7 @@ export async function updateInvoiceItem(
     });
     return full;
   });
+  await regenerateSalesInvoicePreviewDocuments(prisma, tenantId, invoiceId);
   return serializeInvoiceDetail(updated);
 }
 
@@ -434,6 +445,7 @@ export async function deleteInvoiceItem(
     });
     return full;
   });
+  await regenerateSalesInvoicePreviewDocuments(prisma, tenantId, invoiceId);
   return serializeInvoiceDetail(updated);
 }
 

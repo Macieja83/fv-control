@@ -1428,6 +1428,10 @@ html[data-theme='dark'] .upload-bar__status--error { color: #f87171; }
   padding: 3px 5px;
 }
 
+.kd-table + .kd-table {
+  margin-top: 6px;
+}
+
 .kd-r { text-align: right !important; }
 
 .kd-gross-total {
