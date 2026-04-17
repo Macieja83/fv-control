@@ -1,9 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
+  deleteInvoiceItem,
   deleteInvoiceRequest,
+  fetchInvoiceDetail,
   fetchInvoicesListAllPages,
   patchInvoice,
+  patchInvoiceItem,
   patchInvoiceStatus,
+  postInvoiceItem,
   postAdoptInvoiceVendor,
   postCreateInvoice,
   postRehydrateKsefInvoice,
@@ -740,6 +744,59 @@ export function useInvoiceDashboard() {
     [refreshFromApi],
   )
 
+  const getSalesInvoiceForEdit = useCallback(async (id: string) => {
+    const token = getStoredToken()
+    if (!token) throw new Error('Brak sesji.')
+    const detail = await fetchInvoiceDetail(token, id)
+    return detail
+  }, [])
+
+  const updateSalesInvoice = useCallback(
+    async (id: string, body: Record<string, unknown>) => {
+      const token = getStoredToken()
+      if (!token) throw new Error('Brak sesji.')
+
+      const items = Array.isArray(body.items) ? (body.items as Record<string, unknown>[]) : []
+      await patchInvoice(token, id, {
+        contractorId: body.contractorId,
+        number: body.number,
+        issueDate: body.issueDate,
+        saleDate: body.saleDate,
+        dueDate: body.dueDate,
+        currency: body.currency,
+        status: body.status,
+        notes: body.notes,
+      })
+
+      const current = await fetchInvoiceDetail(token, id)
+      const currentItems = current.items
+      const commonCount = Math.min(currentItems.length, items.length)
+
+      const itemPayload = (raw: Record<string, unknown>) => ({
+        name: String(raw.name ?? ''),
+        quantity: String(raw.quantity ?? '1'),
+        unit: raw.unit == null ? null : String(raw.unit),
+        netPrice: String(raw.netPrice ?? '0'),
+        vatRate: String(raw.vatRate ?? '0.00'),
+        netValue: String(raw.netValue ?? '0'),
+        grossValue: String(raw.grossValue ?? '0'),
+      })
+
+      for (let i = 0; i < commonCount; i++) {
+        await patchInvoiceItem(token, id, currentItems[i].id, itemPayload(items[i]))
+      }
+      for (let i = commonCount; i < items.length; i++) {
+        await postInvoiceItem(token, id, itemPayload(items[i]))
+      }
+      for (let i = commonCount; i < currentItems.length; i++) {
+        await deleteInvoiceItem(token, id, currentItems[i].id)
+      }
+
+      await refreshFromApi()
+    },
+    [refreshFromApi],
+  )
+
   return {
     invoices,
     filtered,
@@ -787,5 +844,7 @@ export function useInvoiceDashboard() {
     adoptInvoiceVendor,
     sendInvoiceToKsef,
     createSalesInvoice,
+    getSalesInvoiceForEdit,
+    updateSalesInvoice,
   }
 }

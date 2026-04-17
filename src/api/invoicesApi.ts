@@ -203,6 +203,30 @@ export async function postSendInvoiceToKsef(token: string, invoiceId: string): P
 
 export type ApiInvoiceCreateResponse = { id: string } & Record<string, unknown>
 
+export type ApiInvoiceDetailItem = {
+  id: string
+  name: string
+  quantity: string
+  unit: string | null
+  netPrice: string
+  vatRate: string
+  netValue: string
+  grossValue: string
+}
+
+export type ApiInvoiceDetail = {
+  id: string
+  contractorId: string | null
+  number: string
+  issueDate: string
+  saleDate: string | null
+  dueDate: string | null
+  currency: string
+  status: string
+  notes: string | null
+  items: ApiInvoiceDetailItem[]
+}
+
 export async function postCreateInvoice(
   token: string,
   body: Record<string, unknown>,
@@ -220,6 +244,59 @@ export async function postCreateInvoice(
   const data = (await res.json()) as ApiInvoiceCreateResponse
   if (typeof data.id !== 'string') throw new Error('API: brak id utworzonej faktury.')
   return data
+}
+
+export async function fetchInvoiceDetail(token: string, invoiceId: string): Promise<ApiInvoiceDetail> {
+  const res = await fetch(`${API}/invoices/${encodeURIComponent(invoiceId)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (res.status === 401) throw new Error('Sesja wygasła — zaloguj się ponownie.')
+  if (!res.ok) throw new Error(await readApiErrorMessage(res))
+  return (await res.json()) as ApiInvoiceDetail
+}
+
+export async function postInvoiceItem(
+  token: string,
+  invoiceId: string,
+  body: Record<string, unknown>,
+): Promise<void> {
+  const res = await fetch(`${API}/invoices/${encodeURIComponent(invoiceId)}/items`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  })
+  if (res.status === 401) throw new Error('Sesja wygasła — zaloguj się ponownie.')
+  if (!res.ok) throw new Error(await readApiErrorMessage(res))
+}
+
+export async function patchInvoiceItem(
+  token: string,
+  invoiceId: string,
+  itemId: string,
+  body: Record<string, unknown>,
+): Promise<void> {
+  const res = await fetch(`${API}/invoices/${encodeURIComponent(invoiceId)}/items/${encodeURIComponent(itemId)}`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  })
+  if (res.status === 401) throw new Error('Sesja wygasła — zaloguj się ponownie.')
+  if (!res.ok) throw new Error(await readApiErrorMessage(res))
+}
+
+export async function deleteInvoiceItem(token: string, invoiceId: string, itemId: string): Promise<void> {
+  const res = await fetch(`${API}/invoices/${encodeURIComponent(invoiceId)}/items/${encodeURIComponent(itemId)}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (res.status === 401) throw new Error('Sesja wygasła — zaloguj się ponownie.')
+  if (!res.ok) throw new Error(await readApiErrorMessage(res))
 }
 
 export type RehydrateFromKsefResponse = {

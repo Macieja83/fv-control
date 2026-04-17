@@ -23,6 +23,27 @@ type LineRow = {
   vatKind: PlVatKind
 }
 
+export type SalesInvoiceSubmitPayload = Record<string, unknown>
+
+export type SalesInvoiceInitialData = {
+  invoiceId: string
+  contractorId: string
+  number: string
+  issueDate: string
+  saleDate: string | null
+  dueDate: string | null
+  currency: string
+  notes: string | null
+  status: 'RECEIVED' | 'DRAFT'
+  items: Array<{
+    name: string
+    quantity: string
+    unit: string | null
+    netPrice: string
+    vatRate: string
+  }>
+}
+
 const UNITS = ['szt.', 'kg', 'm', 'h', 'usł.', 'kpl.', 'l', 'm2', 'm3'] as const
 
 const GTU_CHOICES = [
@@ -77,10 +98,12 @@ function filterLineNameSuggestions(query: string, pool: string[]): string[] {
 type Props = {
   open: boolean
   onClose: () => void
-  onSubmit: (body: Record<string, unknown>, opts?: { sendToKsef?: boolean }) => Promise<void>
+  mode?: 'create' | 'edit'
+  initialData?: SalesInvoiceInitialData | null
+  onSubmit: (body: SalesInvoiceSubmitPayload, opts?: { sendToKsef?: boolean }) => Promise<void>
 }
 
-export function SalesInvoiceDialog({ open, onClose, onSubmit }: Props) {
+export function SalesInvoiceDialog({ open, onClose, mode = 'create', initialData = null, onSubmit }: Props) {
   const [contractors, setContractors] = useState<ContractorDto[]>([])
   const [contractorId, setContractorId] = useState('')
   const [contractorQuery, setContractorQuery] = useState('')
@@ -107,6 +130,17 @@ export function SalesInvoiceDialog({ open, onClose, onSubmit }: Props) {
   const [ksefConnector, setKsefConnector] = useState<KsefConnectorStatus | null>(null)
   const [sendKsefAfterSave, setSendKsefAfterSave] = useState(false)
   const [lineNameSuggestions, setLineNameSuggestions] = useState<string[]>([])
+
+  const isEditMode = mode === 'edit' && Boolean(initialData)
+
+  const vatKindFromRate = useCallback((value: string): PlVatKind => {
+    const n = Number.parseFloat(value)
+    if (!Number.isFinite(n)) return '23'
+    if (Math.abs(n - 0.23) < 0.0001) return '23'
+    if (Math.abs(n - 0.08) < 0.0001) return '8'
+    if (Math.abs(n - 0.05) < 0.0001) return '5'
+    return '0'
+  }, [])
 
   useEffect(() => {
     if (!issueDate) return
@@ -145,6 +179,32 @@ export function SalesInvoiceDialog({ open, onClose, onSubmit }: Props) {
     setNumber((prev) => (prev.trim() ? prev : suggestNumber(issueDate)))
     setSaleDate((sd) => sd || issueDate)
   }, [open, issueDate])
+
+  useEffect(() => {
+    if (!open || !isEditMode || !initialData) return
+    setContractorId(initialData.contractorId)
+    setNumber(initialData.number)
+    setIssueDate(initialData.issueDate)
+    setSaleDate(initialData.saleDate ?? initialData.issueDate)
+    setDueDate(initialData.dueDate ?? initialData.issueDate)
+    setCurrency(initialData.currency || 'PLN')
+    setNotes(initialData.notes ?? '')
+    setLines(
+      initialData.items.length > 0
+        ? initialData.items.map((it) => ({
+            id: crypto.randomUUID(),
+            name: it.name ?? '',
+            gtu: '',
+            quantity: it.quantity ?? '1',
+            unit: it.unit ?? 'szt.',
+            netPrice: it.netPrice ?? '0',
+            discountPct: '0',
+            vatKind: vatKindFromRate(it.vatRate),
+          }))
+        : [newLine()],
+    )
+    setSendKsefAfterSave(false)
+  }, [open, isEditMode, initialData, vatKindFromRate])
 
   const filteredContractors = useMemo(() => {
     const q = contractorQuery.trim().toLowerCase()
@@ -336,9 +396,10 @@ export function SalesInvoiceDialog({ open, onClose, onSubmit }: Props) {
     }
     setBusy(true)
     try {
+      const statusToSave = isEditMode ? (initialData?.status ?? status) : status
       await onSubmit(
-        buildPayload(status),
-        status === 'RECEIVED' && invoiceType === 'VAT' ? { sendToKsef: sendKsefAfterSave } : undefined,
+        buildPayload(statusToSave),
+        !isEditMode && statusToSave === 'RECEIVED' && invoiceType === 'VAT' ? { sendToKsef: sendKsefAfterSave } : undefined,
       )
       const t = getStoredToken()
       if (t) {
@@ -347,10 +408,12 @@ export function SalesInvoiceDialog({ open, onClose, onSubmit }: Props) {
           .catch(() => {})
       }
       onClose()
-      setNumber('')
-      setNotes('')
-      setLines([newLine()])
-      setContractorId('')
+      if (!isEditMode) {
+        setNumber('')
+        setNotes('')
+        setLines([newLine()])
+        setContractorId('')
+      }
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Nie udało się zapisać faktury.')
     } finally {
@@ -373,7 +436,7 @@ export function SalesInvoiceDialog({ open, onClose, onSubmit }: Props) {
       >
         <div className="modal-header sales-inv__header">
           <div className="sales-inv__title-block">
-            <h2 className="detail-panel__title">Wystaw fakturę</h2>
+            <h2 className="detail-panel__title">{isEditMode ? 'Edytuj fakturę sprzedaży' : 'Wystaw fakturę'}</h2>
             <p className="sales-inv__subtitle mono">{number || '—'}</p>
           </div>
           <div className="sales-inv__header-tools">
@@ -718,7 +781,7 @@ export function SalesInvoiceDialog({ open, onClose, onSubmit }: Props) {
           </div>
 
           <div className="sales-inv__actions">
-            {invoiceType === 'VAT' && ksefConnector && (
+            {!isEditMode && invoiceType === 'VAT' && ksefConnector && (
               <label className="sales-inv__ksef-opt">
                 <input
                   type="checkbox"
@@ -740,12 +803,20 @@ export function SalesInvoiceDialog({ open, onClose, onSubmit }: Props) {
               <button type="button" className="btn" onClick={() => setPreviewOpen(true)} disabled={busy}>
                 Podgląd
               </button>
-              <button type="button" className="btn btn--primary" disabled={busy} onClick={() => void submit('RECEIVED')}>
-                {busy ? 'Zapisywanie…' : 'Wystaw'}
-              </button>
-              <button type="button" className="btn btn--ghost" disabled={busy} onClick={() => void submit('DRAFT')}>
-                Zapisz szkic
-              </button>
+              {isEditMode ? (
+                <button type="button" className="btn btn--primary" disabled={busy} onClick={() => void submit('DRAFT')}>
+                  {busy ? 'Zapisywanie…' : 'Zapisz zmiany'}
+                </button>
+              ) : (
+                <>
+                  <button type="button" className="btn btn--primary" disabled={busy} onClick={() => void submit('RECEIVED')}>
+                    {busy ? 'Zapisywanie…' : 'Wystaw'}
+                  </button>
+                  <button type="button" className="btn btn--ghost" disabled={busy} onClick={() => void submit('DRAFT')}>
+                    Zapisz szkic
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>

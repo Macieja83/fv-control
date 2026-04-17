@@ -38,6 +38,8 @@ type Props = {
   onDeleteInvoice: (id: string) => void
   /** Wysyłka do KSeF (faktury sprzedaży). */
   onSendToKsef?: (id: string) => void | Promise<void>
+  /** Edycja faktury sprzedaży przed wysyłką do KSeF. */
+  onEditSalesInvoice?: (id: string) => void | Promise<void>
   /** Utwórz / dopnij kontrahenta po NIP i przypisz do faktury kosztowej. */
   onAdoptVendor?: (id: string, body?: { nip?: string; name?: string }) => void | Promise<void>
 }
@@ -63,6 +65,7 @@ export function DetailPanel({
   onRefreshList,
   onDeleteInvoice,
   onSendToKsef,
+  onEditSalesInvoice,
   onAdoptVendor,
 }: Props) {
   const [draftNotes, setDraftNotes] = useState('')
@@ -169,6 +172,10 @@ export function DetailPanel({
     row.ksef_status === 'SENT' ||
     row.ksef_status === 'RECEIVED' ||
     row.ksef_status === 'PENDING'
+  const canEditSalesBeforeKsef =
+    row.ledger_kind === 'sale' &&
+    !ksefWorkflowBusy &&
+    (row.ksef_status == null || row.ksef_status === 'TO_ISSUE' || row.ksef_status === 'FAILED')
   const primaryMime = (row.primary_document_mime ?? '').toLowerCase()
   const primaryLooksLikeXml =
     primaryMime.includes('xml') || primaryMime.startsWith('text/')
@@ -331,7 +338,7 @@ export function DetailPanel({
                 )}
               </section>
 
-              {row.ledger_kind === 'sale' && onSendToKsef && (
+              {row.ledger_kind === 'sale' && (onSendToKsef || onEditSalesInvoice) && (
                 <section className="detail-section">
                   <h3>KSeF — wystawienie</h3>
                   <dl className="detail-dl" style={{ marginBottom: 10 }}>
@@ -356,28 +363,47 @@ export function DetailPanel({
                       niż mock — inaczej zapisany zostanie tylko stub (PENDING).
                     </p>
                   )}
-                  <button
-                    type="button"
-                    className="btn btn--primary"
-                    title={
-                      !ksefEligible
-                        ? 'Faktura nie kwalifikuje się do wysyłki KSeF.'
-                        : ksefWorkflowBusy
-                          ? 'Sesja zakończona lub w toku — sprawdź status powyżej.'
-                          : undefined
-                    }
-                    disabled={ksefBusy || !ksefEligible || ksefWorkflowBusy}
-                    onClick={async () => {
-                      setKsefBusy(true)
-                      try {
-                        await onSendToKsef(row.id)
-                      } finally {
-                        setKsefBusy(false)
-                      }
-                    }}
-                  >
-                    {ksefBusy ? 'Wysyłanie…' : 'Wyślij do KSeF'}
-                  </button>
+                  <div className="detail-actions__row">
+                    {onEditSalesInvoice && (
+                      <button
+                        type="button"
+                        className="btn btn--sm"
+                        disabled={!canEditSalesBeforeKsef}
+                        title={
+                          canEditSalesBeforeKsef
+                            ? undefined
+                            : 'Edycja jest dostępna przed rozpoczęciem workflow wysyłki do KSeF.'
+                        }
+                        onClick={() => void onEditSalesInvoice(row.id)}
+                      >
+                        Edytuj fakturę
+                      </button>
+                    )}
+                    {onSendToKsef && (
+                      <button
+                        type="button"
+                        className="btn btn--primary"
+                        title={
+                          !ksefEligible
+                            ? 'Faktura nie kwalifikuje się do wysyłki KSeF.'
+                            : ksefWorkflowBusy
+                              ? 'Sesja zakończona lub w toku — sprawdź status powyżej.'
+                              : undefined
+                        }
+                        disabled={ksefBusy || !ksefEligible || ksefWorkflowBusy}
+                        onClick={async () => {
+                          setKsefBusy(true)
+                          try {
+                            await onSendToKsef(row.id)
+                          } finally {
+                            setKsefBusy(false)
+                          }
+                        }}
+                      >
+                        {ksefBusy ? 'Wysyłanie…' : 'Wyślij do KSeF'}
+                      </button>
+                    )}
+                  </div>
                 </section>
               )}
 

@@ -20,7 +20,10 @@ import { InvoiceTable } from './components/dashboard/InvoiceTable'
 import { DetailPanel } from './components/dashboard/DetailPanel'
 import { InvoiceLedgerTabs } from './components/dashboard/InvoiceLedgerTabs'
 import { InvoiceUpload } from './components/dashboard/InvoiceUpload'
-import { SalesInvoiceDialog } from './components/dashboard/SalesInvoiceDialog'
+import {
+  SalesInvoiceDialog,
+  type SalesInvoiceInitialData,
+} from './components/dashboard/SalesInvoiceDialog'
 import { useInvoiceDashboard } from './hooks/useInvoiceDashboard'
 import './styles/dashboard.css'
 
@@ -47,6 +50,9 @@ export default function DashboardApp() {
   const [nav, setNav] = useState<AppNavKey>(() => readNavFromLocation())
   const [activityOpen, setActivityOpen] = useState(false)
   const [salesDialogOpen, setSalesDialogOpen] = useState(false)
+  const [editSalesDialogOpen, setEditSalesDialogOpen] = useState(false)
+  const [editingSalesInvoiceId, setEditingSalesInvoiceId] = useState<string | null>(null)
+  const [editingSalesInitialData, setEditingSalesInitialData] = useState<SalesInvoiceInitialData | null>(null)
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     if (typeof document === 'undefined') return 'light'
     return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'
@@ -95,6 +101,8 @@ export default function DashboardApp() {
     adoptInvoiceVendor,
     sendInvoiceToKsef,
     createSalesInvoice,
+    getSalesInvoiceForEdit,
+    updateSalesInvoice,
   } = useInvoiceDashboard()
 
   useEffect(() => {
@@ -257,6 +265,29 @@ export default function DashboardApp() {
           onDeleteInvoice={(id) => void deleteInvoice(id)}
           onSendToKsef={(id) => void sendInvoiceToKsef(id)}
           onAdoptVendor={(id, body) => void adoptInvoiceVendor(id, body)}
+          onEditSalesInvoice={async (id) => {
+            const detail = await getSalesInvoiceForEdit(id)
+            setEditingSalesInvoiceId(id)
+            setEditingSalesInitialData({
+              invoiceId: detail.id,
+              contractorId: detail.contractorId ?? '',
+              number: detail.number,
+              issueDate: detail.issueDate.slice(0, 10),
+              saleDate: detail.saleDate ? detail.saleDate.slice(0, 10) : null,
+              dueDate: detail.dueDate ? detail.dueDate.slice(0, 10) : null,
+              currency: detail.currency,
+              notes: detail.notes,
+              status: detail.status === 'RECEIVED' ? 'RECEIVED' : 'DRAFT',
+              items: detail.items.map((it) => ({
+                name: it.name,
+                quantity: it.quantity,
+                unit: it.unit,
+                netPrice: it.netPrice,
+                vatRate: it.vatRate,
+              })),
+            })
+            setEditSalesDialogOpen(true)
+          }}
         />
       )}
       <ActivityDrawer open={activityOpen} onClose={() => setActivityOpen(false)} />
@@ -264,6 +295,20 @@ export default function DashboardApp() {
         open={salesDialogOpen}
         onClose={() => setSalesDialogOpen(false)}
         onSubmit={(body, opts) => createSalesInvoice(body, opts)}
+      />
+      <SalesInvoiceDialog
+        open={editSalesDialogOpen}
+        mode="edit"
+        initialData={editingSalesInitialData}
+        onClose={() => {
+          setEditSalesDialogOpen(false)
+          setEditingSalesInvoiceId(null)
+          setEditingSalesInitialData(null)
+        }}
+        onSubmit={(body) => {
+          if (!editingSalesInvoiceId) return Promise.reject(new Error('Brak id faktury do edycji.'))
+          return updateSalesInvoice(editingSalesInvoiceId, body)
+        }}
       />
     </div>
   )
