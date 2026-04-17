@@ -9,6 +9,7 @@ export type PlatformTenantRow = {
   createdAt: string
   userCount: number
   invoiceCount: number
+  tenantAccountActive?: boolean
   subscription: {
     status: string
     planCode: string
@@ -85,4 +86,41 @@ export async function fetchConnectorsPlatformSummary(token: string): Promise<Con
   const body = (await res.json()) as { data?: { rows: ConnectorsPlatformRow[] }; error?: { message?: string } }
   if (!res.ok) throw new Error(body.error?.message ?? `Connectory (${res.status})`)
   return Array.isArray(body.data?.rows) ? body.data!.rows : []
+}
+
+async function postAdminTenantAction(token: string, path: string): Promise<void> {
+  const res = await fetch(path, {
+    method: 'POST',
+    headers: authHeader(token),
+  })
+  if (res.ok || res.status === 204) return
+  const raw = await res.text()
+  let msg = `Operacja nieudana (${res.status})`
+  try {
+    const j = raw ? (JSON.parse(raw) as { error?: { message?: string } }) : {}
+    if (typeof j.error?.message === 'string' && j.error.message.trim()) msg = j.error.message.trim()
+  } catch {
+    /* ignore non-json body */
+  }
+  throw new Error(msg)
+}
+
+export async function setTenantManualProPlan(token: string, tenantId: string): Promise<void> {
+  await postAdminTenantAction(token, `/api/v1/platform-admin/tenants/${encodeURIComponent(tenantId)}/subscription/manual-pro`)
+}
+
+export async function archiveTenant(token: string, tenantId: string): Promise<void> {
+  await postAdminTenantAction(token, `/api/v1/platform-admin/tenants/${encodeURIComponent(tenantId)}/archive`)
+}
+
+export async function unarchiveTenant(token: string, tenantId: string): Promise<void> {
+  await postAdminTenantAction(token, `/api/v1/platform-admin/tenants/${encodeURIComponent(tenantId)}/unarchive`)
+}
+
+export async function deactivateTenantUsers(token: string, tenantId: string): Promise<void> {
+  await postAdminTenantAction(token, `/api/v1/platform-admin/tenants/${encodeURIComponent(tenantId)}/deactivate`)
+}
+
+export async function activateTenantUsers(token: string, tenantId: string): Promise<void> {
+  await postAdminTenantAction(token, `/api/v1/platform-admin/tenants/${encodeURIComponent(tenantId)}/activate`)
 }

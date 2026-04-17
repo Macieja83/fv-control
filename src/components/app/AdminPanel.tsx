@@ -1,12 +1,17 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
+  activateTenantUsers,
+  archiveTenant,
+  deactivateTenantUsers,
   fetchConnectorsPlatformSummary,
   fetchPlatformKsefOverview,
   fetchPlatformTenants,
   issueImpersonationToken,
+  setTenantManualProPlan,
   type ConnectorsPlatformRow,
   type PlatformAdminKsefRow,
   type PlatformTenantRow,
+  unarchiveTenant,
 } from '../../api/platformAdminApi'
 import { IMPERSONATION_RESTORE_TOKEN_KEY, getStoredToken, setStoredToken } from '../../auth/session'
 import { AdminTenantDirectory } from './AdminTenantDirectory'
@@ -68,6 +73,17 @@ export function AdminPanel() {
     }
   }
 
+  const runTenantAction = async (tenantId: string, action: (token: string, tenantId: string) => Promise<void>) => {
+    const token = getStoredToken()
+    if (!token) return
+    try {
+      await action(token, tenantId)
+      await load()
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : String(e))
+    }
+  }
+
   return (
     <div className="workspace-panel">
       <header className="workspace-panel__head workspace-panel__head--split">
@@ -93,6 +109,11 @@ export function AdminPanel() {
         err={err}
         onReload={() => void load()}
         onImpersonate={onImpersonate}
+        onSetManualPro={(tenantId) => runTenantAction(tenantId, setTenantManualProPlan)}
+        onArchive={(tenantId) => runTenantAction(tenantId, archiveTenant)}
+        onUnarchive={(tenantId) => runTenantAction(tenantId, unarchiveTenant)}
+        onDeactivateUsers={(tenantId) => runTenantAction(tenantId, deactivateTenantUsers)}
+        onActivateUsers={(tenantId) => runTenantAction(tenantId, activateTenantUsers)}
       />
     </div>
   )

@@ -2023,6 +2023,11 @@ html[data-theme='dark'] .upload-bar__status--error { color: #f87171; }
   padding: 0.65rem 0.75rem 0.85rem;
 }
 
+.admin-tenant-detail__actions {
+  margin-top: 0.8rem;
+  justify-content: flex-start;
+}
+
 .admin-tenant-detail__grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));

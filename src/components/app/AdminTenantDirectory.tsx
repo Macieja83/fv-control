@@ -12,6 +12,11 @@ export type AdminTenantDirectoryProps = {
   err: string | null
   onReload: () => void
   onImpersonate: (tenantId: string) => Promise<void>
+  onSetManualPro: (tenantId: string) => Promise<void>
+  onArchive: (tenantId: string) => Promise<void>
+  onUnarchive: (tenantId: string) => Promise<void>
+  onDeactivateUsers: (tenantId: string) => Promise<void>
+  onActivateUsers: (tenantId: string) => Promise<void>
 }
 
 type Enriched = PlatformTenantRow & { ksef?: PlatformAdminKsefRow; connectors?: ConnectorsPlatformRow }
@@ -80,7 +85,20 @@ async function copyText(label: string, text: string, onDone: (msg: string) => vo
 }
 
 export function AdminTenantDirectory(props: AdminTenantDirectoryProps) {
-  const { rows, ksefRows, connectors, loading, err, onReload, onImpersonate } = props
+  const {
+    rows,
+    ksefRows,
+    connectors,
+    loading,
+    err,
+    onReload,
+    onImpersonate,
+    onSetManualPro,
+    onArchive,
+    onUnarchive,
+    onDeactivateUsers,
+    onActivateUsers,
+  } = props
   const [query, setQuery] = useState('')
   const [planFilter, setPlanFilter] = useState<PlanFilter>('all')
   const [sortKey, setSortKey] = useState<SortKey>('createdAt')
@@ -170,6 +188,16 @@ export function AdminTenantDirectory(props: AdminTenantDirectoryProps) {
     setBusyId(tenantId)
     try {
       await onImpersonate(tenantId)
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  const runAction = async (busyKey: string, action: () => Promise<void>, okMsg: string) => {
+    setBusyId(busyKey)
+    try {
+      await action()
+      showToast(okMsg)
     } finally {
       setBusyId(null)
     }
@@ -290,6 +318,7 @@ export function AdminTenantDirectory(props: AdminTenantDirectoryProps) {
                 const sub = t.subscription
                 const health = tenantHealth(t)
                 const premium = isPremiumSubscriptionActive(t)
+                const tenantActive = t.tenantAccountActive !== false
                 const proCode = isProPlanCode(sub?.planCode)
                 return (
                   <Fragment key={t.id}>
@@ -327,9 +356,9 @@ export function AdminTenantDirectory(props: AdminTenantDirectoryProps) {
                           <button
                             type="button"
                             className="btn-primary btn-primary--sm"
-                            disabled={!!t.deletedAt || busyId === t.id}
+                            disabled={!!t.deletedAt || !tenantActive || busyId === t.id}
                             onClick={() => void onEnter(t.id)}
-                            title={t.deletedAt ? 'Tenant zarchiwizowany.' : 'Wejdź na workspace tenanta'}
+                            title={t.deletedAt ? 'Tenant zarchiwizowany.' : !tenantActive ? 'Konto tenantu jest wyłączone.' : 'Wejdź na workspace tenanta'}
                           >
                             {busyId === t.id ? '…' : 'Konto'}
                           </button>
@@ -379,6 +408,14 @@ export function AdminTenantDirectory(props: AdminTenantDirectoryProps) {
                                     sub?.provider ?? '—'
                                   )}
                                 </dd>
+                                <dt>Konto tenantu</dt>
+                                <dd>
+                                  {tenantActive ? (
+                                    <span className="admin-health admin-health--ok">Aktywne</span>
+                                  ) : (
+                                    <span className="admin-health admin-health--bad">Wyłączone</span>
+                                  )}
+                                </dd>
                                 <dt>Integracje</dt>
                                 <dd className="workspace-panel__muted">
                                   Ingestion {t.connectors?.ingestionSources ?? 0} · Credentials {t.connectors?.integrationCredentials ?? 0} · POS{' '}
@@ -394,6 +431,72 @@ export function AdminTenantDirectory(props: AdminTenantDirectoryProps) {
                                   ) : null}
                                 </dd>
                               </dl>
+                            </div>
+                            <div className="admin-tenant-table__actions admin-tenant-detail__actions">
+                              <button
+                                type="button"
+                                className="btn-ghost btn-ghost--sm"
+                                disabled={busyId === `${t.id}:pro` || premium}
+                                onClick={() =>
+                                  void runAction(`${t.id}:pro`, () => onSetManualPro(t.id), 'Ustawiono plan PRO (manual).')
+                                }
+                              >
+                                {busyId === `${t.id}:pro` ? '…' : 'Nadaj PRO ręcznie'}
+                              </button>
+                              {t.deletedAt ? (
+                                <button
+                                  type="button"
+                                  className="btn-ghost btn-ghost--sm"
+                                  disabled={busyId === `${t.id}:unarchive`}
+                                  onClick={() =>
+                                    void runAction(`${t.id}:unarchive`, () => onUnarchive(t.id), 'Przywrócono tenant.')
+                                  }
+                                >
+                                  {busyId === `${t.id}:unarchive` ? '…' : 'Przywróć tenant'}
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="btn-ghost btn-ghost--sm"
+                                  disabled={busyId === `${t.id}:archive`}
+                                  onClick={() =>
+                                    void runAction(`${t.id}:archive`, () => onArchive(t.id), 'Tenant zarchiwizowany.')
+                                  }
+                                >
+                                  {busyId === `${t.id}:archive` ? '…' : 'Archiwizuj tenant'}
+                                </button>
+                              )}
+                              {tenantActive ? (
+                                <button
+                                  type="button"
+                                  className="btn-ghost btn-ghost--sm"
+                                  disabled={busyId === `${t.id}:deactivate`}
+                                  onClick={() =>
+                                    void runAction(
+                                      `${t.id}:deactivate`,
+                                      () => onDeactivateUsers(t.id),
+                                      'Wyłączono konto tenantu (użytkownicy nieaktywni).',
+                                    )
+                                  }
+                                >
+                                  {busyId === `${t.id}:deactivate` ? '…' : 'Wyłącz konto'}
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="btn-ghost btn-ghost--sm"
+                                  disabled={busyId === `${t.id}:activate`}
+                                  onClick={() =>
+                                    void runAction(
+                                      `${t.id}:activate`,
+                                      () => onActivateUsers(t.id),
+                                      'Aktywowano konto tenantu.',
+                                    )
+                                  }
+                                >
+                                  {busyId === `${t.id}:activate` ? '…' : 'Aktywuj konto'}
+                                </button>
+                              )}
                             </div>
                             {(t.ksef?.lastSyncErrorPreview || (t.ksef?.lastQueueFinalFailure && t.ksef.lastQueueError)) && (
                               <div className="workspace-panel__err admin-tenant-warn" role="status">

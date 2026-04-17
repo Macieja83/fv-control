@@ -464,6 +464,15 @@ export async function listTenantsForSuperAdmin(prisma: PrismaClient, limit = 200
       },
     },
   });
+  const activeTenantRows = await prisma.user.findMany({
+    where: {
+      tenantId: { in: rows.map((r) => r.id) },
+      isActive: true,
+    },
+    distinct: ["tenantId"],
+    select: { tenantId: true },
+  });
+  const activeTenantIds = new Set(activeTenantRows.map((r) => r.tenantId));
   return rows.map((t) => ({
     id: t.id,
     name: t.name,
@@ -473,6 +482,7 @@ export async function listTenantsForSuperAdmin(prisma: PrismaClient, limit = 200
     registrationEmail: t.users[0]?.email ?? null,
     userCount: t._count.users,
     invoiceCount: t._count.invoices,
+    tenantAccountActive: activeTenantIds.has(t.id),
     subscription: (() => {
       const s = t.subscriptions[0];
       if (!s) return null;
@@ -488,6 +498,155 @@ export async function listTenantsForSuperAdmin(prisma: PrismaClient, limit = 200
       };
     })(),
   }));
+}
+
+async function assertPlatformAdminActor(prisma: PrismaClient, actorUserId: string) {
+  const actor = await prisma.user.findUnique({ where: { id: actorUserId } });
+  if (!actor?.isActive || !isPlatformAdminEmail(actor.email)) {
+    throw AppError.forbidden("Platform admin required");
+  }
+  return actor;
+}
+
+export async function setTenantManualProSubscription(
+  prisma: PrismaClient,
+  actorUserId: string,
+  targetTenantId: string,
+) {
+  const actor = await assertPlatformAdminActor(prisma, actorUserId);
+  const tenant = await prisma.tenant.findUnique({ where: { id: targetTenantId } });
+  if (!tenant) throw AppError.notFound("Tenant not found");
+
+  const current = await prisma.subscription.findFirst({
+    where: { tenantId: targetTenantId },
+    orderBy: { createdAt: "desc" },
+  });
+
+  if (current) {
+    await prisma.subscription.update({
+      where: { id: current.id },
+      data: {
+        provider: "MANUAL",
+        planCode: "pro",
+        status: "ACTIVE",
+        billingKind: null,
+        currentPeriodStart: new Date(),
+        currentPeriodEnd: null,
+        trialEndsAt: null,
+        providerCustomerId: null,
+        providerSubscriptionId: null,
+      },
+    });
+  } else {
+    await prisma.subscription.create({
+      data: {
+        tenantId: targetTenantId,
+        provider: "MANUAL",
+        planCode: "pro",
+        status: "ACTIVE",
+        currentPeriodStart: new Date(),
+        currentPeriodEnd: null,
+        trialEndsAt: null,
+      },
+    });
+  }
+
+  await prisma.auditLog.create({
+    data: {
+      tenantId: targetTenantId,
+      actorId: actor.id,
+      action: "PLATFORM_ADMIN_SET_MANUAL_PRO",
+      entityType: "TENANT",
+      entityId: targetTenantId,
+      metadata: { actorEmail: actor.email } as object,
+    },
+  });
+}
+
+export async function archiveTenantByPlatformAdmin(
+  prisma: PrismaClient,
+  actorUserId: string,
+  targetTenantId: string,
+) {
+  const actor = await assertPlatformAdminActor(prisma, actorUserId);
+  const tenant = await prisma.tenant.findUnique({ where: { id: targetTenantId } });
+  if (!tenant) throw AppError.notFound("Tenant not found");
+  if (!tenant.deletedAt) {
+    await prisma.tenant.update({ where: { id: targetTenantId }, data: { deletedAt: new Date() } });
+  }
+  await prisma.auditLog.create({
+    data: {
+      tenantId: targetTenantId,
+      actorId: actor.id,
+      action: "PLATFORM_ADMIN_ARCHIVE_TENANT",
+      entityType: "TENANT",
+      entityId: targetTenantId,
+      metadata: { actorEmail: actor.email } as object,
+    },
+  });
+}
+
+export async function unarchiveTenantByPlatformAdmin(
+  prisma: PrismaClient,
+  actorUserId: string,
+  targetTenantId: string,
+) {
+  const actor = await assertPlatformAdminActor(prisma, actorUserId);
+  const tenant = await prisma.tenant.findUnique({ where: { id: targetTenantId } });
+  if (!tenant) throw AppError.notFound("Tenant not found");
+  if (tenant.deletedAt) {
+    await prisma.tenant.update({ where: { id: targetTenantId }, data: { deletedAt: null } });
+  }
+  await prisma.auditLog.create({
+    data: {
+      tenantId: targetTenantId,
+      actorId: actor.id,
+      action: "PLATFORM_ADMIN_UNARCHIVE_TENANT",
+      entityType: "TENANT",
+      entityId: targetTenantId,
+      metadata: { actorEmail: actor.email } as object,
+    },
+  });
+}
+
+export async function setTenantUsersActiveStateByPlatformAdmin(
+  prisma: PrismaClient,
+  actorUserId: string,
+  targetTenantId: string,
+  isActive: boolean,
+) {
+  const actor = await assertPlatformAdminActor(prisma, actorUserId);
+  const tenant = await prisma.tenant.findUnique({ where: { id: targetTenantId } });
+  if (!tenant) throw AppError.notFound("Tenant not found");
+
+  const users = await prisma.user.findMany({
+    where: { tenantId: targetTenantId },
+    select: { id: true },
+  });
+  const userIds = users.map((u) => u.id);
+
+  await prisma.$transaction(async (tx) => {
+    await tx.user.updateMany({
+      where: { tenantId: targetTenantId },
+      data: { isActive },
+    });
+    if (!isActive && userIds.length > 0) {
+      await tx.refreshToken.updateMany({
+        where: { userId: { in: userIds }, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+    }
+    await tx.auditLog.create({
+      data: {
+        tenantId: targetTenantId,
+        actorId: actor.id,
+        action: isActive ? "PLATFORM_ADMIN_ACTIVATE_TENANT_USERS" : "PLATFORM_ADMIN_DEACTIVATE_TENANT_USERS",
+        entityType: "USER",
+        entityId: targetTenantId,
+        metadata: { actorEmail: actor.email, usersAffected: userIds.length } as object,
+      },
+    });
+  });
 }
 
 export async function issueTenantImpersonationAccessToken(

@@ -3,8 +3,12 @@ import { z } from "zod";
 import { AppError } from "../lib/errors.js";
 import { parseOrThrow } from "../lib/validate.js";
 import {
+  archiveTenantByPlatformAdmin,
   issueTenantImpersonationAccessToken,
   listTenantsForSuperAdmin,
+  setTenantManualProSubscription,
+  setTenantUsersActiveStateByPlatformAdmin,
+  unarchiveTenantByPlatformAdmin,
 } from "../modules/auth/auth.service.js";
 import {
   getConnectorsPlatformSummary,
@@ -19,6 +23,10 @@ const impersonateSchema = z.object({
   tenantId: z.string().uuid(),
 });
 
+const tenantParamSchema = z.object({
+  tenantId: z.string().uuid(),
+});
+
 const platformAdminRoutes: FastifyPluginAsync = async (app) => {
   app.get(
     "/platform-admin/tenants",
@@ -27,6 +35,61 @@ const platformAdminRoutes: FastifyPluginAsync = async (app) => {
       if (!request.authUser?.isPlatformAdmin) throw AppError.forbidden("Platform admin required");
       const q = parseOrThrow(listQuerySchema, request.query ?? {});
       return { data: await listTenantsForSuperAdmin(app.prisma, q.limit) };
+    },
+  );
+
+  app.post(
+    "/platform-admin/tenants/:tenantId/subscription/manual-pro",
+    { preHandler: [app.authenticate], schema: { tags: ["PlatformAdmin"], summary: "Set tenant subscription to MANUAL PRO" } },
+    async (request, reply) => {
+      if (!request.authUser?.isPlatformAdmin) throw AppError.forbidden("Platform admin required");
+      const p = parseOrThrow(tenantParamSchema, request.params);
+      await setTenantManualProSubscription(app.prisma, request.authUser.id, p.tenantId);
+      return reply.status(204).send();
+    },
+  );
+
+  app.post(
+    "/platform-admin/tenants/:tenantId/archive",
+    { preHandler: [app.authenticate], schema: { tags: ["PlatformAdmin"], summary: "Archive tenant" } },
+    async (request, reply) => {
+      if (!request.authUser?.isPlatformAdmin) throw AppError.forbidden("Platform admin required");
+      const p = parseOrThrow(tenantParamSchema, request.params);
+      await archiveTenantByPlatformAdmin(app.prisma, request.authUser.id, p.tenantId);
+      return reply.status(204).send();
+    },
+  );
+
+  app.post(
+    "/platform-admin/tenants/:tenantId/unarchive",
+    { preHandler: [app.authenticate], schema: { tags: ["PlatformAdmin"], summary: "Unarchive tenant" } },
+    async (request, reply) => {
+      if (!request.authUser?.isPlatformAdmin) throw AppError.forbidden("Platform admin required");
+      const p = parseOrThrow(tenantParamSchema, request.params);
+      await unarchiveTenantByPlatformAdmin(app.prisma, request.authUser.id, p.tenantId);
+      return reply.status(204).send();
+    },
+  );
+
+  app.post(
+    "/platform-admin/tenants/:tenantId/deactivate",
+    { preHandler: [app.authenticate], schema: { tags: ["PlatformAdmin"], summary: "Deactivate all tenant users" } },
+    async (request, reply) => {
+      if (!request.authUser?.isPlatformAdmin) throw AppError.forbidden("Platform admin required");
+      const p = parseOrThrow(tenantParamSchema, request.params);
+      await setTenantUsersActiveStateByPlatformAdmin(app.prisma, request.authUser.id, p.tenantId, false);
+      return reply.status(204).send();
+    },
+  );
+
+  app.post(
+    "/platform-admin/tenants/:tenantId/activate",
+    { preHandler: [app.authenticate], schema: { tags: ["PlatformAdmin"], summary: "Activate all tenant users" } },
+    async (request, reply) => {
+      if (!request.authUser?.isPlatformAdmin) throw AppError.forbidden("Platform admin required");
+      const p = parseOrThrow(tenantParamSchema, request.params);
+      await setTenantUsersActiveStateByPlatformAdmin(app.prisma, request.authUser.id, p.tenantId, true);
+      return reply.status(204).send();
     },
   );
 
