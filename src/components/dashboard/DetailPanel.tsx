@@ -180,8 +180,9 @@ export function DetailPanel({
   const primaryLooksLikeXml =
     primaryMime.includes('xml') || primaryMime.startsWith('text/')
   const shouldPreferKsefFaXmlPreview =
-    row.source_type === 'ksef' &&
-    (primaryLooksLikeXml || row.primary_document_kind === 'ksef_summary_pdf')
+    (row.source_type === 'ksef' &&
+      (primaryLooksLikeXml || row.primary_document_kind === 'ksef_summary_pdf')) ||
+    (row.ledger_kind === 'sale' && row.primary_document_kind === 'sale_preview_pdf')
 
   const handleOverlayClick = (e: React.MouseEvent) => {
     if (e.target === overlayRef.current) onClose()
@@ -239,11 +240,11 @@ export function DetailPanel({
                   </div>
                 )}
                 <InvoiceDocumentPreview
-                  key={row.id}
+                  key={`${row.id}:${row.primary_document_id ?? "none"}:${row.updated_at}`}
                   invoiceId={row.id}
                   ksefNumber={row.ksef_number}
                   preferKsefFaXml={shouldPreferKsefFaXmlPreview}
-                  reloadExtra={docPreviewReloadKey}
+                  reloadExtra={docPreviewReloadKey + (Date.parse(row.updated_at) || 0)}
                 />
               </section>
             </div>

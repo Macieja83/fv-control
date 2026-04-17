@@ -23,6 +23,24 @@ async function resolveKsefFaXmlDocument(
     primaryDoc: Document | null;
   },
 ): Promise<Document | null> {
+  // Manual sales invoice: when primary is generated preview PDF, switch preview to FA(3) XML draft.
+  const primaryMeta = invoice.primaryDoc?.metadata as Record<string, unknown> | null;
+  if (primaryMeta?.kind === "sale_preview_pdf") {
+    const saleDraft = await prisma.document.findFirst({
+      where: {
+        tenantId,
+        sourceType: "MANUAL_UPLOAD",
+        sourceExternalId: `${invoice.id}:sale-fa3-draft-xml`,
+        deletedAt: null,
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    if (saleDraft) {
+      const mt = (saleDraft.mimeType ?? "").toLowerCase();
+      if (mt.includes("xml") || mt.includes("text")) return saleDraft;
+    }
+  }
+
   if (invoice.intakeSourceType !== "KSEF_API") return null;
   const primary = invoice.primaryDoc;
   if (!primary) return null;
