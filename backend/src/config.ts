@@ -68,9 +68,19 @@ const envSchema = z.object({
   METRICS_BEARER_TOKEN: z
     .preprocess((v) => (v === "" || v === undefined ? undefined : v), z.string().min(24).optional()),
 
-  GOOGLE_CLIENT_ID: z.string().optional(),
-  GOOGLE_CLIENT_SECRET: z.string().optional(),
-  GOOGLE_OAUTH_REDIRECT_URI: z.string().url().optional(),
+  /** .env z edytorów Windows często ma CRLF — trim usuwa \\r z końca wartości (inaczej Google zwraca redirect_uri_mismatch). */
+  GOOGLE_CLIENT_ID: z.preprocess(
+    (v) => (v === "" || v === undefined ? undefined : String(v).trim() || undefined),
+    z.string().optional(),
+  ),
+  GOOGLE_CLIENT_SECRET: z.preprocess(
+    (v) => (v === "" || v === undefined ? undefined : String(v).trim() || undefined),
+    z.string().optional(),
+  ),
+  GOOGLE_OAUTH_REDIRECT_URI: z.preprocess(
+    (v) => (v === "" || v === undefined ? undefined : String(v).trim() || undefined),
+    z.string().url().optional(),
+  ),
   WEB_APP_URL: z.string().url().default("http://localhost:5173"),
 
   /** Wysyłka e-maili weryfikacyjnych (nodemailer). Na produkcji ustaw SMTP_HOST + EMAIL_FROM. */
