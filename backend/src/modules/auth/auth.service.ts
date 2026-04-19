@@ -10,7 +10,7 @@ import {
   shouldExposeVerificationToken,
 } from "../../config.js";
 import { AppError } from "../../lib/errors.js";
-import { sendTenantVerificationEmail } from "../../lib/mailer.js";
+import { sendPasswordResetEmail, sendTenantVerificationEmail } from "../../lib/mailer.js";
 import { signAccessToken } from "../../lib/jwt.js";
 import { hashPassword, verifyPassword } from "../../lib/password.js";
 import { generateRefreshToken, hashOpaqueToken } from "../../lib/token-hash.js";
@@ -289,6 +289,66 @@ export async function resendEmailVerification(prisma: PrismaClient, email: strin
     throw AppError.internal(`Nie udało się wysłać wiadomości e-mail: ${msg}`);
   }
   return { sent: true, ...(shouldExposeVerificationToken(cfg) ? { verificationToken: token } : {}) };
+}
+
+const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000;
+
+export async function requestPasswordReset(
+  prisma: PrismaClient,
+  email: string,
+): Promise<{ sent: true; resetToken?: string }> {
+  const cfg = loadConfig();
+  const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
+  if (!user?.isActive || !user.passwordHash) {
+    return { sent: true };
+  }
+  if (cfg.NODE_ENV === "production" && !isSmtpConfigured(cfg)) {
+    throw AppError.unavailable(
+      "Wysyłka e-maili nie jest skonfigurowana. Ustaw SMTP (SMTP_HOST, EMAIL_FROM) na serwerze.",
+    );
+  }
+  const token = await issuePasswordResetToken(prisma, user.id, user.tenantId);
+  try {
+    await sendPasswordResetEmail(cfg, user.email, token);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    throw AppError.internal(`Nie udało się wysłać wiadomości e-mail: ${msg}`);
+  }
+  return { sent: true, ...(shouldExposeVerificationToken(cfg) ? { resetToken: token } : {}) };
+}
+
+export async function resetPasswordWithToken(prisma: PrismaClient, token: string, newPassword: string) {
+  const tokenHash = hashOpaqueToken(token);
+  const row = await prisma.passwordResetToken.findUnique({
+    where: { tokenHash },
+    include: { user: true },
+  });
+  if (!row || row.consumedAt || row.expiresAt < new Date()) {
+    throw AppError.validation("Link do resetu hasła jest nieprawidłowy lub wygasł. Poproś o nowy e-mail.");
+  }
+  if (!row.user.isActive) {
+    throw AppError.unauthorized("Konto jest nieaktywne.");
+  }
+  if (!row.user.emailVerified) {
+    throw AppError.forbidden("Potwierdź najpierw adres e-mail.");
+  }
+  const passwordHash = await hashPassword(newPassword);
+  await prisma.$transaction([
+    prisma.user.update({
+      where: { id: row.userId },
+      data: { passwordHash },
+    }),
+    prisma.passwordResetToken.update({
+      where: { id: row.id },
+      data: { consumedAt: new Date() },
+    }),
+    prisma.refreshToken.updateMany({
+      where: { userId: row.userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    }),
+  ]);
+  const tokens = await issueTokens(prisma, row.user.id, row.user.tenantId, row.user.role);
+  return { user: sanitizeUser({ ...row.user, passwordHash }), ...tokens };
 }
 
 const GOOGLE_OAUTH_NOT_CONFIGURED_MSG =
@@ -742,6 +802,24 @@ function sanitizeUser(user: {
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
   };
+}
+
+async function issuePasswordResetToken(prisma: PrismaClient, userId: string, tenantId: string): Promise<string> {
+  const token = generateRefreshToken();
+  const tokenHash = hashOpaqueToken(token);
+  const expiresAt = new Date(Date.now() + PASSWORD_RESET_TTL_MS);
+  await prisma.passwordResetToken.deleteMany({
+    where: { userId, consumedAt: null },
+  });
+  await prisma.passwordResetToken.create({
+    data: {
+      userId,
+      tenantId,
+      tokenHash,
+      expiresAt,
+    },
+  });
+  return token;
 }
 
 async function issueEmailVerificationToken(prisma: PrismaClient, userId: string, tenantId: string): Promise<string> {

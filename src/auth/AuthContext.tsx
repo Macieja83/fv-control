@@ -10,6 +10,7 @@ import { clearStoredToken, getStoredToken, setStoredToken } from './session'
 import {
   loginRequest,
   logoutRequest,
+  resetPasswordRequest,
   sessionRequest,
   verifyEmailRequest,
 } from './authApi'
@@ -38,6 +39,8 @@ type AuthContextValue = {
   user: AuthUser | null
   login: (email: string, password: string) => Promise<void>
   loginWithVerificationToken: (token: string) => Promise<void>
+  /** Po ustawieniu hasła z linku e-mail (reset). */
+  loginAfterPasswordReset: (token: string, password: string) => Promise<void>
   logout: () => Promise<void>
   /** Odświeża /auth/me (np. po ustawieniu hasła). */
   refreshUser: () => Promise<void>
@@ -110,6 +113,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setStatus('authed')
   }, [])
 
+  const loginAfterPasswordReset = useCallback(async (token: string, password: string) => {
+    const data = await resetPasswordRequest(token, password)
+    setStoredToken(data.accessToken)
+    setUser(data.user)
+    setStatus('authed')
+  }, [])
+
   const logout = useCallback(async () => {
     const token = getStoredToken()
     if (token) await logoutRequest(token)
@@ -135,10 +145,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       user,
       login,
       loginWithVerificationToken,
+      loginAfterPasswordReset,
       logout,
       refreshUser,
     }),
-    [status, user, login, loginWithVerificationToken, logout, refreshUser],
+    [status, user, login, loginWithVerificationToken, loginAfterPasswordReset, logout, refreshUser],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

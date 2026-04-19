@@ -40,6 +40,10 @@ const envSchema = z.object({
   RATE_LIMIT_VERIFY_EMAIL_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
   RATE_LIMIT_RESEND_VERIFICATION_MAX: z.coerce.number().int().positive().default(10),
   RATE_LIMIT_RESEND_VERIFICATION_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
+  RATE_LIMIT_FORGOT_PASSWORD_MAX: z.coerce.number().int().positive().default(5),
+  RATE_LIMIT_FORGOT_PASSWORD_WINDOW_MS: z.coerce.number().int().positive().default(900_000),
+  RATE_LIMIT_RESET_PASSWORD_MAX: z.coerce.number().int().positive().default(15),
+  RATE_LIMIT_RESET_PASSWORD_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
   /**
    * Limit ręcznego `POST /connectors/ksef/sync` na tenant (po uwierzytelnieniu). 0 = wyłączony.
    */

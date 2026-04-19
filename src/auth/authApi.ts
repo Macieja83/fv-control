@@ -189,6 +189,42 @@ export async function registerRequest(input: {
   }
 }
 
+export async function forgotPasswordRequest(email: string): Promise<{ sent: true; resetToken?: string }> {
+  const res = await fetch('/api/v1/auth/forgot-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  })
+  const body = (await res.json()) as { sent?: boolean; resetToken?: string; error?: { message?: string } }
+  if (!res.ok) throw new Error(body.error?.message ?? `Nie udało się wysłać (${res.status})`)
+  return { sent: true, resetToken: typeof body.resetToken === 'string' ? body.resetToken : undefined }
+}
+
+export async function resetPasswordRequest(token: string, password: string): Promise<LoginSuccess> {
+  const res = await fetch('/api/v1/auth/reset-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, password }),
+  })
+  const body = (await res.json()) as BackendLoginBody & BackendErrorBody
+  if (!res.ok) throw new Error(readLoginErrorMessage(body, res.status))
+  const accessToken = body.accessToken
+  if (!accessToken || !body.user?.email) throw new Error('Brak poprawnej odpowiedzi resetu hasła.')
+  const hasPassword =
+    typeof body.user.hasPassword === 'boolean' ? body.user.hasPassword : true
+  return {
+    accessToken,
+    expiresIn: typeof body.expiresIn === 'number' ? body.expiresIn : 0,
+    user: {
+      email: body.user.email,
+      tenantId: typeof body.user.tenantId === 'string' ? body.user.tenantId : '',
+      emailVerified: body.user.emailVerified === true,
+      isPlatformAdmin: readIsPlatformAdmin(body.user),
+      hasPassword,
+    },
+  }
+}
+
 export async function verifyEmailRequest(token: string): Promise<LoginSuccess> {
   const res = await fetch('/api/v1/auth/verify-email', {
     method: 'POST',

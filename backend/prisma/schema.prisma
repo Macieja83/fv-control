@@ -278,6 +278,7 @@ model Tenant {
   agreements             Agreement[]
   subscriptions          Subscription[]
   emailVerificationTokens EmailVerificationToken[]
+  passwordResetTokens     PasswordResetToken[]
 }
 
 model Permission {
@@ -343,6 +344,7 @@ model User {
   auditLogs       AuditLog[]      @relation("AuditActor")
   authIdentities  AuthIdentity[]
   emailVerificationTokens EmailVerificationToken[]
+  passwordResetTokens     PasswordResetToken[]
 
   @@index([tenantId])
 }
@@ -382,6 +384,22 @@ model EmailVerificationToken {
   @@index([userId, expiresAt])
   @@index([tenantId, expiresAt])
   @@map("email_verification_tokens")
+}
+
+model PasswordResetToken {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @db.Uuid
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId     String   @db.Uuid
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String   @unique
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime @default(now())
+
+  @@index([userId, expiresAt])
+  @@index([tenantId, expiresAt])
+  @@map("password_reset_tokens")
 }
 
 model AuthIdentity {

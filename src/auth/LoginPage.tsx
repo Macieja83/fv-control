@@ -1,15 +1,39 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useAuth } from './AuthContext'
-import { getGoogleStartUrl, registerRequest, resendVerificationRequest } from './authApi'
+import {
+  forgotPasswordRequest,
+  getGoogleStartUrl,
+  registerRequest,
+  resendVerificationRequest,
+} from './authApi'
 import './login.css'
 
+type PageMode = 'login' | 'register' | 'verify' | 'forgot' | 'reset'
+
 type LoginPageProps = {
-  initialMode?: 'login' | 'register' | 'verify'
+  initialMode?: 'login' | 'register' | 'verify' | 'forgot'
+  onNavigateForgot?: () => void
+  onNavigateLogin?: () => void
 }
 
-export default function LoginPage({ initialMode = 'login' }: LoginPageProps) {
-  const { login, loginWithVerificationToken } = useAuth()
-  const [mode, setMode] = useState<'login' | 'register' | 'verify'>(initialMode)
+function readInitialModeFromUrl(prop: LoginPageProps['initialMode']): PageMode {
+  const q = new URLSearchParams(window.location.search)
+  if (q.get('pwd_reset')?.trim()) return 'reset'
+  return prop ?? 'login'
+}
+
+export default function LoginPage({
+  initialMode = 'login',
+  onNavigateForgot,
+  onNavigateLogin,
+}: LoginPageProps) {
+  const { login, loginWithVerificationToken, loginAfterPasswordReset } = useAuth()
+  const [mode, setMode] = useState<PageMode>(() => readInitialModeFromUrl(initialMode))
+  const [resetFlowToken] = useState(() => new URLSearchParams(window.location.search).get('pwd_reset')?.trim() ?? '')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const skipInitialModeSync = useRef(!!new URLSearchParams(window.location.search).get('pwd_reset')?.trim())
+
   const [planCode, setPlanCode] = useState<'free' | 'pro'>('free')
   const [tenantName, setTenantName] = useState('')
   const [tenantNip, setTenantNip] = useState('')
@@ -22,7 +46,20 @@ export default function LoginPage({ initialMode = 'login' }: LoginPageProps) {
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    setMode(initialMode)
+    const url = new URL(window.location.href)
+    if (url.searchParams.has('pwd_reset')) {
+      url.searchParams.delete('pwd_reset')
+      const s = url.searchParams.toString()
+      window.history.replaceState(null, '', `${url.pathname}${s ? `?${s}` : ''}`)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (skipInitialModeSync.current) {
+      skipInitialModeSync.current = false
+      return
+    }
+    setMode(initialMode ?? 'login')
   }, [initialMode])
 
   useEffect(() => {
@@ -72,7 +109,23 @@ export default function LoginPage({ initialMode = 'login' }: LoginPageProps) {
     setOk(null)
     setLoading(true)
     try {
-      if (mode === 'login') {
+      if (mode === 'forgot') {
+        const fp = await forgotPasswordRequest(email.trim())
+        setOk(
+          'Jeśli konto z tym adresem istnieje i ma ustawione hasło, wyślemy wiadomość z linkiem do resetu (sprawdź także folder Spam).',
+        )
+        setDevTokenHint(import.meta.env.DEV ? (fp.resetToken ?? null) : null)
+      } else if (mode === 'reset') {
+        if (!resetFlowToken) {
+          setError('Brak tokenu resetu. Otwórz link z e-maila ponownie.')
+          return
+        }
+        if (newPassword !== confirmPassword) {
+          setError('Hasła muszą być takie same.')
+          return
+        }
+        await loginAfterPasswordReset(resetFlowToken, newPassword)
+      } else if (mode === 'login') {
         await login(email.trim(), password)
       } else if (mode === 'register') {
         const reg = await registerRequest({
@@ -120,6 +173,10 @@ export default function LoginPage({ initialMode = 'login' }: LoginPageProps) {
     }
   }
 
+  const showTabs = mode !== 'forgot' && mode !== 'reset'
+  const title =
+    mode === 'forgot' ? 'Reset hasła' : mode === 'reset' ? 'Nowe hasło' : 'FV Resta'
+
   return (
     <div className="login-page">
       <div className="login-card" role="main" aria-labelledby="login-title">
@@ -127,23 +184,25 @@ export default function LoginPage({ initialMode = 'login' }: LoginPageProps) {
           <span className="login-card__logo" aria-hidden />
           <div>
             <h1 id="login-title" className="login-card__title">
-              FV Resta
+              {title}
             </h1>
             <p className="login-card__subtitle">Bezpieczne logowanie · Invoice Inbox</p>
           </div>
         </div>
 
-        <div className="login-tabs" role="tablist" aria-label="Tryb logowania">
-          <button type="button" className={`login-tab ${mode === 'login' ? 'is-active' : ''}`} onClick={() => setMode('login')}>
-            Logowanie
-          </button>
-          <button type="button" className={`login-tab ${mode === 'register' ? 'is-active' : ''}`} onClick={() => setMode('register')}>
-            Rejestracja
-          </button>
-          <button type="button" className={`login-tab ${mode === 'verify' ? 'is-active' : ''}`} onClick={() => setMode('verify')}>
-            Weryfikacja
-          </button>
-        </div>
+        {showTabs && (
+          <div className="login-tabs" role="tablist" aria-label="Tryb logowania">
+            <button type="button" className={`login-tab ${mode === 'login' ? 'is-active' : ''}`} onClick={() => setMode('login')}>
+              Logowanie
+            </button>
+            <button type="button" className={`login-tab ${mode === 'register' ? 'is-active' : ''}`} onClick={() => setMode('register')}>
+              Rejestracja
+            </button>
+            <button type="button" className={`login-tab ${mode === 'verify' ? 'is-active' : ''}`} onClick={() => setMode('verify')}>
+              Weryfikacja
+            </button>
+          </div>
+        )}
 
         <form className="login-form" onSubmit={onSubmit} noValidate>
           {mode === 'register' && (
@@ -165,20 +224,63 @@ export default function LoginPage({ initialMode = 'login' }: LoginPageProps) {
               </label>
             </>
           )}
-          <label className="login-field">
-            <span className="login-field__label">E-mail</span>
-            <input
-              className="login-input"
-              name="email"
-              type="email"
-              autoComplete="username"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              disabled={loading}
-            />
-          </label>
-          {mode !== 'verify' ? (
+
+          {mode === 'forgot' && (
+            <p className="login-google-hint" style={{ marginBottom: '0.75rem' }}>
+              Podaj adres e-mail konta. Wyślemy link ważny ok. 1 godziny (tylko jeśli konto ma ustawione hasło — logowanie e-mailem).
+            </p>
+          )}
+
+          {(mode === 'login' || mode === 'register' || mode === 'verify' || mode === 'forgot') && (
+            <label className="login-field">
+              <span className="login-field__label">E-mail</span>
+              <input
+                className="login-input"
+                name="email"
+                type="email"
+                autoComplete="username"
+                required={mode !== 'verify'}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={loading}
+              />
+            </label>
+          )}
+
+          {mode === 'reset' && (
+            <>
+              <label className="login-field">
+                <span className="login-field__label">Nowe hasło</span>
+                <input
+                  className="login-input"
+                  name="newPassword"
+                  type="password"
+                  autoComplete="new-password"
+                  required
+                  minLength={8}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  disabled={loading}
+                />
+              </label>
+              <label className="login-field">
+                <span className="login-field__label">Powtórz hasło</span>
+                <input
+                  className="login-input"
+                  name="confirmPassword"
+                  type="password"
+                  autoComplete="new-password"
+                  required
+                  minLength={8}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  disabled={loading}
+                />
+              </label>
+            </>
+          )}
+
+          {(mode === 'login' || mode === 'register') && (
             <label className="login-field">
               <span className="login-field__label">Hasło</span>
               <input
@@ -192,7 +294,9 @@ export default function LoginPage({ initialMode = 'login' }: LoginPageProps) {
                 disabled={loading}
               />
             </label>
-          ) : (
+          )}
+
+          {mode === 'verify' && (
             <label className="login-field">
               <span className="login-field__label">Token weryfikacyjny</span>
               <input
@@ -212,24 +316,56 @@ export default function LoginPage({ initialMode = 'login' }: LoginPageProps) {
             </p>
           )}
           {ok && <p className="login-ok">{ok}</p>}
-          {import.meta.env.DEV && devTokenHint && mode === 'verify' && (
+          {import.meta.env.DEV && devTokenHint && (mode === 'verify' || mode === 'forgot') && (
             <p className="login-dev-token">
               DEV token (tylko lokalnie): <code>{devTokenHint}</code>
             </p>
           )}
 
           <button type="submit" className="login-submit" disabled={loading}>
-            {loading ? 'Przetwarzanie…' : mode === 'login' ? 'Zaloguj się' : mode === 'register' ? 'Utwórz konto' : 'Zweryfikuj i zaloguj'}
+            {loading
+              ? 'Przetwarzanie…'
+              : mode === 'login'
+                ? 'Zaloguj się'
+                : mode === 'register'
+                  ? 'Utwórz konto'
+                  : mode === 'verify'
+                    ? 'Zweryfikuj i zaloguj'
+                    : mode === 'forgot'
+                      ? 'Wyślij link resetujący'
+                      : 'Ustaw hasło i zaloguj'}
           </button>
+
+          {mode === 'login' && onNavigateForgot && (
+            <button type="button" className="login-secondary" onClick={onNavigateForgot} disabled={loading}>
+              Zapomniałeś hasła?
+            </button>
+          )}
+
+          {mode === 'forgot' && onNavigateLogin && (
+            <button type="button" className="login-secondary" onClick={onNavigateLogin} disabled={loading}>
+              Powrót do logowania
+            </button>
+          )}
+
+          {mode === 'reset' && onNavigateLogin && (
+            <button type="button" className="login-secondary" onClick={onNavigateLogin} disabled={loading}>
+              Anuluj — wróć do logowania
+            </button>
+          )}
+
           {mode === 'verify' && (
             <button type="button" className="login-secondary" onClick={onResend} disabled={loading || !email.trim()}>
               Wyślij ponownie e-mail weryfikacyjny
             </button>
           )}
-          <button type="button" className="login-google" onClick={onGoogle} disabled={loading}>
-            Kontynuuj przez Google
-          </button>
-          {mode !== 'verify' && (
+
+          {(mode === 'login' || mode === 'register') && (
+            <button type="button" className="login-google" onClick={onGoogle} disabled={loading}>
+              Kontynuuj przez Google
+            </button>
+          )}
+          {(mode === 'login' || mode === 'register') && (
             <p className="login-google-hint">
               Po pierwszym logowaniu przez Google możesz ustawić hasło w <strong>Ustawieniach</strong>, żeby logować się także e-mailem.
             </p>

@@ -7,12 +7,13 @@ import LandingPage from './landing/LandingPage'
 import { PlaceholderLegalPage } from './legal/PlaceholderLegalPage'
 import './index.css'
 
-type GuestRoute = 'landing' | 'login' | 'register' | 'verify' | 'legal_terms' | 'legal_privacy'
+type GuestRoute = 'landing' | 'login' | 'register' | 'verify' | 'forgot' | 'legal_terms' | 'legal_privacy'
 
 function resolveGuestRoute(pathname: string): GuestRoute {
   if (pathname === '/login') return 'login'
   if (pathname === '/register') return 'register'
   if (pathname === '/verify') return 'verify'
+  if (pathname === '/forgot-password') return 'forgot'
   if (pathname === '/legal/regulamin') return 'legal_terms'
   if (pathname === '/legal/polityka-prywatnosci') return 'legal_privacy'
   return 'landing'
@@ -28,12 +29,19 @@ function AuthGate() {
     return () => window.removeEventListener('popstate', onPopState)
   }, [])
 
-  const navigateGuestRoute = useCallback((target: 'login' | 'register') => {
-    const path = target === 'login' ? '/login' : '/register'
+  const navigateGuestRoute = useCallback((target: 'login' | 'register' | 'forgot') => {
+    const path = target === 'login' ? '/login' : target === 'register' ? '/register' : '/forgot-password'
     if (window.location.pathname !== path) {
       window.history.pushState(null, '', path)
     }
-    setGuestRoute(target)
+    setGuestRoute(target === 'forgot' ? 'forgot' : target)
+  }, [])
+
+  const navigateToLoginOnly = useCallback(() => {
+    if (window.location.pathname !== '/login') {
+      window.history.pushState(null, '', '/login')
+    }
+    setGuestRoute('login')
   }, [])
 
   const navigateLegal = useCallback((target: 'terms' | 'privacy') => {
@@ -70,7 +78,13 @@ function AuthGate() {
     if (guestRoute === 'legal_privacy') {
       return <PlaceholderLegalPage kind="privacy" onBack={navigateLanding} />
     }
-    return <LoginPage initialMode={guestRoute} />
+    return (
+      <LoginPage
+        initialMode={guestRoute === 'forgot' ? 'forgot' : guestRoute === 'register' ? 'register' : guestRoute === 'verify' ? 'verify' : 'login'}
+        onNavigateForgot={() => navigateGuestRoute('forgot')}
+        onNavigateLogin={navigateToLoginOnly}
+      />
+    )
   }
 
   return <DashboardApp />

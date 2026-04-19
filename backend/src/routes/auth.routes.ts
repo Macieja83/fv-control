@@ -4,12 +4,14 @@ import { AppError } from "../lib/errors.js";
 import { parseOrThrow } from "../lib/validate.js";
 import {
   changePasswordSchema,
+  forgotPasswordSchema,
   googleCallbackSchema,
   googleStartSchema,
   loginSchema,
   logoutBodySchema,
   refreshSchema,
   registerSchema,
+  resetPasswordWithTokenSchema,
   setInitialPasswordSchema,
   verifyEmailSchema,
 } from "../modules/auth/auth.schema.js";
@@ -62,6 +64,61 @@ const authRoutes: FastifyPluginAsync = async (app) => {
     async (request, reply) => {
       const body = parseOrThrow(verifyEmailSchema, request.body);
       const result = await authService.verifyEmail(app.prisma, body.token);
+      return reply.send(result);
+    },
+  );
+
+  app.post(
+    "/auth/forgot-password",
+    {
+      config: {
+        rateLimit: {
+          max: loadConfig().RATE_LIMIT_FORGOT_PASSWORD_MAX,
+          timeWindow: loadConfig().RATE_LIMIT_FORGOT_PASSWORD_WINDOW_MS,
+        },
+      },
+      schema: {
+        tags: ["Auth"],
+        summary: "Request password reset email",
+        body: {
+          type: "object",
+          required: ["email"],
+          properties: { email: { type: "string", format: "email" } },
+        },
+      },
+    },
+    async (request, reply) => {
+      const body = parseOrThrow(forgotPasswordSchema, request.body);
+      const result = await authService.requestPasswordReset(app.prisma, body.email);
+      return reply.send(result);
+    },
+  );
+
+  app.post(
+    "/auth/reset-password",
+    {
+      config: {
+        rateLimit: {
+          max: loadConfig().RATE_LIMIT_RESET_PASSWORD_MAX,
+          timeWindow: loadConfig().RATE_LIMIT_RESET_PASSWORD_WINDOW_MS,
+        },
+      },
+      schema: {
+        tags: ["Auth"],
+        summary: "Set new password using token from email",
+        body: {
+          type: "object",
+          required: ["token", "password"],
+          properties: {
+            token: { type: "string" },
+            password: { type: "string" },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const body = parseOrThrow(resetPasswordWithTokenSchema, request.body);
+      const result = await authService.resetPasswordWithToken(app.prisma, body.token, body.password);
       return reply.send(result);
     },
   );
