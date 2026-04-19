@@ -23,6 +23,35 @@ Na VPS warto zweryfikować:
 
 **Cache przeglądarki:** często włącza się długi cache na **`/assets/*.js`** (`immutable`). Jeśli hash w nazwie pliku nie zmienił się przy kolejnym `npm run build`, przeglądarka może trzymać **stary bundel** JS, mimo że **API** już pochodzi z nowego kodu na serwerze (żądania `fetch('/api/...')` zwykle nie są cache’owane jak statyczne JS). Przy podejrzeniu starego frontu: **twarde odświeżenie** (Ctrl+Shift+R) lub wyczyszczenie cache dla domeny.
 
+### Logowanie Google — błąd **503** na `GET /api/v1/auth/google/start`
+
+Oznacza to, że w **`backend/.env`** na VPS **nie ma** pełnej trójki (albo są puste):
+
+- `GOOGLE_CLIENT_ID`
+- `GOOGLE_CLIENT_SECRET`
+- `GOOGLE_OAUTH_REDIRECT_URI`
+
+**Dla domeny `fv.resta.biz`** (frontend i `/api/` przez nginx na tym samym hoście, jak w `deploy/nginx-fv-control.example.conf`):
+
+1. W [Google Cloud Console](https://console.cloud.google.com/) → APIs & Services → Credentials utwórz **OAuth 2.0 Client ID** typu **Web application**.
+2. **Authorized JavaScript origins:** `https://fv.resta.biz`
+3. **Authorized redirect URIs:** dokładnie  
+   `https://fv.resta.biz/api/v1/auth/google/callback`  
+   (musi być **identyczne** z wartością `GOOGLE_OAUTH_REDIRECT_URI` w `.env`).
+4. W pliku `~/fv-control/backend/.env` dopisz (wartości z konsoli Google):
+
+```env
+GOOGLE_CLIENT_ID=....apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=GOCSPX-...
+GOOGLE_OAUTH_REDIRECT_URI=https://fv.resta.biz/api/v1/auth/google/callback
+WEB_APP_URL=https://fv.resta.biz
+```
+
+5. Restart API:  
+   `systemctl --user restart fv-control-backend.service`
+
+Diagnostyka: `curl -sS https://fv.resta.biz/api/v1/ready` — w JSON pole **`googleOAuthConfigured`** powinno być **`true`** po uzupełnieniu zmiennych i restarcie. Bez SMTP nowe konto wyłącznie przez Google może wymagać jeszcze weryfikacji e-mail — wtedy potrzebne są też `SMTP_HOST` i `EMAIL_FROM` (jak przy zwykłej rejestracji).
+
 Sam proces `**npm run start`** (Fastify) **tylko przyjmuje HTTP** (login, `POST .../sync`, itd.).  
 **Nie wykonuje** synchronizacji IMAP ani kroków pipeline na kolejce BullMQ.
 

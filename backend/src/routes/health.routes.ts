@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
-import { loadConfig } from "../config.js";
+import { isGoogleOAuthConfigured, loadConfig } from "../config.js";
 import { pingRedis } from "../lib/redis-connection.js";
 
 const healthRoutes: FastifyPluginAsync = async (app) => {
@@ -35,6 +35,7 @@ const healthRoutes: FastifyPluginAsync = async (app) => {
               status: { type: "string" },
               database: { type: "string" },
               redis: { type: "string" },
+              googleOAuthConfigured: { type: "boolean" },
             },
           },
           503: {
@@ -43,6 +44,7 @@ const healthRoutes: FastifyPluginAsync = async (app) => {
               status: { type: "string" },
               database: { type: "string" },
               redis: { type: "string" },
+              googleOAuthConfigured: { type: "boolean" },
             },
           },
         },
@@ -57,7 +59,9 @@ const healthRoutes: FastifyPluginAsync = async (app) => {
       }
       const redis = (await pingRedis()) ? "ok" : "down";
       const ok = database === "ok" && redis === "ok";
-      const body = { status: ok ? "ok" : "degraded", database, redis };
+      const cfg = loadConfig();
+      const googleOAuthConfigured = isGoogleOAuthConfigured(cfg);
+      const body = { status: ok ? "ok" : "degraded", database, redis, googleOAuthConfigured };
       return ok ? reply.send(body) : reply.status(503).send(body);
     },
   );

@@ -273,7 +273,12 @@ export async function resendVerificationRequest(email: string): Promise<{ verifi
 
 export async function getGoogleStartUrl(mode: 'login' | 'register'): Promise<string> {
   const res = await fetch(`/api/v1/auth/google/start?mode=${encodeURIComponent(mode)}`)
-  const body = (await res.json()) as { url?: string; error?: { message?: string } }
-  if (!res.ok || !body.url) throw new Error(body.error?.message ?? 'Google OAuth niedostępny')
+  let body: BackendErrorBody & { url?: string } = {}
+  try {
+    body = (await res.json()) as BackendErrorBody & { url?: string }
+  } catch {
+    /* ignore */
+  }
+  if (!res.ok || !body.url) throw new Error(readLoginErrorMessage(body, res.status))
   return body.url
 }

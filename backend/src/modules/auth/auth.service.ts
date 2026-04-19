@@ -3,6 +3,7 @@ import jwt from "jsonwebtoken";
 import type { PrismaClient, UserRole } from "@prisma/client";
 import {
   type AppConfig,
+  isGoogleOAuthConfigured,
   isPlatformAdminEmail,
   isSmtpConfigured,
   loadConfig,
@@ -290,19 +291,24 @@ export async function resendEmailVerification(prisma: PrismaClient, email: strin
   return { sent: true, ...(shouldExposeVerificationToken(cfg) ? { verificationToken: token } : {}) };
 }
 
+const GOOGLE_OAUTH_NOT_CONFIGURED_MSG =
+  "Logowanie Google nie jest skonfigurowane na serwerze. Ustaw GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET i GOOGLE_OAUTH_REDIRECT_URI w pliku .env backendu (i ten sam redirect URI w Google Cloud Console), potem zrestartuj usługę API.";
+
 export function buildGoogleAuthUrl(mode: "login" | "register"): string {
   const cfg = loadConfig();
-  if (!cfg.GOOGLE_CLIENT_ID || !cfg.GOOGLE_CLIENT_SECRET || !cfg.GOOGLE_OAUTH_REDIRECT_URI) {
-    throw AppError.unavailable("Google OAuth is not configured");
+  if (!isGoogleOAuthConfigured(cfg)) {
+    throw AppError.unavailable(GOOGLE_OAUTH_NOT_CONFIGURED_MSG);
   }
+  const googleClientId = cfg.GOOGLE_CLIENT_ID!;
+  const googleRedirectUri = cfg.GOOGLE_OAUTH_REDIRECT_URI!;
   const state = jwt.sign(
     { typ: "google_state", nonce: crypto.randomUUID(), mode },
     cfg.JWT_ACCESS_SECRET,
     { expiresIn: "10m", algorithm: "HS256" },
   );
   const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");
-  url.searchParams.set("client_id", cfg.GOOGLE_CLIENT_ID);
-  url.searchParams.set("redirect_uri", cfg.GOOGLE_OAUTH_REDIRECT_URI);
+  url.searchParams.set("client_id", googleClientId);
+  url.searchParams.set("redirect_uri", googleRedirectUri);
   url.searchParams.set("response_type", "code");
   url.searchParams.set("scope", "openid email profile");
   url.searchParams.set("state", state);
@@ -316,9 +322,12 @@ export async function loginWithGoogleCode(
   state: string,
 ): Promise<GoogleOAuthLoginResult> {
   const cfg = loadConfig();
-  if (!cfg.GOOGLE_CLIENT_ID || !cfg.GOOGLE_CLIENT_SECRET || !cfg.GOOGLE_OAUTH_REDIRECT_URI) {
-    throw AppError.unavailable("Google OAuth is not configured");
+  if (!isGoogleOAuthConfigured(cfg)) {
+    throw AppError.unavailable(GOOGLE_OAUTH_NOT_CONFIGURED_MSG);
   }
+  const googleClientId = cfg.GOOGLE_CLIENT_ID!;
+  const googleClientSecret = cfg.GOOGLE_CLIENT_SECRET!;
+  const googleRedirectUri = cfg.GOOGLE_OAUTH_REDIRECT_URI!;
   try {
     const decoded = jwt.verify(state, cfg.JWT_ACCESS_SECRET, { algorithms: ["HS256"] }) as Record<string, unknown>;
     if (decoded.typ !== "google_state") throw new Error("bad state");
@@ -331,9 +340,9 @@ export async function loginWithGoogleCode(
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       code,
-      client_id: cfg.GOOGLE_CLIENT_ID,
-      client_secret: cfg.GOOGLE_CLIENT_SECRET,
-      redirect_uri: cfg.GOOGLE_OAUTH_REDIRECT_URI,
+      client_id: googleClientId,
+      client_secret: googleClientSecret,
+      redirect_uri: googleRedirectUri,
       grant_type: "authorization_code",
     }),
   });

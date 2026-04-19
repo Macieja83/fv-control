@@ -287,6 +287,15 @@ export function isSmtpConfigured(cfg: AppConfig): boolean {
   return Boolean(cfg.SMTP_HOST && cfg.SMTP_HOST.length > 0);
 }
 
+/** Pełna konfiguracja „Zaloguj przez Google” (`/auth/google/*`). Bez tego `GET /auth/google/start` zwraca 503. */
+export function isGoogleOAuthConfigured(cfg: AppConfig): boolean {
+  return Boolean(
+    cfg.GOOGLE_CLIENT_ID?.trim() &&
+      cfg.GOOGLE_CLIENT_SECRET?.trim() &&
+      cfg.GOOGLE_OAUTH_REDIRECT_URI?.trim(),
+  );
+}
+
 /** Czy API może zwracać verificationToken w JSON (wyłącz na VPS / produkcji). */
 export function shouldExposeVerificationToken(cfg: AppConfig): boolean {
   if (cfg.AUTH_EXPOSE_VERIFICATION_TOKEN === "true") return true;

@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import { assertCanManageIntegrations } from "../lib/roles.js";
 import { createStubGmailConnector, createStubImapConnector, createStubKsefConnector, createStubRestaConnector } from "../connectors/connector.interfaces.js";
-import { loadConfig } from "../config.js";
+import { isGoogleOAuthConfigured, loadConfig } from "../config.js";
 
 const connectorsRoutes: FastifyPluginAsync = async (app) => {
   app.get(
@@ -24,7 +24,7 @@ const connectorsRoutes: FastifyPluginAsync = async (app) => {
         environment: {
           ksefEnv: cfg.KSEF_ENV,
           restaConfigured: Boolean(cfg.RESTA_API_BASE_URL),
-          googleOAuthConfigured: Boolean(cfg.GOOGLE_CLIENT_ID && cfg.GOOGLE_CLIENT_SECRET),
+          googleOAuthConfigured: isGoogleOAuthConfigured(cfg),
         },
         stubs: {
           gmail: { nextHistoryId: g.nextCursor.historyId, pendingAttachments: g.attachmentRefs.length },
