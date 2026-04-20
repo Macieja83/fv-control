@@ -304,6 +304,8 @@ export function ReportsPanel({ invoiceListEpoch }: ReportsPanelProps) {
             profitMarginPct={profitMarginPct}
             trendPoints={trendPoints}
             formatMoney={money}
+            dateFrom={filters.dateFrom}
+            dateTo={filters.dateTo}
           />
         ) : null}
 
