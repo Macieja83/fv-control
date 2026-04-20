@@ -4,7 +4,8 @@ import { useAuth } from '../../auth/AuthContext'
 import { getStoredToken } from '../../auth/session'
 import { ALL_REPORT_CATEGORIES } from '../../data/categories'
 import { seedInvoices } from '../../data/mockInvoices'
-import { CategoryBarChart, type CategoryBarDatum } from '../dashboard/CategoryBarChart'
+import type { CategoryBarDatum } from '../dashboard/CategoryBarChart'
+import { CategoryPieChart } from '../dashboard/CategoryPieChart'
 import { ReportsVisualSummary } from './ReportsVisualSummary'
 import { FilterBar } from '../dashboard/FilterBar'
 import { matchesInvoiceFilters } from '../../lib/matchesInvoiceFilters'
@@ -309,7 +310,7 @@ export function ReportsPanel({ invoiceListEpoch }: ReportsPanelProps) {
         <div className="reports-chart-grid">
           <section className="reports-chart-card">
             <h3 className="workspace-panel__h3">Wydatki</h3>
-            <CategoryBarChart
+            <CategoryPieChart
               variant="purchase"
               data={purchaseData}
               formatMoney={money}
@@ -318,7 +319,7 @@ export function ReportsPanel({ invoiceListEpoch }: ReportsPanelProps) {
           </section>
           <section className="reports-chart-card">
             <h3 className="workspace-panel__h3">Przychody</h3>
-            <CategoryBarChart
+            <CategoryPieChart
               variant="sale"
               data={saleData}
               formatMoney={money}

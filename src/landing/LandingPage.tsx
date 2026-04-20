@@ -31,11 +31,11 @@ export default function LandingPage({ onNavigateAuth, onNavigateLegal }: Landing
 
     const amountEl = document.getElementById('live-amount')
     const sparkEl = document.getElementById('fw-spark-val')
-    let amount = 896120
+    let amount = 98420
     let spark = 42810
     timers.push(
       window.setInterval(() => {
-        amount += Math.floor(Math.random() * 200) + 50
+        amount += Math.floor(Math.random() * 40) + 8
         spark += Math.floor(Math.random() * 80) + 20
         if (amountEl) amountEl.textContent = `${amount.toLocaleString('pl-PL')} zł`
         if (sparkEl) sparkEl.textContent = `${spark.toLocaleString('pl-PL')} zł`
@@ -85,9 +85,12 @@ export default function LandingPage({ onNavigateAuth, onNavigateLegal }: Landing
 
     const heroEl = document.querySelector<HTMLElement>('.hero')
     const onScroll = () => {
-      if (!heroEl) return
-      const past = window.scrollY > heroEl.offsetHeight - 80
-      document.body.classList.toggle('past-hero', past)
+      const y = window.scrollY
+      if (heroEl) {
+        const past = y > heroEl.offsetHeight - 80
+        document.body.classList.toggle('past-hero', past)
+      }
+      document.body.classList.toggle('nav-top', y < 12)
     }
     window.addEventListener('scroll', onScroll, { passive: true })
     onScroll()
@@ -109,7 +112,7 @@ export default function LandingPage({ onNavigateAuth, onNavigateLegal }: Landing
       timers.forEach((id) => window.clearInterval(id))
       window.removeEventListener('scroll', onScroll)
       observer.disconnect()
-      document.body.classList.remove('hero-dark', 'past-hero')
+      document.body.classList.remove('hero-dark', 'past-hero', 'nav-top')
     }
   }, [])
 
@@ -271,7 +274,7 @@ export default function LandingPage({ onNavigateAuth, onNavigateLegal }: Landing
                   <div className="device__body">
                     <div className="device__eyebrow">Przychody · kwiecień 2026</div>
                     <div className="device__amount" id="live-amount">
-                      896 120 zł
+                      98 420 zł
                     </div>
                     <div className="device__trend">+ 12,4 % <span>vs. marzec</span></div>
                     <div className="device__chart">
