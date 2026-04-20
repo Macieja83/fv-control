@@ -142,7 +142,7 @@ export function useInvoiceDashboard() {
           return
         }
         setListError(msg)
-        setInvoices([])
+        // Nie czyść listy — chwilowy błąd API (timeout/502) wyglądałby jak „znika” świeżo dodana faktura.
         bumpInvoiceListEpoch()
       }
     } finally {

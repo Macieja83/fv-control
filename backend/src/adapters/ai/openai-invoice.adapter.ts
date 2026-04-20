@@ -46,6 +46,7 @@ Rules:
 - dueDate: Polish invoices often show \"Termin płatności\", \"Płatność do\", \"Zapłata do\" as DD.MM.RRRR — you MUST output dueDate as YYYY-MM-DD (convert day-first dates)
 - dueDate / paymentForm / bankAccount / paymentDescription: only if clearly visible on the document
 - Omit or set to null any unknown fields
+- For photos and phone scans: handle slight blur, skew, and shadows; disambiguate O/0 and I/1 using context (NIP, amounts, „FV”, „Sprzedawca”).
 - Return ONLY valid JSON, no markdown fences`;
 
 function toStr(val: unknown, fallback: string): string {

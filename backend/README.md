@@ -49,19 +49,29 @@ Szczegóły produkcyjne: [README-PRODUCTION.md](./README-PRODUCTION.md). Dokumen
 - Hasło: `Admin123!`
 - Tenant: **Resta Demo** (wraz z przykładowym kontrahentem i fakturą + 2 pozycjami)
 
-## Docker (API + Postgres + Redis + MinIO + Worker)
+## Docker (Postgres + Redis + MinIO; API + Worker opcjonalnie w kontenerach)
+
+Domyślnie uruchamiane są tylko bazy i MinIO (API i worker na hoście — `npm run dev` / `npm run worker`):
 
 ```bash
-docker compose up --build
+docker compose up -d
+```
+
+Pełny backend w kontenerach (API + worker — profil `docker-app`):
+
+```bash
+docker compose --profile docker-app up -d --build
 ```
 
 - **api** — `migrate deploy` + `node dist/index.js`
-- **worker** — `migrate deploy` + `node dist/worker.js`
+- **worker** — `node dist/worker.js`
 
-Seed (jednorazowo / po zmianach):
+**Produkcja z API/worker w systemd:** nie uruchamiaj profilu `docker-app` na tym samym hoście — drugi worker w Dockerze weźmie te same joby z Redis, ale inny katalog uploadów i OCR się wyłoży.
+
+Seed (jednorazowo / po zmianach, gdy działa kontener `api`):
 
 ```bash
-docker compose exec api npx prisma db seed
+docker compose --profile docker-app exec api npx prisma db seed
 ```
 
 ## Makefile

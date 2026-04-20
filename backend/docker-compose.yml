@@ -1,5 +1,12 @@
-# Lokalny stack: Postgres + Redis + API + worker.
-# Migracje Prisma: uruchamiane przy starcie kontenera **api** (Dockerfile CMD) — worker nie powtarza `migrate deploy`.
+# Lokalny stack: Postgres + Redis + MinIO; API i worker w kontenerze tylko z profilem `docker-app`.
+#
+# Domyślnie: `docker compose up -d` = postgres + redis + minio (API/worker na hoście przez npm lub systemd).
+# Pełny stack w Dockerze: `docker compose --profile docker-app up -d --build`
+#
+# Uwaga (VPS): nie uruchamiaj jednocześnie workera w Dockerze i `fv-control-worker.service` — wspólna kolejka BullMQ,
+# inne katalogi uploadów → OCR kończy się błędem „brak pliku w storage”.
+#
+# Migracje Prisma: przy starcie kontenera **api** (Dockerfile CMD).
 services:
   postgres:
     image: postgres:16-alpine
@@ -40,6 +47,8 @@ services:
       - fvcontrol_minio:/data
 
   api:
+    profiles:
+      - docker-app
     build:
       context: .
       dockerfile: Dockerfile
@@ -97,6 +106,8 @@ services:
 
   # Worker startuje po healthy API — wtedy `prisma migrate deploy` w CMD obrazu API już się wykonał.
   worker:
+    profiles:
+      - docker-app
     build:
       context: .
       dockerfile: Dockerfile
