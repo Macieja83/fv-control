@@ -14,8 +14,10 @@ services:
       POSTGRES_USER: fvresta
       POSTGRES_PASSWORD: fvresta
       POSTGRES_DB: fvresta
+    # Nie używaj 5432 na hoście, jeśli produkcyjny Postgres jest z root `docker-compose.yml` — inaczej API na hoście
+    # trafi w pustą bazę z tego pliku zamiast w fvresta_pg.
     ports:
-      - "5432:5432"
+      - "5434:5432"
     volumes:
       - fvcontrol_pg:/var/lib/postgresql/data
     healthcheck:

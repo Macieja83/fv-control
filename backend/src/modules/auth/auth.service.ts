@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import jwt from "jsonwebtoken";
-import type { PrismaClient, UserRole } from "@prisma/client";
+import { Prisma, type PrismaClient, type UserRole } from "@prisma/client";
 import {
   type AppConfig,
   isGoogleOAuthConfigured,
@@ -145,12 +145,30 @@ export async function login(prisma: PrismaClient, input: LoginInput) {
     return { user: sanitizeUser(user), ...tokens };
   } catch (e) {
     if (e instanceof AppError) throw e;
+    if (e instanceof Prisma.PrismaClientKnownRequestError) {
+      if (e.code === "P1001" || e.code === "P1017") {
+        throw AppError.internal(
+          "Brak połączenia z bazą danych. Sprawdź DATABASE_URL i czy Postgres działa (np. docker compose up -d postgres z katalogu głównego repo).",
+        );
+      }
+      if (e.code === "P2021" || /does not exist in the current database/i.test(e.message)) {
+        throw AppError.internal(
+          "Baza danych nie ma schematu aplikacji (brak tabel). Uruchom: cd backend && npx prisma migrate deploy — albo API wskazuje na złą instancję Postgres (np. drugi kontener na porcie 5432 z pustą bazą).",
+        );
+      }
+    }
+    if (e instanceof Prisma.PrismaClientInitializationError) {
+      throw AppError.internal(
+        "Brak połączenia z bazą danych (Prisma). Sprawdź DATABASE_URL i dostępność Postgresa.",
+      );
+    }
     const msg = e instanceof Error ? e.message : String(e);
     if (/P1001|Can't reach database|ECONNREFUSED/i.test(msg)) {
       throw AppError.internal(
         "Brak połączenia z bazą danych. Uruchom Postgres (np. docker compose up -d postgres).",
       );
     }
+    console.error("[auth] login unexpected error:", e);
     throw AppError.internal("Logowanie chwilowo niedostępne.");
   }
 }
