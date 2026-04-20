@@ -1,6 +1,20 @@
 import path from "node:path";
 import { z } from "zod";
 
+/**
+ * Zmienne bool z `.env` są stringami. `z.coerce.boolean()` używa `Boolean(x)` — dla `"false"` daje `true`.
+ */
+function envBool(defaultValue: boolean) {
+  return z.preprocess((val: unknown) => {
+    if (val === undefined || val === null || val === "") return defaultValue;
+    if (typeof val === "boolean") return val;
+    const s = String(val).trim().toLowerCase();
+    if (["true", "1", "yes"].includes(s)) return true;
+    if (["false", "0", "no"].includes(s)) return false;
+    return defaultValue;
+  }, z.boolean());
+}
+
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   HOST: z.string().default("0.0.0.0"),
@@ -60,10 +74,10 @@ const envSchema = z.object({
   S3_ACCESS_KEY: z.string().optional(),
   S3_SECRET_KEY: z.string().optional(),
   S3_BUCKET: z.string().default("fvcontrol-documents"),
-  S3_FORCE_PATH_STYLE: z.coerce.boolean().default(true),
+  S3_FORCE_PATH_STYLE: envBool(true),
   STORAGE_DRIVER: z.enum(["local", "s3"]).default("local"),
 
-  FEATURE_AI_EXTRACTION_MOCK: z.coerce.boolean().default(true),
+  FEATURE_AI_EXTRACTION_MOCK: envBool(true),
   OPENAI_API_KEY: z.string().optional(),
   OPENAI_MODEL: z.string().default("gpt-4o"),
 
@@ -90,7 +104,7 @@ const envSchema = z.object({
   /** Wysyłka e-maili weryfikacyjnych (nodemailer). Na produkcji ustaw SMTP_HOST + EMAIL_FROM. */
   SMTP_HOST: z.preprocess((v) => (v === "" || v === undefined ? undefined : String(v).trim()), z.string().min(1).optional()),
   SMTP_PORT: z.coerce.number().int().positive().default(587),
-  SMTP_SECURE: z.coerce.boolean().default(false),
+  SMTP_SECURE: envBool(false),
   SMTP_USER: z.preprocess((v) => (v === "" || v === undefined ? undefined : String(v)), z.string().optional()),
   SMTP_PASS: z.preprocess((v) => (v === "" || v === undefined ? undefined : String(v)), z.string().optional()),
   /** Nadawca (np. "FV Resta <noreply@twojadomena.pl>"). */
@@ -156,7 +170,7 @@ const envSchema = z.object({
    * Domyślnie **false** — zostaje XML jako główny dokument (pełny podgląd w UI jak u pozostałych źródeł z treścią faktury).
    * `true` = stare zachowanie (PDF w primary + `GET …?source=ksef-fa-xml` dla pełnego podglądu).
    */
-  KSEF_PROMOTE_SUMMARY_PDF_PRIMARY: z.coerce.boolean().default(false),
+  KSEF_PROMOTE_SUMMARY_PDF_PRIMARY: envBool(false),
   /**
    * Zapytania `POST /invoices/query/metadata` — lista ról MF (`Subject1` = m.in. wystawca, `Subject2` = m.in. nabywca).
    * Domyślnie oba: część faktur widoczna w portalu tylko w jednym kontekście; deduplikacja po `ksefNumber`.
@@ -225,7 +239,7 @@ const envSchema = z.object({
    * SaaS multi-tenant: gdy `true`, KSeF **nie** używa globalnych `KSEF_TOKEN` / `KSEF_NIP` z `.env` —
    * tylko poświadczeń zapisanych przez tenanta (Ustawienia). Zalecane na produkcji współdzielonym hoście.
    */
-  KSEF_DISABLE_GLOBAL_FALLBACK: z.coerce.boolean().default(false),
+  KSEF_DISABLE_GLOBAL_FALLBACK: envBool(false),
   RESTA_API_BASE_URL: z.string().optional(),
 
   /**
@@ -235,7 +249,7 @@ const envSchema = z.object({
   GUS_BIR_SERVICE_URL: z.preprocess((v) => (v === "" || v === undefined ? undefined : v), z.string().url().optional()),
   GUS_BIR_API_KEY: z.preprocess((v) => (v === "" || v === undefined ? undefined : v), z.string().optional()),
   /** Środowisko testowe GUS (klucz domyślny z dokumentacji, jeśli GUS_BIR_API_KEY puste). */
-  GUS_BIR_USE_TEST: z.coerce.boolean().default(false),
+  GUS_BIR_USE_TEST: envBool(false),
 
   PIPELINE_MAX_ATTEMPTS: z.coerce.number().int().positive().default(8),
   IDEMPOTENCY_TTL_HOURS: z.coerce.number().int().positive().default(24),
