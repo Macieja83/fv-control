@@ -43,7 +43,8 @@ async function main() {
   const demoHash = await argon2.hash("Admin123!", { type: argon2.argon2id });
   await prisma.user.upsert({
     where: { email: demoEmail },
-    update: { passwordHash: demoHash, tenantId: tenant.id, role: "ADMIN", isActive: true },
+    // update: omit tenantId so production kontakt stays on the real tenant (seed only refreshes password)
+    update: { passwordHash: demoHash, role: "ADMIN", isActive: true },
     create: {
       id: "00000000-0000-4000-8000-000000000003",
       tenantId: tenant.id,

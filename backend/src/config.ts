@@ -8,11 +8,46 @@ function envBool(defaultValue: boolean) {
   return z.preprocess((val: unknown) => {
     if (val === undefined || val === null || val === "") return defaultValue;
     if (typeof val === "boolean") return val;
-    const s = String(val).trim().toLowerCase();
-    if (["true", "1", "yes"].includes(s)) return true;
-    if (["false", "0", "no"].includes(s)) return false;
+    if (typeof val === "number") return val !== 0;
+    if (typeof val === "string") {
+      const s = val.trim().toLowerCase();
+      if (["true", "1", "yes"].includes(s)) return true;
+      if (["false", "0", "no"].includes(s)) return false;
+    }
     return defaultValue;
   }, z.boolean());
+}
+
+function envOptionalTrimmedString(v: unknown): string | undefined {
+  if (v === "" || v === undefined || v === null) return undefined;
+  if (typeof v === "string") return v.trim() || undefined;
+  if (typeof v === "number" || typeof v === "boolean" || typeof v === "bigint") return String(v);
+  return undefined;
+}
+
+function envOptionalString(v: unknown): string | undefined {
+  if (v === "" || v === undefined || v === null) return undefined;
+  if (typeof v === "string") return v;
+  if (typeof v === "number" || typeof v === "boolean" || typeof v === "bigint") return String(v);
+  return undefined;
+}
+
+function envCsvOrDefault(v: unknown, defaultCsv: string): string {
+  if (v === "" || v === undefined || v === null) return defaultCsv;
+  if (typeof v === "string") return v.trim();
+  if (typeof v === "number" || typeof v === "boolean" || typeof v === "bigint") return String(v);
+  return defaultCsv;
+}
+
+function envAuthExposeVerificationToken(v: unknown): "true" | "false" | undefined {
+  if (v === "" || v === undefined || v === null) return undefined;
+  if (v === true) return "true";
+  if (v === false) return "false";
+  if (typeof v === "string") {
+    const t = v.trim();
+    if (t === "true" || t === "false") return t;
+  }
+  return undefined;
 }
 
 const envSchema = z.object({
@@ -87,42 +122,33 @@ const envSchema = z.object({
     .preprocess((v) => (v === "" || v === undefined ? undefined : v), z.string().min(24).optional()),
 
   /** .env z edytorów Windows często ma CRLF — trim usuwa \\r z końca wartości (inaczej Google zwraca redirect_uri_mismatch). */
-  GOOGLE_CLIENT_ID: z.preprocess(
-    (v) => (v === "" || v === undefined ? undefined : String(v).trim() || undefined),
-    z.string().optional(),
-  ),
-  GOOGLE_CLIENT_SECRET: z.preprocess(
-    (v) => (v === "" || v === undefined ? undefined : String(v).trim() || undefined),
-    z.string().optional(),
-  ),
-  GOOGLE_OAUTH_REDIRECT_URI: z.preprocess(
-    (v) => (v === "" || v === undefined ? undefined : String(v).trim() || undefined),
-    z.string().url().optional(),
-  ),
+  GOOGLE_CLIENT_ID: z.preprocess(envOptionalTrimmedString, z.string().optional()),
+  GOOGLE_CLIENT_SECRET: z.preprocess(envOptionalTrimmedString, z.string().optional()),
+  GOOGLE_OAUTH_REDIRECT_URI: z.preprocess(envOptionalTrimmedString, z.string().url().optional()),
   WEB_APP_URL: z.string().url().default("http://localhost:5173"),
 
   /** Wysyłka e-maili weryfikacyjnych (nodemailer). Na produkcji ustaw SMTP_HOST + EMAIL_FROM. */
-  SMTP_HOST: z.preprocess((v) => (v === "" || v === undefined ? undefined : String(v).trim()), z.string().min(1).optional()),
+  SMTP_HOST: z.preprocess(envOptionalTrimmedString, z.string().min(1).optional()),
   SMTP_PORT: z.coerce.number().int().positive().default(587),
   SMTP_SECURE: envBool(false),
-  SMTP_USER: z.preprocess((v) => (v === "" || v === undefined ? undefined : String(v)), z.string().optional()),
-  SMTP_PASS: z.preprocess((v) => (v === "" || v === undefined ? undefined : String(v)), z.string().optional()),
+  SMTP_USER: z.preprocess(envOptionalString, z.string().optional()),
+  SMTP_PASS: z.preprocess(envOptionalString, z.string().optional()),
   /** Nadawca (np. "FV Resta <noreply@twojadomena.pl>"). */
   EMAIL_FROM: z.string().min(3).default("FV Resta <noreply@example.com>"),
   /**
    * Gdy "true", API rejestracji zwraca verificationToken (tylko testy / smoke).
    * Gdy "false" lub brak: w produkcji nigdy nie zwracaj; w development bez ustawienia — zwraca jak dotąd (wygoda lokalna).
    */
-  AUTH_EXPOSE_VERIFICATION_TOKEN: z.preprocess(
-    (v) => (v === "" || v === undefined ? undefined : String(v)),
-    z.enum(["true", "false"]).optional(),
-  ),
+  AUTH_EXPOSE_VERIFICATION_TOKEN: z.preprocess(envAuthExposeVerificationToken, z.enum(["true", "false"]).optional()),
   /**
    * Jedno konto operatora platformy (lista tenantów, impersonacja, /platform-admin/*).
    * Produkcja: ustaw na adres operatora (np. kontakt@tuttopizza.pl).
    */
   PLATFORM_ADMIN_EMAIL: z.preprocess(
-    (v) => (v === "" || v === undefined || v === null ? undefined : String(v).trim().toLowerCase()),
+    (v) => {
+      const s = envOptionalTrimmedString(v);
+      return s === undefined ? undefined : s.toLowerCase();
+    },
     z.string().email().optional(),
   ),
   /** @deprecated Użyj PLATFORM_ADMIN_EMAIL; pozostawione dla istniejących wdrożeń (lista po przecinku). */
@@ -177,7 +203,7 @@ const envSchema = z.object({
    * Skrót: tylko zakupy → `Subject2`.
    */
   KSEF_SYNC_SUBJECT_TYPES: z.preprocess(
-    (v) => (v === "" || v === undefined ? "Subject2,Subject1" : String(v).trim()),
+    (v) => envCsvOrDefault(v, "Subject2,Subject1"),
     z.string(),
   ).transform((raw): ("Subject1" | "Subject2")[] => {
     const out: ("Subject1" | "Subject2")[] = [];
@@ -198,7 +224,7 @@ const envSchema = z.object({
    * Gdy MF zwróci błąd dla `Issue`, ten przebieg jest pomijany (nie blokuje zapisu hwmDate z PermanentStorage).
    */
   KSEF_SYNC_DATE_TYPES: z.preprocess(
-    (v) => (v === "" || v === undefined ? "PermanentStorage,Issue" : String(v).trim()),
+    (v) => envCsvOrDefault(v, "PermanentStorage,Issue"),
     z.string(),
   ).transform((raw): ("PermanentStorage" | "Issue")[] => {
     const out: ("PermanentStorage" | "Issue")[] = [];
