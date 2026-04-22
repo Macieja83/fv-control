@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { InvoiceFilters } from '../../types/invoice'
+import { defaultInvoiceFilters, type InvoiceFilters } from '../../types/invoice'
 
 type Props = {
   filters: InvoiceFilters
@@ -7,6 +7,8 @@ type Props = {
   suppliers: string[]
   restaurants: string[]
   categories: readonly string[]
+  /** Po „Wyczyść” — domyślny stan; brak = bieżący miesiąc + puste pola (jak panel faktur). */
+  getDefaultFilters?: () => InvoiceFilters
 }
 
 function activeFilterCount(f: InvoiceFilters): number {
@@ -22,7 +24,14 @@ function activeFilterCount(f: InvoiceFilters): number {
   return n
 }
 
-export function FilterBar({ filters, onChange, suppliers, restaurants, categories }: Props) {
+export function FilterBar({
+  filters,
+  onChange,
+  suppliers,
+  restaurants,
+  categories,
+  getDefaultFilters,
+}: Props) {
   const [open, setOpen] = useState(false)
   const count = activeFilterCount(filters)
 
@@ -72,6 +81,22 @@ export function FilterBar({ filters, onChange, suppliers, restaurants, categorie
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
           <span className="filter-bar__toggle-label">Filtry{count > 0 ? ` (${count})` : ''}</span>
           <svg className={`filter-bar__chevron ${open ? 'filter-bar__chevron--open' : ''}`} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <button
+          type="button"
+          className="filter-bar__reset"
+          title="Przywróć domyślne filtry: bieżący miesiąc, puste wyszukiwanie, wszystkie kategorie (jak po odświeżeniu strony — z aktualną datą od–do)."
+          aria-label="Wyczyść filtry i przywróć domyślne ustawienia"
+          onClick={() => {
+            onChange((getDefaultFilters ?? defaultInvoiceFilters)())
+            setOpen(false)
+          }}
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+            <path d="M3 3v5h5" />
+          </svg>
+          <span className="filter-bar__reset-label">Wyczyść</span>
         </button>
         <button
           type="button"

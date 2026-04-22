@@ -118,17 +118,22 @@ function monthRange(year: number, month: number): { dateFrom: string; dateTo: st
   }
 }
 
-export const EMPTY_FILTERS: InvoiceFilters = {
-  search: '',
-  ...currentMonthRange(),
-  supplier: '',
-  source: '',
-  reviewStatus: '',
-  category: '',
-  payment: '',
-  scope: '',
-  restaurant: '',
+/** Świeży domyślny stan (bieżący miesiąc kalendarzowy + puste pola) — użyj przy resecie filtrów. */
+export function defaultInvoiceFilters(): InvoiceFilters {
+  return {
+    search: '',
+    ...currentMonthRange(),
+    supplier: '',
+    source: '',
+    reviewStatus: '',
+    category: '',
+    payment: '',
+    scope: '',
+    restaurant: '',
+  }
 }
+
+export const EMPTY_FILTERS: InvoiceFilters = defaultInvoiceFilters()
 
 /** Domyślny zakres pod Raporty: od 1. dnia bieżącego miesiąca do dzisiaj (lokalna data przeglądarki). */
 export function defaultReportsDateRange(): Pick<InvoiceFilters, 'dateFrom' | 'dateTo'> {

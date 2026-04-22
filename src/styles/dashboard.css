@@ -516,6 +516,30 @@ html[data-theme='dark'] .app-shell {
 .filter-bar__toggle:hover { border-color: var(--accent); color: var(--accent); }
 .filter-bar__toggle--active { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
 
+.filter-bar__reset {
+  display: flex; align-items: center; gap: 0.3rem;
+  font: inherit; font-size: 0.72rem; font-weight: 600;
+  padding: 0.35rem 0.5rem;
+  min-height: 2.25rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-0);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--transition);
+  white-space: nowrap;
+  flex-shrink: 0;
+  align-self: center;
+}
+.filter-bar__reset:hover {
+  border-color: color-mix(in srgb, var(--text-muted) 35%, var(--border));
+  color: var(--text);
+  background: color-mix(in srgb, var(--surface-0) 85%, var(--surface-1));
+}
+
+.filter-bar__reset-label { display: none; }
+@media (min-width: 480px) { .filter-bar__reset-label { display: inline; } }
+
 .filter-bar__toggle-label { display: none; }
 @media (min-width: 480px) { .filter-bar__toggle-label { display: inline; } }
 

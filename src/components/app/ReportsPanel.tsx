@@ -12,7 +12,7 @@ import { matchesInvoiceFilters } from '../../lib/matchesInvoiceFilters'
 import { enrichDuplicateMetadata } from '../../lib/duplicates'
 import { mapApiInvoiceRowToRecord } from '../../lib/mapApiInvoice'
 import type { CurrencyCode, InvoiceFilters, InvoiceRecord } from '../../types/invoice'
-import { defaultReportsDateRange, EMPTY_FILTERS } from '../../types/invoice'
+import { defaultInvoiceFilters, defaultReportsDateRange, EMPTY_FILTERS } from '../../types/invoice'
 
 const USE_MOCK_INVOICES =
   import.meta.env.VITE_USE_MOCK_INVOICES === 'true' ||
@@ -264,6 +264,10 @@ export function ReportsPanel({ invoiceListEpoch }: ReportsPanelProps) {
           suppliers={suppliers}
           restaurants={restaurants}
           categories={ALL_REPORT_CATEGORIES}
+          getDefaultFilters={() => ({
+            ...defaultInvoiceFilters(),
+            ...defaultReportsDateRange(),
+          })}
         />
 
         <div className="reports-toolbar">
