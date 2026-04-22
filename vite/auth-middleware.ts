@@ -135,24 +135,6 @@ function attachAuthMiddleware(
       const auth = req.headers.authorization
       const token = auth?.startsWith('Bearer ') ? auth.slice(7) : ''
       if (!token) {
-        sendJson(res, 401, { valid: false })
-        return
-      }
-      const s = sessions.get(token)
-      if (!s || Date.now() > s.exp) {
-        if (token) sessions.delete(token)
-        sendJson(res, 401, { valid: false })
-        return
-      }
-      sendJson(res, 200, { valid: true, email: s.email })
-      return
-    }
-
-    /** Zgodny kształt z GET /api/auth/me (Fastify) — tylko dev. */
-    if (url === '/api/auth/me' && req.method === 'GET') {
-      const auth = req.headers.authorization
-      const token = auth?.startsWith('Bearer ') ? auth.slice(7) : ''
-      if (!token) {
         sendJson(res, 401, {
           error: { code: 'UNAUTHORIZED', message: 'Unauthorized', details: null },
         })
@@ -166,13 +148,24 @@ function attachAuthMiddleware(
         })
         return
       }
+      const devTenantId = '00000000-0000-4000-8000-000000000001'
       const now = new Date().toISOString()
+      /**
+       * Musi odpowiadać kształtowi GET /api/v1/auth/me (authService.getMe) — inaczej
+       * `sessionRequest` traci tenantId po odświeżeniu (poprzednio zwracaliśmy tylko { valid, email }).
+       */
       sendJson(res, 200, {
         id: '00000000-0000-4000-8000-000000000002',
-        tenantId: '00000000-0000-4000-8000-000000000001',
+        tenantId: devTenantId,
         email: s.email,
         role: 'OWNER',
+        emailVerified: true,
         isActive: true,
+        isPlatformAdmin: false,
+        isSuperAdmin: false,
+        hasPassword: true,
+        tenantName: 'Resta Demo',
+        impersonation: null,
         createdAt: now,
         updatedAt: now,
       })
