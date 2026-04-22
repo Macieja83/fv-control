@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './auth/AuthContext'
 import LoginPage from './auth/LoginPage'
 import DashboardApp from './DashboardApp'
 import { AppErrorBoundary } from './components/app/AppErrorBoundary'
+import { MobileInvoiceCapturePage } from './components/capture/MobileInvoiceCapturePage'
 import LandingPage from './landing/LandingPage'
 import { PlaceholderLegalPage } from './legal/PlaceholderLegalPage'
 import './index.css'
@@ -17,6 +18,11 @@ function resolveGuestRoute(pathname: string): GuestRoute {
   if (pathname === '/legal/regulamin') return 'legal_terms'
   if (pathname === '/legal/polityka-prywatnosci') return 'legal_privacy'
   return 'landing'
+}
+
+function publicInvoiceCaptureToken(): string | null {
+  const m = window.location.pathname.match(/^\/invoice-capture\/([^/]+)\/?$/)
+  return m?.[1] ? decodeURIComponent(m[1]) : null
 }
 
 function AuthGate() {
@@ -58,6 +64,11 @@ function AuthGate() {
     }
     setGuestRoute('landing')
   }, [])
+
+  const captureToken = publicInvoiceCaptureToken()
+  if (captureToken) {
+    return <MobileInvoiceCapturePage token={captureToken} />
+  }
 
   if (status === 'checking') {
     return (
