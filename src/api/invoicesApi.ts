@@ -235,6 +235,12 @@ export type ApiInvoiceDetail = {
   status: string
   notes: string | null
   items: ApiInvoiceDetailItem[]
+  intakeSourceType?: string
+  source?: string
+  netTotal?: string
+  vatTotal?: string
+  grossTotal?: string
+  normalizedPayload?: Record<string, unknown> | null
 }
 
 export async function postCreateInvoice(

@@ -3,7 +3,7 @@ import helmet from "@fastify/helmet";
 import multipart from "@fastify/multipart";
 import rateLimit from "@fastify/rate-limit";
 import Fastify from "fastify";
-import { loadConfig, getCorsOriginList } from "./config.js";
+import { loadConfig, getCorsOriginList, getPlatformAdminEmails } from "./config.js";
 import authPlugin from "./plugins/auth.js";
 import errorHandlerPlugin from "./plugins/error-handler.js";
 import prismaPlugin from "./plugins/prisma.js";
@@ -15,6 +15,12 @@ import metricsRootRoutes from "./routes/metrics-root.routes.js";
 
 export async function buildApp() {
   const cfg = loadConfig();
+  if (cfg.NODE_ENV === "production" && getPlatformAdminEmails().length === 0) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      "[fv-control] Brak operatora platformy: ustaw PLATFORM_ADMIN_EMAIL i/lub SUPER_ADMIN_EMAILS w .env (inaczej zakładka Admin /api/platform-admin/* są niedostępne).",
+    );
+  }
 
   const app = Fastify({
     disableRequestLogging: true,

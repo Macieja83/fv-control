@@ -13,6 +13,11 @@ export default defineConfig(({ mode }) => {
   const loginEmail = env.FV_RESTA_LOGIN_EMAIL ?? ''
   /** Pełny URL backendu (np. http://localhost:3000) — wtedy /api jest proxy i logowanie idzie do Fastify. */
   const apiUrl = (env.FV_RESTA_API_URL ?? '').trim().replace(/\/$/, '')
+  /** Kto ma `isPlatformAdmin` w trybie Vite dev (jak backend / seed). */
+  const devPlatformAdminEmails = (env.FV_RESTA_DEV_PLATFORM_ADMIN_EMAILS ?? 'kontakt@tuttopizza.pl,admin@fvresta.local')
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean)
 
   return {
     resolve: {
@@ -27,6 +32,7 @@ export default defineConfig(({ mode }) => {
             authDevPlugin({
               loginPassword,
               loginEmail,
+              platformAdminEmails: devPlatformAdminEmails,
             }),
           ]),
     ],

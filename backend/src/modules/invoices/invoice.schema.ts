@@ -90,6 +90,12 @@ export const invoiceUpdateSchema = z.object({
   reviewStatus: z.nativeEnum(InvoiceReviewStatus).optional(),
   legalChannel: z.nativeEnum(LegalChannel).optional(),
   reportCategory: z.string().max(200).optional().nullable(),
+  /** Tylko dla faktur innych niż KSEF_API — dane uzupełniane w UI po OCR. */
+  ocrContractorNip: z.union([z.string().max(24), z.null()]).optional(),
+  ocrContractorName: z.union([z.string().max(500), z.null()]).optional(),
+  ocrPaymentForm: z.union([z.string().max(200), z.null()]).optional(),
+  ocrBankAccount: z.union([z.string().max(80), z.null()]).optional(),
+  ocrPaymentDescription: z.union([z.string().max(500), z.null()]).optional(),
 });
 
 export const invoiceStatusPatchSchema = z.object({

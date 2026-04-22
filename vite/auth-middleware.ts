@@ -44,6 +44,16 @@ type AuthOptions = {
   loginPassword: string
   /** Jeśli ustawione (np. manager@resta.biz), login wymaga tego samego adresu (case-insensitive). */
   loginEmail: string
+  /**
+   * E-maile z `isPlatformAdmin: true` (jak backend `getPlatformAdminEmails` w dev).
+   * Domyślnie: kontakt@tuttopizza.pl, admin@fvresta.local (seed).
+   */
+  platformAdminEmails: string[]
+}
+
+function isDevPlatformAdmin(email: string, list: string[]): boolean {
+  const e = email.trim().toLowerCase()
+  return list.some((x) => x.trim().toLowerCase() === e)
 }
 
 function attachAuthMiddleware(
@@ -89,6 +99,7 @@ function attachAuthMiddleware(
         sessions.set(token, { email, exp: Date.now() + SESSION_MS })
         /** Kształt jak POST /api/v1/auth/login (Fastify) — wymagany przez src/auth/authApi.ts. */
         const devTenantId = '00000000-0000-4000-8000-000000000001'
+        const isPlatformAdmin = isDevPlatformAdmin(email, opts.platformAdminEmails)
         sendJson(res, 200, {
           accessToken: token,
           expiresIn: Math.floor(SESSION_MS / 1000),
@@ -97,7 +108,7 @@ function attachAuthMiddleware(
             email,
             tenantId: devTenantId,
             emailVerified: true,
-            isPlatformAdmin: false,
+            isPlatformAdmin,
             hasPassword: true,
             role: 'OWNER',
             id: '00000000-0000-4000-8000-000000000002',
@@ -150,6 +161,7 @@ function attachAuthMiddleware(
       }
       const devTenantId = '00000000-0000-4000-8000-000000000001'
       const now = new Date().toISOString()
+      const isPlatformAdmin = isDevPlatformAdmin(s.email, opts.platformAdminEmails)
       /**
        * Musi odpowiadać kształtowi GET /api/v1/auth/me (authService.getMe) — inaczej
        * `sessionRequest` traci tenantId po odświeżeniu (poprzednio zwracaliśmy tylko { valid, email }).
@@ -161,8 +173,8 @@ function attachAuthMiddleware(
         role: 'OWNER',
         emailVerified: true,
         isActive: true,
-        isPlatformAdmin: false,
-        isSuperAdmin: false,
+        isPlatformAdmin,
+        isSuperAdmin: isPlatformAdmin,
         hasPassword: true,
         tenantName: 'Resta Demo',
         impersonation: null,
@@ -178,14 +190,20 @@ function attachAuthMiddleware(
 
 export function authDevPlugin(opts: AuthOptions): Plugin {
   const sessions = new Map<string, { email: string; exp: number }>()
+  const ro: AuthOptions = {
+    ...opts,
+    platformAdminEmails: opts.platformAdminEmails.length
+      ? opts.platformAdminEmails
+      : ['kontakt@tuttopizza.pl', 'admin@fvresta.local'],
+  }
 
   return {
     name: 'fv-resta-auth-dev',
     configureServer(server) {
-      attachAuthMiddleware(server.middlewares, sessions, opts)
+      attachAuthMiddleware(server.middlewares, sessions, ro)
     },
     configurePreviewServer(server) {
-      attachAuthMiddleware(server.middlewares, sessions, opts)
+      attachAuthMiddleware(server.middlewares, sessions, ro)
     },
   }
 }

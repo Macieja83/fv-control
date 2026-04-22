@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { InvoiceRecord } from '../../types/invoice'
 import { DuplicateBadge, PaymentBadge, ScopeBadge, SourceBadge } from './Badges'
 import { InvoiceDocumentPreview } from './InvoiceDocumentPreview'
-import { fetchInvoiceEvents, type InvoiceEventRow } from '../../api/invoicesApi'
+import { fetchInvoiceDetail, fetchInvoiceEvents, type InvoiceEventRow } from '../../api/invoicesApi'
 import { getStoredToken } from '../../auth/session'
 import { COST_CATEGORIES, REVENUE_CATEGORIES } from '../../data/categories'
 
@@ -42,6 +42,45 @@ type Props = {
   onEditSalesInvoice?: (id: string) => void | Promise<void>
   /** Utwórz / dopnij kontrahenta po NIP i przypisz do faktury kosztowej. */
   onAdoptVendor?: (id: string, body?: { nip?: string; name?: string }) => void | Promise<void>
+  /** Zapis pól uznanych za wynik OCR (upload / skan), nieużywany na fakturach KSeF-API. */
+  onSaveOcrEdits?: (id: string, body: Record<string, unknown>) => void | Promise<void>
+  dataSource?: 'api' | 'mock'
+}
+
+type OcrFormState = {
+  number: string
+  issueDate: string
+  dueDate: string
+  currency: string
+  net: string
+  vat: string
+  gross: string
+  contractorNip: string
+  contractorName: string
+  paymentForm: string
+  bankAccount: string
+  paymentDescription: string
+}
+
+function buildOcrFormState(row: InvoiceRecord): OcrFormState {
+  const vatFallback = Math.round((row.gross_amount - row.net_amount) * 100) / 100
+  const vatNum =
+    typeof row.vat_amount === 'number' && Number.isFinite(row.vat_amount) ? row.vat_amount : vatFallback
+  return {
+    number: row.invoice_number,
+    issueDate: row.issue_date,
+    dueDate: row.due_date || '',
+    currency: row.currency,
+    net: row.net_amount.toFixed(2),
+    vat: vatNum.toFixed(2),
+    gross: row.gross_amount.toFixed(2),
+    contractorNip: (row.extracted_vendor_nip || row.supplier_nip || '').replace(/\D/g, '').slice(0, 10),
+    contractorName:
+      row.supplier_name?.trim() && row.supplier_name.trim() !== '—' ? row.supplier_name.trim() : '',
+    paymentForm: '',
+    bankAccount: '',
+    paymentDescription: '',
+  }
 }
 
 export function DetailPanel({
@@ -67,6 +106,8 @@ export function DetailPanel({
   onSendToKsef,
   onEditSalesInvoice,
   onAdoptVendor,
+  onSaveOcrEdits,
+  dataSource = 'api',
 }: Props) {
   const [draftNotes, setDraftNotes] = useState('')
   const [ksefBusy, setKsefBusy] = useState(false)
@@ -77,6 +118,9 @@ export function DetailPanel({
   const [adoptBusy, setAdoptBusy] = useState(false)
   const [paymentEvents, setPaymentEvents] = useState<InvoiceEventRow[]>([])
   const [paymentEventsLoading, setPaymentEventsLoading] = useState(false)
+  const [ocrForm, setOcrForm] = useState<OcrFormState | null>(null)
+  const [ocrExtraLoading, setOcrExtraLoading] = useState(false)
+  const [ocrSaveBusy, setOcrSaveBusy] = useState(false)
   const overlayRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -84,13 +128,58 @@ export function DetailPanel({
       setDraftNotes('')
       setAdoptNip('')
       setAdoptName('')
+      setOcrForm(null)
       return
     }
     setDraftNotes(row.notes)
     const digits = (row.extracted_vendor_nip || row.supplier_nip || '').replace(/\D/g, '')
     setAdoptNip(digits.slice(0, 10))
     setAdoptName('')
+    setOcrForm(buildOcrFormState(row))
   }, [row?.id])
+
+  useEffect(() => {
+    if (!row || dataSource === 'mock') return
+    if (row.intake_source_type === 'KSEF_API') return
+    const token = getStoredToken()
+    if (!token) return
+    const invoiceId = row.id
+    let cancelled = false
+    setOcrExtraLoading(true)
+    void fetchInvoiceDetail(token, invoiceId)
+      .then((detail) => {
+        if (cancelled) return
+        const p = detail.normalizedPayload
+        if (!p || typeof p !== 'object' || p === null) return
+        const o = p as Record<string, unknown>
+        setOcrForm((prev) => {
+          if (!prev) return prev
+          return {
+            ...prev,
+            paymentForm: typeof o.paymentForm === 'string' ? o.paymentForm : prev.paymentForm,
+            bankAccount: typeof o.bankAccount === 'string' ? o.bankAccount : prev.bankAccount,
+            paymentDescription:
+              typeof o.paymentDescription === 'string' ? o.paymentDescription : prev.paymentDescription,
+            contractorNip:
+              typeof o.contractorNip === 'string' && o.contractorNip.replace(/\D/g, '').length === 10
+                ? o.contractorNip.replace(/\D/g, '')
+                : prev.contractorNip,
+            contractorName: typeof o.contractorName === 'string' && o.contractorName.trim()
+              ? o.contractorName.trim()
+              : prev.contractorName,
+          }
+        })
+      })
+      .catch(() => {
+        /* ciche — pola z listy zostaną */
+      })
+      .finally(() => {
+        if (!cancelled) setOcrExtraLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [row?.id, dataSource, row?.intake_source_type])
 
   useEffect(() => {
     setDocPreviewReloadKey(0)
@@ -183,6 +272,44 @@ export function DetailPanel({
     (row.source_type === 'ksef' &&
       (primaryLooksLikeXml || row.primary_document_kind === 'ksef_summary_pdf')) ||
     (row.ledger_kind === 'sale' && row.primary_document_kind === 'sale_preview_pdf')
+  const ocrKsefLocked = row.intake_source_type === 'KSEF_API'
+  const ocrIngesting = row.invoice_status === 'INGESTING'
+
+  const handleOcrField =
+    (key: keyof OcrFormState) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      const v = e.target.value
+      setOcrForm((prev) => (prev ? { ...prev, [key]: v } : prev))
+    }
+
+  const handleOcrSave = useCallback(() => {
+    if (!onSaveOcrEdits || !row || !ocrForm) return
+    const n = ocrForm.number.trim()
+    if (!n) {
+      window.alert('Podaj numer faktury.')
+      return
+    }
+    setOcrSaveBusy(true)
+    void (async () => {
+      try {
+        await onSaveOcrEdits(row.id, {
+          number: n,
+          issueDate: ocrForm.issueDate,
+          dueDate: ocrForm.dueDate.trim() ? ocrForm.dueDate : null,
+          currency: ocrForm.currency.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3) || 'PLN',
+          netTotal: ocrForm.net,
+          vatTotal: ocrForm.vat,
+          grossTotal: ocrForm.gross,
+          ocrContractorNip: ocrForm.contractorNip.trim() || null,
+          ocrContractorName: ocrForm.contractorName.trim() || null,
+          ocrPaymentForm: ocrForm.paymentForm.trim() || null,
+          ocrBankAccount: ocrForm.bankAccount.replace(/\s/g, '').trim() || null,
+          ocrPaymentDescription: ocrForm.paymentDescription.trim() || null,
+        })
+      } finally {
+        setOcrSaveBusy(false)
+      }
+    })()
+  }, [onSaveOcrEdits, ocrForm, row])
 
   const handleOverlayClick = (e: React.MouseEvent) => {
     if (e.target === overlayRef.current) onClose()
@@ -338,6 +465,173 @@ export function DetailPanel({
                   </div>
                 )}
               </section>
+
+              {onSaveOcrEdits && (
+                <section className="detail-section">
+                  <h3>Dane rozpoznane (OCR)</h3>
+                  {ocrKsefLocked ? (
+                    <p className="workspace-panel__muted" style={{ margin: 0 }}>
+                      Faktura z KSeF — pól z ministerialnego źródła i strukturalnej treści tutaj nie edytujesz. Do odświeżenia
+                      danych użyj <strong>Odśwież</strong> w podglądzie dokumentu.
+                    </p>
+                  ) : ocrIngesting ? (
+                    <p className="workspace-panel__muted" style={{ margin: 0 }}>
+                      Trwa odczyt pliku (OCR) — gdy zniknie status „OCR” na etykiecie źródła, możesz skorygować pola
+                      poniżej.
+                    </p>
+                  ) : ocrForm ? (
+                    <>
+                      {ocrExtraLoading && (
+                        <p className="workspace-panel__muted" style={{ marginBottom: 8 }}>
+                          Ładowanie szczegółów płatności (z odczytu)…
+                        </p>
+                      )}
+                      <p className="workspace-panel__muted" style={{ marginTop: 0, marginBottom: 10 }}>
+                        Dla faktur ze skanu, zdjęcia lub wgranego pliku (PDF/PNG/JPEG) — popraw rozpoznanie, jeśli
+                        pomyliło cyfrę lub słowo. Dla importu <strong>z KSeF</strong> sekcja jest tylko do odczytu
+                        (regułą jest źródłowe dane w systemie MF).
+                      </p>
+                      <div
+                        className="detail-ocr-grid"
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: '1fr 1fr',
+                          gap: '0.65rem 1rem',
+                        }}
+                      >
+                        <label className="field" style={{ gridColumn: '1 / -1' }}>
+                          <span className="field__label">Numer faktury</span>
+                          <input
+                            className="input"
+                            value={ocrForm.number}
+                            onChange={handleOcrField('number')}
+                            autoComplete="off"
+                          />
+                        </label>
+                        <label className="field">
+                          <span className="field__label">Data wystawienia</span>
+                          <input
+                            className="input mono"
+                            type="date"
+                            value={ocrForm.issueDate.length >= 10 ? ocrForm.issueDate.slice(0, 10) : ocrForm.issueDate}
+                            onChange={handleOcrField('issueDate')}
+                          />
+                        </label>
+                        <label className="field">
+                          <span className="field__label">Termin płatności</span>
+                          <input
+                            className="input mono"
+                            type="date"
+                            value={
+                              ocrForm.dueDate.length >= 10 ? ocrForm.dueDate.slice(0, 10) : ocrForm.dueDate
+                            }
+                            onChange={handleOcrField('dueDate')}
+                          />
+                        </label>
+                        <label className="field">
+                          <span className="field__label">Waluta (np. PLN)</span>
+                          <input
+                            className="input mono"
+                            maxLength={3}
+                            value={ocrForm.currency}
+                            onChange={handleOcrField('currency')}
+                          />
+                        </label>
+                        <label className="field">
+                          <span className="field__label">Netto</span>
+                          <input
+                            className="input mono"
+                            inputMode="decimal"
+                            value={ocrForm.net}
+                            onChange={handleOcrField('net')}
+                          />
+                        </label>
+                        <label className="field">
+                          <span className="field__label">VAT</span>
+                          <input
+                            className="input mono"
+                            inputMode="decimal"
+                            value={ocrForm.vat}
+                            onChange={handleOcrField('vat')}
+                          />
+                        </label>
+                        <label className="field" style={{ gridColumn: '1 / -1' }}>
+                          <span className="field__label">Brutto</span>
+                          <input
+                            className="input mono"
+                            inputMode="decimal"
+                            value={ocrForm.gross}
+                            onChange={handleOcrField('gross')}
+                          />
+                        </label>
+                        <label className="field" style={{ gridColumn: '1 / -1' }}>
+                          <span className="field__label">Sprzedawca — NIP (z faktury)</span>
+                          <input
+                            className="input mono"
+                            inputMode="numeric"
+                            maxLength={10}
+                            value={ocrForm.contractorNip}
+                            onChange={(e) => {
+                              const t = e.target.value.replace(/\D/g, '').slice(0, 10)
+                              setOcrForm((p) => (p ? { ...p, contractorNip: t } : p))
+                            }}
+                            autoComplete="off"
+                          />
+                        </label>
+                        <label className="field" style={{ gridColumn: '1 / -1' }}>
+                          <span className="field__label">Sprzedawca — nazwa (z faktury)</span>
+                          <input
+                            className="input"
+                            value={ocrForm.contractorName}
+                            onChange={handleOcrField('contractorName')}
+                            maxLength={500}
+                          />
+                        </label>
+                        <label className="field" style={{ gridColumn: '1 / -1' }}>
+                          <span className="field__label">Forma płatności (tekst z dokumentu)</span>
+                          <input
+                            className="input"
+                            value={ocrForm.paymentForm}
+                            onChange={handleOcrField('paymentForm')}
+                            maxLength={200}
+                          />
+                        </label>
+                        <label className="field" style={{ gridColumn: '1 / -1' }}>
+                          <span className="field__label">Rachunek (IBAN / nr konta, bez spacji w zapisie)</span>
+                          <input
+                            className="input mono"
+                            value={ocrForm.bankAccount}
+                            onChange={handleOcrField('bankAccount')}
+                            maxLength={80}
+                            spellCheck={false}
+                            autoComplete="off"
+                          />
+                        </label>
+                        <label className="field" style={{ gridColumn: '1 / -1' }}>
+                          <span className="field__label">Tytuł / opis przelewu</span>
+                          <textarea
+                            className="textarea"
+                            rows={2}
+                            value={ocrForm.paymentDescription}
+                            onChange={handleOcrField('paymentDescription')}
+                            maxLength={500}
+                          />
+                        </label>
+                      </div>
+                      <div style={{ marginTop: 12 }}>
+                        <button
+                          type="button"
+                          className="btn btn--primary"
+                          disabled={ocrSaveBusy}
+                          onClick={() => void handleOcrSave()}
+                        >
+                          {ocrSaveBusy ? 'Zapisywanie…' : 'Zapisz poprawki (OCR)'}
+                        </button>
+                      </div>
+                    </>
+                  ) : null}
+                </section>
+              )}
 
               {row.ledger_kind === 'sale' && (onSendToKsef || onEditSalesInvoice) && (
                 <section className="detail-section">

@@ -21,6 +21,7 @@ function mapCurrency(c: string): CurrencyCode {
 export function mapApiInvoiceRowToRecord(row: ApiInvoiceListRow): InvoiceRecord {
   const contractor = row.contractor
   const net = Number.parseFloat(row.netTotal)
+  const vat = Number.parseFloat(row.vatTotal)
   const gross = Number.parseFloat(row.grossTotal)
   const dup = row.duplicateScore != null ? Number.parseFloat(row.duplicateScore) : 0
   const dupOf = row.duplicateCanonicalId?.trim() || null
@@ -54,7 +55,9 @@ export function mapApiInvoiceRowToRecord(row: ApiInvoiceListRow): InvoiceRecord 
     issue_date: toYmd(row.issueDate),
     due_date: row.dueDate ? toYmd(row.dueDate) : '',
     net_amount: Number.isFinite(net) ? net : 0,
+    vat_amount: Number.isFinite(vat) ? vat : 0,
     gross_amount: Number.isFinite(gross) ? gross : 0,
+    intake_source_type: row.intakeSourceType,
     currency: mapCurrency(row.currency),
     category: row.reportCategory?.trim() || null,
     payment_status: row.status === 'PAID' ? 'paid' : 'unpaid',

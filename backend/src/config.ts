@@ -360,10 +360,15 @@ export function shouldExposeVerificationToken(cfg: AppConfig): boolean {
 /** E-maile z uprawnieniami operatora platformy (zakładka Admin + API platform-admin). */
 export function getPlatformAdminEmails(): string[] {
   const cfg = loadConfig();
-  if (cfg.PLATFORM_ADMIN_EMAIL) return [cfg.PLATFORM_ADMIN_EMAIL];
-  const legacy = cfg.SUPER_ADMIN_EMAILS.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
-  if (legacy.length) return [...new Set(legacy)];
-  if (cfg.NODE_ENV !== "production") return ["kontakt@tuttopizza.pl"];
+  const out = new Set<string>();
+  if (cfg.PLATFORM_ADMIN_EMAIL) out.add(cfg.PLATFORM_ADMIN_EMAIL);
+  for (const e of cfg.SUPER_ADMIN_EMAILS.split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean)) {
+    out.add(e);
+  }
+  if (out.size > 0) return [...out];
+  if (cfg.NODE_ENV !== "production") return ["kontakt@tuttopizza.pl", "admin@fvresta.local"];
   return [];
 }
 

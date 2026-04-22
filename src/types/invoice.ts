@@ -44,8 +44,12 @@ export interface InvoiceRecord {
   issue_date: string
   due_date: string
   net_amount: number
+  /** Suma VAT (z listy faktur / API). */
+  vat_amount?: number
   gross_amount: number
   currency: CurrencyCode
+  /** np. KSEF_API, UPLOAD — gdy brak (mock), edycja OCR traktowana jak „nie z KSeF”. */
+  intake_source_type?: string
   category: string | null
   payment_status: PaymentStatus
   document_scope: DocumentScope

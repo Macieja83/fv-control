@@ -615,6 +615,43 @@ export function useInvoiceDashboard() {
     [refreshFromApi, bumpInvoiceListEpoch],
   )
 
+  const saveOcrInvoiceEdits = useCallback(
+    async (id: string, body: Record<string, unknown>) => {
+      if (USE_MOCK_INVOICES) {
+        updateRow(id, (r) =>
+          pushHistory(
+            {
+              ...r,
+              invoice_number: String(body.number ?? r.invoice_number),
+              issue_date: String(body.issueDate ?? r.issue_date).slice(0, 10),
+              due_date: body.dueDate ? String(body.dueDate).slice(0, 10) : r.due_date,
+              net_amount: Number.parseFloat(String(body.netTotal ?? r.net_amount)) || r.net_amount,
+              vat_amount: Number.parseFloat(String(body.vatTotal ?? r.vat_amount ?? 0)) || 0,
+              gross_amount: Number.parseFloat(String(body.grossTotal ?? r.gross_amount)) || r.gross_amount,
+              currency: (String(body.currency ?? r.currency).slice(0, 3) as InvoiceRecord['currency']) || r.currency,
+              supplier_nip: String(
+                body.ocrContractorNip ?? r.supplier_nip,
+              ).replace(/\D/g, '').slice(0, 10),
+              supplier_name: String(body.ocrContractorName ?? r.supplier_name),
+            },
+            'operator',
+            'Zaktualizowano dane rozpoznane (OCR) — w trybie demo tylko lokalnie',
+          ),
+        )
+        return
+      }
+      const token = getStoredToken()
+      if (!token) return
+      try {
+        await patchInvoice(token, id, body)
+        await refreshFromApi()
+      } catch (e) {
+        window.alert(e instanceof Error ? e.message : String(e))
+      }
+    },
+    [updateRow, refreshFromApi],
+  )
+
   const adoptInvoiceVendor = useCallback(
     async (id: string, body?: { nip?: string; name?: string }) => {
       if (USE_MOCK_INVOICES) {
@@ -842,6 +879,7 @@ export function useInvoiceDashboard() {
     retryInvoiceExtraction,
     syncKsefInvoiceFromApi,
     adoptInvoiceVendor,
+    saveOcrInvoiceEdits,
     sendInvoiceToKsef,
     createSalesInvoice,
     getSalesInvoiceForEdit,

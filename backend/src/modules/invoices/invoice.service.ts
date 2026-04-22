@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import type { InvoiceStatus, PrismaClient } from "@prisma/client";
 import { AppError } from "../../lib/errors.js";
+import { polishNipDigits10 } from "../contractors/contractor-resolve.js";
 import { assertInvoiceCreationAllowed } from "../billing/subscription-plans.js";
 import { refreshInvoiceCompliance } from "../compliance/compliance.service.js";
 import { parseInvoiceDate, parseInvoiceDateInclusiveEndUtc } from "./invoice-dates.js";
@@ -226,6 +227,28 @@ export async function updateInvoice(
     await assertContractor(prisma, tenantId, input.contractorId);
   }
 
+  const isKsef = existing.intakeSourceType === "KSEF_API";
+  const ocrishPatch =
+    input.ocrContractorNip !== undefined ||
+    input.ocrContractorName !== undefined ||
+    input.ocrPaymentForm !== undefined ||
+    input.ocrBankAccount !== undefined ||
+    input.ocrPaymentDescription !== undefined;
+  const keyDataPatch =
+    input.number !== undefined ||
+    input.issueDate !== undefined ||
+    input.saleDate !== undefined ||
+    input.dueDate !== undefined ||
+    input.currency !== undefined ||
+    input.netTotal !== undefined ||
+    input.vatTotal !== undefined ||
+    input.grossTotal !== undefined;
+  if (isKsef && (ocrishPatch || keyDataPatch)) {
+    throw AppError.validation(
+      "Faktury zapisane z KSeF źródłowo: numerów, dat i kwot nie edytujesz w tym formularzu. Użyj odświeżenia z KSeF.",
+    );
+  }
+
   const data: Prisma.InvoiceUpdateInput = {};
   if (input.contractorId !== undefined) data.contractor = { connect: { id: input.contractorId } };
   if (input.number !== undefined) data.number = input.number;
@@ -248,6 +271,74 @@ export async function updateInvoice(
     data.reportCategory = t && t.length > 0 ? t : null;
   }
 
+  if (!isKsef) {
+    const hasOcrMergeInput =
+      ocrishPatch ||
+      keyDataPatch;
+    if (hasOcrMergeInput) {
+      const prev = (existing.normalizedPayload as Record<string, unknown> | null) ?? {};
+      const next: Record<string, unknown> = { ...prev };
+      if (input.ocrContractorNip !== undefined) {
+        if (input.ocrContractorNip === null || String(input.ocrContractorNip).trim() === "") {
+          next.contractorNip = null;
+        } else {
+          const nip = polishNipDigits10(String(input.ocrContractorNip)) ?? String(input.ocrContractorNip).trim();
+          next.contractorNip = nip;
+        }
+      }
+      if (input.ocrContractorName !== undefined) {
+        next.contractorName =
+          input.ocrContractorName === null || !String(input.ocrContractorName).trim()
+            ? null
+            : String(input.ocrContractorName).trim().slice(0, 500);
+      }
+      if (input.ocrPaymentForm !== undefined) {
+        next.paymentForm = input.ocrPaymentForm;
+      }
+      if (input.ocrBankAccount !== undefined) {
+        if (input.ocrBankAccount === null || !String(input.ocrBankAccount).trim()) {
+          next.bankAccount = null;
+        } else {
+          next.bankAccount = String(input.ocrBankAccount).replace(/\s/g, "").slice(0, 80);
+        }
+      }
+      if (input.ocrPaymentDescription !== undefined) {
+        next.paymentDescription = input.ocrPaymentDescription;
+      }
+      if (input.number !== undefined) next.number = input.number;
+      if (input.issueDate !== undefined) {
+        const s = String(input.issueDate);
+        next.issueDate = s.length >= 10 ? s.slice(0, 10) : s;
+      }
+      if (input.saleDate !== undefined) {
+        if (input.saleDate === null) next.saleDate = null;
+        else {
+          const s = String(input.saleDate);
+          next.saleDate = s.length >= 10 ? s.slice(0, 10) : s;
+        }
+      }
+      if (input.dueDate !== undefined) {
+        if (input.dueDate === null) next.dueDate = null;
+        else {
+          const s = String(input.dueDate);
+          next.dueDate = s.length >= 10 ? s.slice(0, 10) : s;
+        }
+      }
+      if (input.currency !== undefined) next.currency = input.currency;
+      if (input.netTotal !== undefined) next.netTotal = String(input.netTotal);
+      if (input.vatTotal !== undefined) next.vatTotal = String(input.vatTotal);
+      if (input.grossTotal !== undefined) next.grossTotal = String(input.grossTotal);
+      data.normalizedPayload = next as Prisma.JsonObject;
+    }
+  }
+
+  const contractorNameFromOcr =
+    input.ocrContractorName !== undefined && !isKsef
+      ? input.ocrContractorName === null
+        ? null
+        : String(input.ocrContractorName).trim().slice(0, 500)
+      : null;
+
   await prisma.$transaction(async (tx) => {
     await tx.invoice.update({
       where: { id },
@@ -258,6 +349,12 @@ export async function updateInvoice(
         files: true,
       },
     });
+    if (existing.contractorId && contractorNameFromOcr != null && contractorNameFromOcr.length > 0) {
+      await tx.contractor.update({
+        where: { id: existing.contractorId, tenantId, deletedAt: null },
+        data: { name: contractorNameFromOcr },
+      });
+    }
     await createInvoiceEvent(tx, {
       invoiceId: id,
       actorUserId: userId,

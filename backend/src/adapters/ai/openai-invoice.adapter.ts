@@ -98,8 +98,49 @@ const NAME_CANDIDATE_KEYS = [
   "seller",
 ] as const;
 
+/**
+ * Czytelne pole tekstowe z odpowiedzi modelu (string | number itd. → trim).
+ * Modele JSON często zwracają np. numer faktury jako liczbę.
+ */
+function coerceToTrimmedString(val: unknown): string | undefined {
+  if (val === null || val === undefined) return undefined;
+  if (typeof val === "string") {
+    const t = val.trim();
+    return t.length > 0 ? t : undefined;
+  }
+  if (typeof val === "number" && Number.isFinite(val)) {
+    return String(val);
+  }
+  if (typeof val === "boolean") return val ? "true" : "false";
+  return undefined;
+}
+
+const INVOICE_NUMBER_KEYS = [
+  "number",
+  "invoiceNumber",
+  "numerFaktury",
+  "numer_faktury",
+  "invoiceNo",
+  "invoice_no",
+  "fakturaNr",
+  "fvNumber",
+  "numer",
+] as const;
+
+function pickInvoiceNumber(raw: Record<string, unknown>): string | undefined {
+  for (const key of INVOICE_NUMBER_KEYS) {
+    const s = coerceToTrimmedString(raw[key]);
+    if (s) return s;
+  }
+  return undefined;
+}
+
 /** Polish NIP: 10 digits after stripping separators (dashes, spaces, "NIP"). */
 function normalizeNipFromRaw(val: unknown): string | null {
+  if (typeof val === "number" && Number.isInteger(val) && val >= 0) {
+    const digits = String(val).replace(/\D/g, "");
+    if (digits.length === 10) return digits;
+  }
   if (typeof val !== "string") return null;
   const digits = val.replace(/\D/g, "");
   if (digits.length === 10) return digits;
@@ -117,10 +158,9 @@ function pickNipFromObject(raw: Record<string, unknown>): string | null {
 function pickContractorName(raw: Record<string, unknown>): string | null {
   for (const key of NAME_CANDIDATE_KEYS) {
     const v = raw[key];
-    if (typeof v === "string") {
-      const t = v.trim();
-      if (t.length > 1) return t;
-    }
+    const t =
+      typeof v === "string" ? v.trim() : typeof v === "number" && Number.isFinite(v) ? String(v).trim() : "";
+    if (t.length > 1) return t;
   }
   return null;
 }
@@ -143,7 +183,8 @@ const DUE_DATE_KEYS = [
 function pickDueDateRawString(raw: Record<string, unknown>): string | undefined {
   for (const key of DUE_DATE_KEYS) {
     const v = raw[key];
-    if (typeof v === "string" && v.trim().length > 0) return v.trim();
+    const s = coerceToTrimmedString(v);
+    if (s) return s;
   }
   return undefined;
 }
@@ -162,13 +203,13 @@ function resolveDueDateYmd(raw: Record<string, unknown>): string | undefined {
 function mapResponseToDraft(raw: Record<string, unknown>): ExtractedInvoiceDraft {
   const nip = pickNipFromObject(raw);
   const dueDate = resolveDueDateYmd(raw);
-  const bankRaw = trimOrUndef(raw.bankAccount);
+  const bankRaw = trimOrUndef(raw.bankAccount) ?? coerceToTrimmedString(raw.bankAccount) ?? undefined;
   const bankAccount = bankRaw ? bankRaw.replace(/\s/g, "") : undefined;
   return {
-    number: typeof raw.number === "string" ? raw.number : undefined,
-    issueDate: typeof raw.issueDate === "string" ? raw.issueDate : undefined,
+    number: pickInvoiceNumber(raw),
+    issueDate: coerceToTrimmedString(raw.issueDate) ?? undefined,
     dueDate,
-    currency: typeof raw.currency === "string" ? raw.currency : undefined,
+    currency: coerceToTrimmedString(raw.currency) ?? undefined,
     netTotal: toMoneyStr(raw.netTotal, "0"),
     vatTotal: toMoneyStr(raw.vatTotal, "0"),
     grossTotal: toMoneyStr(raw.grossTotal, "0"),
@@ -208,7 +249,26 @@ function isPdfMime(mime: string): boolean {
 
 /**
  * Odczyt tekstu z odpowiedzi Responses API (format różni się od chat.completions).
+ * SDK zwykle ustawia `output_text`; gdyby struktura output się zmieniła, zbierz dowolne bloki `text`.
  */
+function collectTextFromResponsesOutput(
+  out: Array<Record<string, unknown>> | undefined,
+  acc: string[],
+  depth: number,
+): void {
+  if (!Array.isArray(out) || depth > 12) return;
+  for (const item of out) {
+    if (item && typeof item === "object" && "text" in item) {
+      const t = (item as { text?: unknown }).text;
+      if (typeof t === "string" && t.length > 0) acc.push(t);
+    }
+    if (item && typeof item === "object" && "content" in item) {
+      const c = (item as { content?: unknown }).content;
+      if (Array.isArray(c)) collectTextFromResponsesOutput(c as Array<Record<string, unknown>>, acc, depth + 1);
+    }
+  }
+}
+
 function getTextFromResponsesOutput(response: {
   output_text?: string;
   output?: Array<{
@@ -227,10 +287,42 @@ function getTextFromResponsesOutput(response: {
         if (c.type === "output_text" && typeof c.text === "string" && c.text.length > 0) {
           return c.text;
         }
+        if (c.type === "text" && typeof c.text === "string" && c.text.length > 0) {
+          return c.text;
+        }
       }
     }
   }
+  const acc: string[] = [];
+  collectTextFromResponsesOutput(out as Array<Record<string, unknown>>, acc, 0);
+  if (acc.length > 0) return acc.join("\n");
   return null;
+}
+
+function stripModelJsonFences(s: string): string {
+  let t = s.trim();
+  if (t.startsWith("```")) {
+    t = t.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "");
+  }
+  return t.trim();
+}
+
+function tryParseExtractionJson(text: string): Record<string, unknown> | null {
+  const cleaned = stripModelJsonFences(text);
+  try {
+    return JSON.parse(cleaned) as Record<string, unknown>;
+  } catch {
+    const start = cleaned.indexOf("{");
+    const end = cleaned.lastIndexOf("}");
+    if (start >= 0 && end > start) {
+      try {
+        return JSON.parse(cleaned.slice(start, end + 1)) as Record<string, unknown>;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
 }
 
 export function createOpenAiAdapter(apiKey: string, model: string): AiInvoiceAdapter {
@@ -304,7 +396,14 @@ export function createOpenAiAdapter(apiKey: string, model: string): AiInvoiceAda
 
         if (!text) return { draft: {}, confidence: 0 };
 
-        const parsed = JSON.parse(text) as Record<string, unknown>;
+        const parsed = tryParseExtractionJson(text);
+        if (!parsed) {
+          console.error(
+            "[openai] could not parse model JSON (OCR/vision). Preview:",
+            text.slice(0, 400),
+          );
+          return { draft: {}, confidence: 0 };
+        }
         const draft = mapResponseToDraft(parsed);
         const confidence =
           typeof parsed.confidence === "number" ? parsed.confidence : 0.85;

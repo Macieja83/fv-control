@@ -99,6 +99,7 @@ export default function DashboardApp() {
     retryInvoiceExtraction,
     syncKsefInvoiceFromApi,
     adoptInvoiceVendor,
+    saveOcrInvoiceEdits,
     sendInvoiceToKsef,
     createSalesInvoice,
     getSalesInvoiceForEdit,
@@ -265,6 +266,8 @@ export default function DashboardApp() {
           onDeleteInvoice={(id) => void deleteInvoice(id)}
           onSendToKsef={(id) => void sendInvoiceToKsef(id)}
           onAdoptVendor={(id, body) => void adoptInvoiceVendor(id, body)}
+          onSaveOcrEdits={saveOcrInvoiceEdits}
+          dataSource={dataSource}
           onEditSalesInvoice={async (id) => {
             const detail = await getSalesInvoiceForEdit(id)
             setEditingSalesInvoiceId(id)
