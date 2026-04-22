@@ -1,4 +1,4 @@
-import OpenAI from "openai";
+import OpenAI, { toFile } from "openai";
 import { normalizeDueDateStringToYmd } from "../../modules/invoices/invoice-dates.js";
 import type { AiInvoiceAdapter, ExtractedInvoiceDraft } from "./ai-invoice.adapter.js";
 
@@ -190,26 +190,47 @@ function mapResponseToDraft(raw: Record<string, unknown>): ExtractedInvoiceDraft
   };
 }
 
-function buildContentParts(meta: { mimeType: string; buffer: Buffer }): unknown[] {
+function buildImageChatParts(meta: { mimeType: string; buffer: Buffer }): OpenAI.ChatCompletionContentPart[] {
   const base64 = meta.buffer.toString("base64");
   const dataUrl = `data:${meta.mimeType};base64,${base64}`;
-
-  const parts: unknown[] = [];
-
-  if (meta.mimeType.startsWith("image/")) {
-    parts.push({
+  return [
+    {
       type: "image_url",
       image_url: { url: dataUrl, detail: "high" },
-    });
-  } else {
-    parts.push({
-      type: "file",
-      file: { file_data: dataUrl, filename: "invoice.pdf" },
-    });
-  }
+    },
+    { type: "text", text: EXTRACTION_PROMPT },
+  ];
+}
 
-  parts.push({ type: "text", text: EXTRACTION_PROMPT });
-  return parts;
+function isPdfMime(mime: string): boolean {
+  return mime === "application/pdf" || mime === "application/x-pdf";
+}
+
+/**
+ * Odczyt tekstu z odpowiedzi Responses API (format różni się od chat.completions).
+ */
+function getTextFromResponsesOutput(response: {
+  output_text?: string;
+  output?: Array<{
+    type?: string;
+    content?: Array<{ type?: string; text?: string }>;
+  }>;
+}): string | null {
+  if (typeof response.output_text === "string" && response.output_text.length > 0) {
+    return response.output_text;
+  }
+  const out = response.output;
+  if (!Array.isArray(out)) return null;
+  for (const item of out) {
+    if (item.type === "message" && Array.isArray(item.content)) {
+      for (const c of item.content) {
+        if (c.type === "output_text" && typeof c.text === "string" && c.text.length > 0) {
+          return c.text;
+        }
+      }
+    }
+  }
+  return null;
 }
 
 export function createOpenAiAdapter(apiKey: string, model: string): AiInvoiceAdapter {
@@ -225,26 +246,62 @@ export function createOpenAiAdapter(apiKey: string, model: string): AiInvoiceAda
         return { draft: {}, confidence: 0 };
       }
 
-      const contentParts = buildContentParts({
+      const imageParts = buildImageChatParts({
         mimeType: meta.mimeType,
         buffer: meta.buffer,
       });
 
       try {
-        const response = await openai.chat.completions.create({
-          model,
-          messages: [
-            {
-              role: "user" as const,
-              content: contentParts as OpenAI.ChatCompletionContentPart[],
-            },
-          ],
-          response_format: { type: "json_object" },
-          temperature: 0.1,
-          max_tokens: 4096,
-        });
+        let text: string | null = null;
 
-        const text = response.choices[0]?.message?.content;
+        if (isPdfMime(meta.mimeType)) {
+          /** PDF: Chat Completions nie obsługuje w niej `file` w ten sposób – użyj Pliki + Responses API. */
+          const uploaded = await openai.files.create({
+            file: await toFile(meta.buffer, "invoice.pdf", { type: "application/pdf" }),
+            purpose: "user_data",
+          });
+          try {
+            const resp = await openai.responses.create({
+              model,
+              input: [
+                {
+                  role: "user",
+                  content: [
+                    { type: "input_file" as const, file_id: uploaded.id },
+                    { type: "input_text" as const, text: EXTRACTION_PROMPT },
+                  ],
+                },
+              ],
+              text: { format: { type: "json_object" } },
+              temperature: 0.1,
+              max_output_tokens: 4096,
+            });
+            text = getTextFromResponsesOutput(
+              resp as { output_text?: string; output?: Array<{ type?: string; content?: Array<{ type?: string; text?: string }> }> },
+            );
+          } finally {
+            try {
+              await openai.files.delete(uploaded.id);
+            } catch {
+              /* ignore */
+            }
+          }
+        } else {
+          const response = await openai.chat.completions.create({
+            model,
+            messages: [
+              {
+                role: "user" as const,
+                content: imageParts,
+              },
+            ],
+            response_format: { type: "json_object" },
+            temperature: 0.1,
+            max_tokens: 4096,
+          });
+          text = response.choices[0]?.message?.content ?? null;
+        }
+
         if (!text) return { draft: {}, confidence: 0 };
 
         const parsed = JSON.parse(text) as Record<string, unknown>;

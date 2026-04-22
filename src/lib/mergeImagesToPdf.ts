@@ -1,10 +1,12 @@
 import { PDFDocument } from 'pdf-lib'
+import { fileToUprightJpegBlob } from './applyExifOrientation'
 
 const A4_W = 595.28
 const A4_H = 841.89
 
 /**
  * Łączy strony (JPEG/PNG) w jeden wielostronicowy PDF do jednego zadania OCR.
+ * Stosuje EXIF (orientacja z telefonu) przed wstawieniem — inaczej strony lądowały bokiem.
  */
 export async function mergeImageFilesToPdfBlob(files: File[]): Promise<Blob> {
   if (files.length === 0) throw new Error('Brak plików')
@@ -13,14 +15,18 @@ export async function mergeImageFilesToPdfBlob(files: File[]): Promise<Blob> {
     if (f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')) {
       return f
     }
+    if (f.type.startsWith('image/') || /\.(jpe?g|png|webp|heic|heif)$/i.test(f.name)) {
+      const upright = await fileToUprightJpegBlob(f)
+      const base = f.name.replace(/\.[^.]+$/, '') || 'faktura'
+      return new File([upright], `${base}.jpg`, { type: 'image/jpeg' })
+    }
   }
 
   const pdf = await PDFDocument.create()
   for (const file of files) {
-    const buf = new Uint8Array(await file.arrayBuffer())
-    const lower = file.name.toLowerCase()
-    const isPng = file.type.includes('png') || lower.endsWith('.png')
-    const image = isPng ? await pdf.embedPng(buf) : await pdf.embedJpg(buf)
+    const blob = await fileToUprightJpegBlob(file)
+    const buf = new Uint8Array(await blob.arrayBuffer())
+    const image = await pdf.embedJpg(buf)
     const iw = image.width
     const ih = image.height
     const page = pdf.addPage([A4_W, A4_H])
