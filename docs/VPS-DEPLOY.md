@@ -67,6 +67,18 @@ Aplikacja woła API pod ścieżką względną **`/api/v1`** — nginx musi **pro
 
 `WEB_APP_URL` i `CORS_ORIGINS` w `backend/.env` muszą wskazywać **publiczny URL frontu** (https).
 
+### Aktualizacja po `git push` (ten sam serwer, systemd + nginx)
+
+Na VPS, w katalogu repozytorium (np. `~/fv-control`):
+
+```bash
+chmod +x scripts/vps-update.sh
+./scripts/vps-update.sh
+```
+
+Skrypt wykonuje: `git pull` (gałąź `main`, nadpisanie: `VPS_GIT_BRANCH=...`), `npm ci` + `npm run build` w korzeniu, `scripts/deploy-fv-www.sh` do `FV_WWW_ROOT` (domyślnie `/var/www/fv-control`), potem build backendu, `prisma migrate deploy` oraz `systemctl --user restart` jednostek `fv-control-backend` i `fv-control-worker`.  
+**Stack wyłącznie w Dockerze** — użyj własnej procedury (`docker compose build && up -d`) zamiast tego skryptu, albo `SKIP_SYSTEMD=1` i ręcznie zrestartuj kontenery.
+
 ---
 
 ## Weryfikacja przed „go live”
