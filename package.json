@@ -11,6 +11,7 @@
     "dev:all": "concurrently -c auto -n api,worker,web \"npm run dev:backend\" \"npm run dev:worker\" \"npm run dev\"",
     "infra:up": "docker compose up -d postgres redis",
     "infra:down": "docker compose down",
+    "dev:local": "npm run dev:stack",
     "dev:stack": "npm run infra:up && npm run dev:all",
     "build": "tsc -b && vite build",
     "lint": "eslint .",

@@ -2,17 +2,18 @@
 
 Monorepo: **React (Vite) dashboard** + **FVControl API** (Fastify) — platforma ingestion / deduplikacja / workflow pod Resta lub standalone.
 
+**Workflow:** zmiany lokalnie (zalecane `npm run dev:local` — pełny stack) → commit / push → na VPS `git pull`, `backend` build + ewent. migracje + restart usług; szczegóły: [docs/LOCAL-DEV.md](docs/LOCAL-DEV.md), deploy: [docs/VPS-DEPLOY.md](docs/VPS-DEPLOY.md).
+
 ## Backend + kolejka (lokalnie)
 
 **Najszybciej (z katalogu głównego repozytorium):**
 
-1. Skopiuj env (jeśli jeszcze nie masz): `cp backend/.env.example backend/.env` oraz w katalogu głównym utwórz `.env` z `FV_RESTA_API_URL=http://localhost:3000` i `VITE_USE_MOCK_INVOICES=false` (szablon: [`.env.example`](.env.example)).
-2. Baza + Redis: `npm run infra:up` (używa [`docker-compose.yml`](docker-compose.yml) z roota).
+1. Skopiuj env: `cp backend/.env.example backend/.env` oraz w katalogu głównym `cp .env.example .env` (dopasuj; szablon: [`.env.example`](.env.example)).
+2. Baza + Redis: `npm run infra:up` (katalog główny, [`docker-compose.yml`](docker-compose.yml)).
 3. Migracje i seed (raz): `cd backend && npx prisma migrate deploy && npx prisma db seed`
-4. **API + worker + Vite jednym poleceniem:** `npm run dev:all`  
-   Albo z podniesieniem Dockera przed startem: `npm run dev:stack`
+4. **API + worker + Vite:** `npm run dev:local` (albo: `npm run dev:all` gdy DB już działa) — to samo, co dawny `dev:stack`, krótsza nazwa.
 
-**Gdy masz w `.env` wpis `FV_RESTA_API_URL=http://localhost:3000`, ale API nie działa (brak Dockera / nie uruchomiłeś backendu), logowanie przez proxy zwróci błąd — albo włącz Docker i odpal stack jak wyżej, albo tymczasowo uruchom sam front: `npm run dev:web` (nadpisuje tryb z [`.env.web-only`](.env.web-only), logowanie: dowolny e-mail + hasło `Admin123!` domyślnie).
+**Gdy masz w `.env` wpis `FV_RESTA_API_URL=http://localhost:3000`, ale API nie działa, logowanie zwróci 502** — włącz `npm run dev:local` albo tymczasowo tylko front: `npm run dev:web` (dodaje tryb [`.env.web-only`](.env.web-only) z logowaniem Vite, domyślne hasło w tym pliku: `Admin123!`).
 
 Skrypty: `dev:backend`, `dev:worker`, `web` = `vite`, `dev:web` = front bez API; `infra:down` zatrzymuje kontenery.  
 **VPS — pełna instrukcja:** [`docs/VPS-DEPLOY.md`](docs/VPS-DEPLOY.md) (Docker stack, `.env`, nginx, Stripe webhook, checklisty).  

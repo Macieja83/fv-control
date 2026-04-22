@@ -1,8 +1,12 @@
 # FVControl monorepo — convenience targets (backend is source of truth for API).
-.PHONY: dev up down migrate seed test lint typecheck
+.PHONY: dev dev-local up down migrate seed test lint typecheck
 
 dev:
 	cd backend && npm run dev
+
+# Pełny stack: Docker (postgres+redis) + API + worker + Vite (root .env: FV_RESTA_API_URL=http://localhost:3000)
+dev-local:
+	npm run dev:local
 
 worker:
 	cd backend && npm run worker
