@@ -279,6 +279,7 @@ model Tenant {
   subscriptions          Subscription[]
   emailVerificationTokens EmailVerificationToken[]
   passwordResetTokens     PasswordResetToken[]
+  mobileCaptureHandoffs  MobileCaptureHandoff[]
 }
 
 model Permission {
@@ -345,6 +346,7 @@ model User {
   authIdentities  AuthIdentity[]
   emailVerificationTokens EmailVerificationToken[]
   passwordResetTokens     PasswordResetToken[]
+  mobileCaptureHandoffs  MobileCaptureHandoff[]
 
   @@index([tenantId])
 }
@@ -992,4 +994,22 @@ model TenantSetting {
 
   @@unique([tenantId, key])
   @@map("tenant_settings")
+}
+
+/// Jednorazowa sesja QR (desktop → telefon): przesłanie zdjęć faktury bez logowania na telefonie, na konto właściciela tokenu.
+model MobileCaptureHandoff {
+  id          String   @id @default(uuid()) @db.Uuid
+  token       String   @unique
+  tenantId    String   @map("tenant_id") @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at")
+  expiresAt   DateTime @map("expires_at")
+  uploadCount Int      @default(0) @map("upload_count")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([expiresAt])
+  @@map("mobile_capture_handoffs")
 }
