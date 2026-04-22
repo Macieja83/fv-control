@@ -26,12 +26,20 @@ type Props = {
   onClose: () => void
   /** Wywołane, gdy telefon przesłał plik w tej sesji (OCR w kolejce). */
   onPhoneUploadDetected: () => void
+  /** Zamiast telefonu: zamknij modal i otwórz wybór pliku (np. główny `<input type="file">` z paska). */
+  onRequestFileFromDisk: () => void
 }
 
 /**
  * Tylko desktop: skan telefonu → otwarcie /invoice-capture/:token → aparat + upload.
  */
-export function DesktopCameraQrModal({ open, accessToken, onClose, onPhoneUploadDetected }: Props) {
+export function DesktopCameraQrModal({
+  open,
+  accessToken,
+  onClose,
+  onPhoneUploadDetected,
+  onRequestFileFromDisk,
+}: Props) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [url, setUrl] = useState<string | null>(null)
@@ -119,6 +127,10 @@ export function DesktopCameraQrModal({ open, accessToken, onClose, onPhoneUpload
     })
   }, [url])
 
+  const onPickFile = useCallback(() => {
+    onRequestFileFromDisk()
+  }, [onRequestFileFromDisk])
+
   if (!open) return null
 
   return (
@@ -130,7 +142,7 @@ export function DesktopCameraQrModal({ open, accessToken, onClose, onPhoneUpload
         </h2>
         <p className="cqr__text">
           Otworzysz stronę, która uruchomi aparat. Możesz dodać kilka stron faktury, potem wyślij — na tym
-          komputerze odświeżą się dane.
+          komputerze odświeżą się dane. Alternatywnie wgraj PDF lub zdjęcie wprost z dysku.
         </p>
         {loading && !error && <p className="cqr__hint">Ładowanie QR…</p>}
         {error && <p className="cqr__err">{error}</p>}
@@ -143,6 +155,9 @@ export function DesktopCameraQrModal({ open, accessToken, onClose, onPhoneUpload
             </button>
           </div>
         )}
+        <button type="button" className="cqr__file" onClick={onPickFile}>
+          Wgraj plik z tego komputera
+        </button>
         <button type="button" className="cqr__close" onClick={onClose}>
           Zamknij
         </button>

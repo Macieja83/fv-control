@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { AuthProvider, useAuth } from './auth/AuthContext'
+import { useAuth } from './auth/AuthContext'
 import LoginPage from './auth/LoginPage'
 import DashboardApp from './DashboardApp'
 import { AppErrorBoundary } from './components/app/AppErrorBoundary'
@@ -104,9 +104,7 @@ function AuthGate() {
 export default function App() {
   return (
     <AppErrorBoundary>
-      <AuthProvider>
-        <AuthGate />
-      </AuthProvider>
+      <AuthGate />
     </AppErrorBoundary>
   )
 }

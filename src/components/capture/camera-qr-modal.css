@@ -84,10 +84,26 @@
   font-size: 0.9rem;
   cursor: pointer;
 }
+.cqr__file {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 0.75rem;
+  padding: 0.55rem 0.75rem;
+  background: #fff;
+  border: 1px solid var(--fv-border, #c4bfb6);
+  border-radius: 0.4rem;
+  font-size: 0.95rem;
+  cursor: pointer;
+  color: #0d47a1;
+}
+.cqr__file:hover {
+  background: #f0f4fa;
+}
 .cqr__close {
   display: block;
   width: 100%;
-  margin-top: 1rem;
+  margin-top: 0.5rem;
   padding: 0.5rem;
   background: var(--fv-panel-bg, #f4f2ee);
   border: 1px solid var(--fv-border, #c4bfb6);

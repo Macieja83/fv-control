@@ -96,6 +96,13 @@ export function InvoiceUpload({ onUploaded }: Props) {
     setShowQr(true)
   }, [access, uploading, usePhoneCamera])
 
+  const onRequestFileFromDisk = useCallback(() => {
+    setShowQr(false)
+    window.setTimeout(() => {
+      fileRef.current?.click()
+    }, 0)
+  }, [])
+
   const closeMockHint = useCallback(() => setShowMockCameraHint(false), [])
 
   return (
@@ -154,6 +161,7 @@ export function InvoiceUpload({ onUploaded }: Props) {
           accessToken={access}
           onClose={closeQr}
           onPhoneUploadDetected={onPhoneScanDone}
+          onRequestFileFromDisk={onRequestFileFromDisk}
         />
       )}
 
