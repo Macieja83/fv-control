@@ -156,7 +156,8 @@ const invoicesRoutes: FastifyPluginAsync = async (app) => {
           properties: {
             disposition: { type: "string", enum: ["inline", "attachment"] },
             /** Dla KSeF: `ksef-fa-xml` — strumień oryginalnego FA XML zamiast PDF podsumowania (pełny podgląd w UI). */
-            source: { type: "string", enum: ["primary", "ksef-fa-xml"] },
+            /** `accountant-pdf` — zawsze PDF (oryginał lub ten sam podgląd co w UI / skan w PDF). */
+            source: { type: "string", enum: ["primary", "ksef-fa-xml", "accountant-pdf"] },
           },
         },
       },
@@ -166,11 +167,16 @@ const invoicesRoutes: FastifyPluginAsync = async (app) => {
       const q = request.query as { disposition?: string; source?: string };
       const disposition = q.disposition === "attachment" ? "attachment" : "inline";
       const ksefFaXml = q.source === "ksef-fa-xml";
+      const accountantPdf = q.source === "accountant-pdf";
       const { stream, mimeType, downloadName, contentLength } = await openInvoicePrimaryDocumentStream(
         app.prisma,
         request.authUser!.tenantId,
         id,
-        ksefFaXml ? { ksefFaXml: true } : undefined,
+        accountantPdf
+          ? { accountantPdf: true }
+          : ksefFaXml
+            ? { ksefFaXml: true }
+            : undefined,
       );
       const asciiFallback = downloadName.replace(/[^\w.-]+/g, "_").slice(0, 180) || "document.bin";
       reply.header("Content-Type", mimeType);

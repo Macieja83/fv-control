@@ -176,6 +176,16 @@ export async function deleteInvoiceRequest(token: string, invoiceId: string): Pr
   if (!res.ok) throw new Error(await readApiErrorMessage(res))
 }
 
+/** PDF do paczki księgowej — oryginał lub rownowaznik podgladu (KSeF XML → ten sam PDF co w UI). */
+export async function fetchInvoiceAccountantPdfBlob(token: string, invoiceId: string): Promise<Blob> {
+  const res = await fetch(
+    `${API}/invoices/${encodeURIComponent(invoiceId)}/primary-document?source=accountant-pdf&disposition=attachment`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  )
+  if (!res.ok) throw new Error(await readApiErrorMessage(res))
+  return res.blob()
+}
+
 export type RetryExtractionResponse = {
   invoiceId: string
   documentId: string

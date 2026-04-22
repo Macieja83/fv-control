@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { InvoiceRecord } from '../../types/invoice'
-import { downloadInvoicePackage } from '../../lib/exportInvoicePackage'
+import { downloadInvoicePdfPackage } from '../../lib/exportInvoicePackage'
 import {
   DuplicateBadge,
   PaymentBadge,
@@ -179,16 +179,22 @@ export function InvoiceTable({
             type="button"
             className="btn btn--sm btn--primary"
             disabled={rows.length === 0 || packaging}
-            title="Pobiera widoczną listę (po filtrach) jako archiwum ZIP (invoices.json + faktury/*.json)."
+            title="ZIP z plikami PDF: wszystkie widoczne po filtrach, albo tylko zaznaczone (gdy cokolwiek zaznaczono). Dla KSeF — ten sam podglad co w aplikacji."
             onClick={() => {
               void (async () => {
+                if (dataSource === 'mock') {
+                  window.alert('W trybie demo paczka PDF z serwera jest niedostepna.')
+                  return
+                }
                 setPackaging(true)
                 try {
-                  await downloadInvoicePackage(rows)
+                  await downloadInvoicePdfPackage(rows, selectedIds)
                 } catch (e) {
                   console.error(e)
                   window.alert(
-                    'Nie udało się utworzyć paczki ZIP. Spróbuj ponownie lub zmniejsz listę.',
+                    e instanceof Error
+                      ? e.message
+                      : 'Nie udało się utworzyć paczki ZIP (PDF). Spróbuj ponownie lub zmniejsz listę.',
                   )
                 } finally {
                   setPackaging(false)
@@ -196,7 +202,7 @@ export function InvoiceTable({
               })()
             }}
           >
-            {packaging ? 'Paczka…' : 'Paczka'}
+            {packaging ? 'Paczka…' : 'Paczka PDF'}
           </button>
           <button
             type="button"

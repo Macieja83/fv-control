@@ -1,8 +1,13 @@
 import type { Document, PrismaClient } from "@prisma/client";
-import type { Readable } from "node:stream";
+import { Readable } from "node:stream";
 import { createObjectStorage } from "../../adapters/storage/create-storage.js";
 import { loadConfig } from "../../config.js";
 import { AppError } from "../../lib/errors.js";
+import {
+  buildImageScanPdf,
+  buildInvoiceDataSummaryPdf,
+  buildKsefInvoiceSummaryPdf,
+} from "../ksef/ksef-invoice-summary-pdf.js";
 
 export type PrimaryDocumentStreamOptions = {
   /**
@@ -10,7 +15,28 @@ export type PrimaryDocumentStreamOptions = {
    * żeby frontend mógł pokazać pełny podgląd (`KsefInvoicePreview`).
    */
   ksefFaXml?: boolean;
+  /**
+   * Paczka księgowa / ZIP: zawsze `application/pdf` — treść oryg. PDF, przerysowanie KSeF XML
+   * na ten sam „podgląd” co w UI, albo skan w PDF (JPG/PNG) / zestawienie pól gdy inny typ.
+   */
+  accountantPdf?: boolean;
 };
+
+async function streamToBuffer(stream: Readable): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) {
+    chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks);
+}
+
+function decimal2(d: { toFixed: (n: number) => string }): string {
+  return d.toFixed(2);
+}
+
+function issueYmd(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
 
 async function resolveKsefFaXmlDocument(
   prisma: PrismaClient,
@@ -89,12 +115,120 @@ export async function openInvoicePrimaryDocumentStream(
 }> {
   const inv = await prisma.invoice.findFirst({
     where: { id: invoiceId, tenantId },
-    include: { primaryDoc: true },
+    include: { primaryDoc: true, contractor: true },
   });
   if (!inv) throw AppError.notFound("Invoice not found");
   let doc = inv.primaryDoc;
   if (!doc || doc.deletedAt) {
     throw AppError.notFound("Invoice has no primary document");
+  }
+
+  const cfg = loadConfig();
+  const maxBytes = cfg.MAX_DOCUMENT_PREVIEW_MB * 1024 * 1024;
+
+  if (opts?.accountantPdf) {
+    const pdoc = inv.primaryDoc;
+    if (!pdoc || pdoc.deletedAt) {
+      throw AppError.notFound("Invoice has no primary document");
+    }
+    if (pdoc.sizeBytes > maxBytes) {
+      throw AppError.payloadTooLarge(
+        `Document size exceeds preview limit (${cfg.MAX_DOCUMENT_PREVIEW_MB} MB) — download via other means or raise MAX_DOCUMENT_PREVIEW_MB`,
+      );
+    }
+    const storage0 = createObjectStorage();
+    let fileBuf: Buffer;
+    try {
+      const { stream: src } = await storage0.getObjectStream({
+        key: pdoc.storageKey,
+        bucket: pdoc.storageBucket,
+      });
+      fileBuf = await streamToBuffer(src);
+    } catch {
+      throw AppError.notFound("Document file missing in storage");
+    }
+    const safeBase = (inv.number || "faktura")
+      .replace(/[/\\:*?"<>|]+/g, "_")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 120) || "faktura";
+    const downloadName = `${safeBase}__${inv.id.replace(/-/g, "").slice(0, 8)}.pdf`;
+    const mimeL = (pdoc.mimeType || "").toLowerCase();
+
+    if (mimeL.includes("pdf")) {
+      return {
+        stream: Readable.from([fileBuf]) as Readable,
+        mimeType: "application/pdf",
+        downloadName,
+        contentLength: fileBuf.length,
+      };
+    }
+
+    const cName = inv.contractor?.name?.trim() || null;
+    const cNip = inv.contractor?.nip?.trim() || null;
+    const isKsefXml =
+      inv.intakeSourceType === "KSEF_API" &&
+      pdoc.sourceType === "KSEF" &&
+      (mimeL.includes("xml") || mimeL === "text/plain" || mimeL === "application/xml");
+    if (isKsefXml) {
+      const kn = (inv.ksefNumber ?? inv.sourceExternalId ?? "").trim() || "—";
+      const out = await buildKsefInvoiceSummaryPdf({
+        ksefNumber: kn,
+        invoiceNumber: inv.number,
+        issueDateYmd: issueYmd(inv.issueDate),
+        contractorName: cName,
+        contractorNip: cNip,
+        netTotal: decimal2(inv.netTotal),
+        vatTotal: decimal2(inv.vatTotal),
+        grossTotal: decimal2(inv.grossTotal),
+        currency: inv.currency,
+      });
+      return {
+        stream: Readable.from([Buffer.from(out)]) as Readable,
+        mimeType: "application/pdf",
+        downloadName,
+        contentLength: out.length,
+      };
+    }
+
+    if (mimeL.startsWith("image/") && (mimeL.includes("png") || mimeL.includes("jpeg") || mimeL.includes("jpg"))) {
+      let out: Uint8Array;
+      try {
+        out = await buildImageScanPdf(fileBuf, pdoc.mimeType || "image/jpeg");
+      } catch {
+        throw AppError.validation("Nie udało się zapisac skanu jako PDF (obsługiwane: JPG, PNG).");
+      }
+      return {
+        stream: Readable.from([Buffer.from(out)]) as Readable,
+        mimeType: "application/pdf",
+        downloadName,
+        contentLength: out.length,
+      };
+    }
+
+    const foot =
+      (mimeL.includes("xml") || pdoc.sourceType === "KSEF") && !isKsefXml
+        ? "Pelna Faktura FA (XML) jest w systemie — ta strona to zestawienie pol do wysylki. Otwórz fakturę w aplikacji po plik zrodlowy."
+        : "Dokument zrodlowy w formacie innym niz PDF — zestawienie danych z bazy (FV Control).";
+    const out2 = await buildInvoiceDataSummaryPdf({
+      title: "Faktura (FV Control / paczka ksiegowa)",
+      invoiceNumber: inv.number,
+      issueDateYmd: issueYmd(inv.issueDate),
+      contractorName: cName,
+      contractorNip: cNip,
+      netTotal: decimal2(inv.netTotal),
+      vatTotal: decimal2(inv.vatTotal),
+      grossTotal: decimal2(inv.grossTotal),
+      currency: inv.currency,
+      ksefNumber: inv.ksefNumber?.trim() || inv.sourceExternalId?.trim() || null,
+      footnote: foot,
+    });
+    return {
+      stream: Readable.from([Buffer.from(out2)]) as Readable,
+      mimeType: "application/pdf",
+      downloadName,
+      contentLength: out2.length,
+    };
   }
 
   if (opts?.ksefFaXml) {
@@ -111,8 +245,6 @@ export async function openInvoicePrimaryDocumentStream(
     doc = xmlDoc;
   }
 
-  const cfg = loadConfig();
-  const maxBytes = cfg.MAX_DOCUMENT_PREVIEW_MB * 1024 * 1024;
   if (doc.sizeBytes > maxBytes) {
     throw AppError.payloadTooLarge(
       `Document size exceeds preview limit (${cfg.MAX_DOCUMENT_PREVIEW_MB} MB) — download via other means or raise MAX_DOCUMENT_PREVIEW_MB`,

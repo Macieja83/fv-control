@@ -337,25 +337,42 @@ export class KsefClient {
     );
   }
 
-  /** Download raw invoice XML by KSeF number. */
+  /**
+   * Download raw invoice XML by KSeF number.
+   * Ponawia również 404/5xx — przy nowych fakturach metadane z `query/metadata` bywają szybciej
+   * niż gotowość `GET /invoices/ksef/…` (lub błąd chwilowy MF), co skutkowało pustką aż do
+   * ręcznego „Odśwież” / kolejnego auto-syncu.
+   */
   async fetchInvoiceXml(ksefNumber: string): Promise<string> {
     const path = `/invoices/ksef/${encodeURIComponent(ksefNumber)}`;
     const max429Attempts = 12;
+    const maxTransientXmlAttempts = 5;
     for (let attempt = 0; attempt < max429Attempts; attempt++) {
-      const res = await this.authedFetch(path, {
-        headers: { Accept: "application/xml" },
-      });
-      if (res.status === 429) {
-        const text = await res.text();
-        const waitMs = parseKsefMetadata429WaitMs(res, text);
-        console.warn(
-          `[KSeF] fetch XML 429 (${ksefNumber}), czekam ${waitMs}ms… ${text.slice(0, 120)}`,
-        );
-        await sleep(waitMs);
-        continue;
+      for (let transientTry = 0; transientTry < maxTransientXmlAttempts; transientTry++) {
+        const res = await this.authedFetch(path, {
+          headers: { Accept: "application/xml" },
+        });
+        if (res.status === 429) {
+          const text = await res.text();
+          const waitMs = parseKsefMetadata429WaitMs(res, text);
+          console.warn(
+            `[KSeF] fetch XML 429 (${ksefNumber}), czekam ${waitMs}ms… ${text.slice(0, 120)}`,
+          );
+          await sleep(waitMs);
+          break;
+        }
+        if (res.ok) return res.text();
+        const errText = await res.text();
+        if (isTransientKsefXmlFetchStatus(res.status) && transientTry < maxTransientXmlAttempts - 1) {
+          const waitMs = Math.min(25_000, 2_000 * 2 ** transientTry);
+          console.warn(
+            `[KSeF] fetch XML ${res.status} (${ksefNumber}), czekam ${waitMs}ms (transient ${transientTry + 1}/${maxTransientXmlAttempts})… ${errText.slice(0, 160)}`,
+          );
+          await sleep(waitMs);
+          continue;
+        }
+        throw new Error(`KSeF fetch invoice ${ksefNumber} failed (${res.status}): ${errText.slice(0, 500)}`);
       }
-      if (!res.ok) throw await this.apiError(res, `fetch invoice ${ksefNumber}`);
-      return res.text();
     }
     throw new Error(`KSeF fetch invoice XML: nadal 429 po ${max429Attempts} próbach (${ksefNumber}).`);
   }
@@ -535,6 +552,16 @@ export class KsefClient {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+/**
+ * 404: częste przy chwilowym rozjazdzie listy metadanych a treścią FA.
+ * 5xx/408/425: przejściowe błędy usług MF.
+ */
+function isTransientKsefXmlFetchStatus(status: number): boolean {
+  if (status === 404) return true;
+  if (status === 408 || status === 425) return true;
+  return status >= 500 && status < 600;
 }
 
 /** MF: nagłówek Retry-After (sekundy) lub treść „Spróbuj ponownie po N sekundach”. */
