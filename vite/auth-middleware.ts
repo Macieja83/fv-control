@@ -87,10 +87,24 @@ function attachAuthMiddleware(
 
         const token = randomBytes(32).toString('hex')
         sessions.set(token, { email, exp: Date.now() + SESSION_MS })
+        /** Kształt jak POST /api/v1/auth/login (Fastify) — wymagany przez src/auth/authApi.ts. */
+        const devTenantId = '00000000-0000-4000-8000-000000000001'
         sendJson(res, 200, {
           accessToken: token,
           expiresIn: Math.floor(SESSION_MS / 1000),
-          email,
+          refreshToken: `dev-refresh-${token.slice(0, 16)}`,
+          user: {
+            email,
+            tenantId: devTenantId,
+            emailVerified: true,
+            isPlatformAdmin: false,
+            hasPassword: true,
+            role: 'OWNER',
+            id: '00000000-0000-4000-8000-000000000002',
+            isActive: true,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
         })
       } catch {
         sendJson(res, 400, { error: 'Niepoprawne żądanie.' })

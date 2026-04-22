@@ -139,7 +139,9 @@ export async function login(prisma: PrismaClient, input: LoginInput) {
       throw AppError.unauthorized("Invalid credentials");
     }
     if (!user.emailVerified) {
-      throw AppError.forbidden("Email not verified");
+      throw AppError.forbidden(
+        "Konto wymaga potwierdzenia e-maila. Otwórz link z wiadomości rejestracyjnej albo użyj opcji wysyłki ponownej weryfikacji.",
+      );
     }
     const tokens = await issueTokens(prisma, user.id, user.tenantId, user.role);
     return { user: sanitizeUser(user), ...tokens };
@@ -186,7 +188,9 @@ export async function refreshSession(prisma: PrismaClient, refreshToken: string)
     throw AppError.unauthorized("User inactive");
   }
   if (!row.user.emailVerified) {
-    throw AppError.forbidden("Email not verified");
+    throw AppError.forbidden(
+      "Konto wymaga potwierdzenia e-maila. Otwórz link z wiadomości rejestracyjnej albo użyj opcji wysyłki ponownej weryfikacji.",
+    );
   }
 
   const cfg = loadConfig();
