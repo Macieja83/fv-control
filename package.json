@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:web": "vite --mode web-only",
     "dev:backend": "npm run dev --prefix backend",
     "dev:worker": "npm run worker --prefix backend",
     "dev:all": "concurrently -c auto -n api,worker,web \"npm run dev:backend\" \"npm run dev:worker\" \"npm run dev\"",

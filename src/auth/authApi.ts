@@ -59,7 +59,7 @@ export async function loginRequest(email: string, password: string): Promise<Log
     })
   } catch {
     throw new Error(
-      'Brak połączenia z API. Uruchom backend (npm run dev w folderze backend) i sprawdź, czy Vite ma FV_RESTA_API_URL w .env.',
+      'Brak połączenia z API (czy coś nasłuchuje na porcie z FV_RESTA_API_URL?). Pełny stos: uruchom Docker Desktop, potem z katalogu głównego `npm run dev:stack` (albo `infra:up` + w backend: migrate/seed + `dev:all`). Szybki front bez bazy: `npm run dev:web`.',
     )
   }
   const rawText = await res.text()
@@ -69,7 +69,7 @@ export async function loginRequest(email: string, password: string): Promise<Log
   } catch {
     throw new Error(
       res.status === 502 || res.status === 504
-        ? 'Proxy nie może połączyć się z backendem (port 3000?).'
+        ? 'Proxy Vite nie łączy się z API (zwykle nic nie nasłuchuje na localhost:3000). Uruchom stack albo tymczasowo: npm run dev:web.'
         : `Niepoprawna odpowiedź serwera (${res.status}).`,
     )
   }

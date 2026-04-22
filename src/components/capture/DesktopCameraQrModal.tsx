@@ -1,7 +1,24 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import QRCode from 'react-qr-code'
+import { useCallback, useEffect, useRef, useState, type ComponentType, type FC } from 'react'
+import QrExport from 'react-qr-code'
 import { getMobileCaptureStatusByToken, postMobileCaptureSession } from '../../api/mobileCaptureApi'
 import './camera-qr-modal.css'
+
+/** ESM: domyślny import to czasem work `{ default, QRCode }` zamiast samego `forwardRef` — wtedy `<Qr />` rzuca React #130. */
+type QrProps = { value: string; size?: number; style?: React.CSSProperties; className?: string; level?: 'L' | 'M' | 'Q' | 'H' }
+const QRCode: FC<QrProps> = (() => {
+  const x = QrExport as
+    | ComponentType<QrProps>
+    | { default?: ComponentType<QrProps>; QRCode?: ComponentType<QrProps> }
+  if (typeof x === 'function' || (typeof x === 'object' && x !== null && '$$typeof' in x)) {
+    return x as FC<QrProps>
+  }
+  const bag = x as { default?: ComponentType<QrProps>; QRCode?: ComponentType<QrProps> }
+  const C = bag.default ?? bag.QRCode
+  if (C != null) {
+    return C as FC<QrProps>
+  }
+  throw new Error('react-qr-code: brak prawidłowego eksportu')
+})()
 
 type Props = {
   open: boolean
@@ -119,7 +136,7 @@ export function DesktopCameraQrModal({ open, accessToken, onClose, onPhoneUpload
         {error && <p className="cqr__err">{error}</p>}
         {url && !error && (
           <div className="cqr__qr-wrap" aria-hidden={loading ? true : undefined}>
-            <QRCode value={url} size={220} style={{ height: 'auto', maxWidth: '100%', width: '100%' }} viewBox="0 0 256 256" />
+            <QRCode value={url} size={220} style={{ height: 'auto', maxWidth: '100%', width: '100%' }} />
             <p className="cqr__url">{url}</p>
             <button type="button" className="cqr__copy" onClick={copyLink}>
               Kopiuj link

@@ -12,7 +12,9 @@ Monorepo: **React (Vite) dashboard** + **FVControl API** (Fastify) — platforma
 4. **API + worker + Vite jednym poleceniem:** `npm run dev:all`  
    Albo z podniesieniem Dockera przed startem: `npm run dev:stack`
 
-Skrypty: `dev:backend`, `dev:worker`, `web` = `vite`; `infra:down` zatrzymuje kontenery.  
+**Gdy masz w `.env` wpis `FV_RESTA_API_URL=http://localhost:3000`, ale API nie działa (brak Dockera / nie uruchomiłeś backendu), logowanie przez proxy zwróci błąd — albo włącz Docker i odpal stack jak wyżej, albo tymczasowo uruchom sam front: `npm run dev:web` (nadpisuje tryb z [`.env.web-only`](.env.web-only), logowanie: dowolny e-mail + hasło `Admin123!` domyślnie).
+
+Skrypty: `dev:backend`, `dev:worker`, `web` = `vite`, `dev:web` = front bez API; `infra:down` zatrzymuje kontenery.  
 **VPS — pełna instrukcja:** [`docs/VPS-DEPLOY.md`](docs/VPS-DEPLOY.md) (Docker stack, `.env`, nginx, Stripe webhook, checklisty).  
 **Pierwsze uruchomienie na VPS:** [`scripts/vps-first-boot.sh`](scripts/vps-first-boot.sh) (tworzy `backend/.env` z szablonu, potem `docker compose`).  
 **VPS (nginx + `/var/www/fv-control`):** po `npm run build` uruchom [`./scripts/deploy-fv-www.sh`](./scripts/deploy-fv-www.sh); przykład vhost: [`deploy/nginx-fv-control.example.conf`](deploy/nginx-fv-control.example.conf). Szczegóły systemd: [`backend/docs/deploy-systemd-api-and-worker.md`](backend/docs/deploy-systemd-api-and-worker.md).
