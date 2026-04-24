@@ -31,6 +31,8 @@ import { createObjectStorage } from "../../adapters/storage/create-storage.js";
 import { loadConfig } from "../../config.js";
 import { getEffectiveKsefApiEnv, KSEF_INGESTION_SOURCE_LABEL } from "./ksef-effective-env.js";
 import { loadKsefClientForTenant } from "./ksef-tenant-credentials.service.js";
+import { recoverStaleInflightPipelineJobsForInvoice } from "../pipeline/pipeline-stale-inflight.service.js";
+import { retryInvoiceExtraction } from "../pipeline/retry-invoice-extraction.service.js";
 
 export type KsefSyncJobData = {
   tenantId: string;
@@ -381,6 +383,54 @@ export async function runKsefSyncJob(
 
 type ProcessOutcome = "ingested" | "refetched" | "skipped" | "linked" | "resumed";
 
+const AUTO_RETRY_FRESH_KSEF_WINDOW_MS = 3 * 60 * 60 * 1000;
+const AUTO_RETRY_MIN_GAP_MS = 90 * 1000;
+
+async function tryAutoResumeKsefInvoiceProcessing(
+  prisma: PrismaClient,
+  tenantId: string,
+  invoice: { id: string; status: string; createdAt: Date },
+): Promise<boolean> {
+  if (invoice.status !== "INGESTING" && invoice.status !== "FAILED_NEEDS_REVIEW") return false;
+  const ageMs = Date.now() - invoice.createdAt.getTime();
+  if (ageMs > AUTO_RETRY_FRESH_KSEF_WINDOW_MS) return false;
+
+  await recoverStaleInflightPipelineJobsForInvoice(prisma, tenantId, invoice.id);
+
+  const inflight = await prisma.processingJob.findFirst({
+    where: {
+      tenantId,
+      invoiceId: invoice.id,
+      type: "INGEST_PIPELINE",
+      status: { in: ["PENDING", "RUNNING"] },
+    },
+    orderBy: { createdAt: "desc" },
+    select: { id: true },
+  });
+  if (inflight) return false;
+
+  const lastJob = await prisma.processingJob.findFirst({
+    where: { tenantId, invoiceId: invoice.id, type: "INGEST_PIPELINE" },
+    orderBy: { createdAt: "desc" },
+    select: { createdAt: true },
+  });
+  if (lastJob && Date.now() - lastJob.createdAt.getTime() < AUTO_RETRY_MIN_GAP_MS) {
+    return false;
+  }
+
+  try {
+    const res = await retryInvoiceExtraction(prisma, tenantId, invoice.id);
+    console.info(
+      `[KSeF sync] auto-resume pipeline: invoice=${invoice.id} processingJob=${res.processingJobId}`,
+    );
+    return true;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`[KSeF sync] auto-resume skipped for ${invoice.id}: ${msg}`);
+    return false;
+  }
+}
+
 /**
  * Faktura powiązana z XML KSeF (`primaryDocId`), ale bez `ksefNumber` — diff MF vs DB pokazuje „brak w bazie”,
  * a sync/ingest uznaje sam `Document` za duplikat i nic nie robi.
@@ -479,9 +529,12 @@ export async function ingestKsefInvoiceXmlByKsefNumber(
 
   const existingInv = await prisma.invoice.findFirst({
     where: { tenantId, ksefNumber: kn },
-    select: { id: true },
+    select: { id: true, status: true, createdAt: true },
   });
-  if (existingInv) return "skipped";
+  if (existingInv) {
+    const resumed = await tryAutoResumeKsefInvoiceProcessing(prisma, tenantId, existingInv);
+    return resumed ? "resumed" : "skipped";
+  }
 
   const existingDoc = await prisma.document.findFirst({
     where: { tenantId, sourceType: "KSEF", sourceExternalId: kn },
@@ -555,7 +608,7 @@ async function processOneInvoice(
 ): Promise<ProcessOutcome> {
   const existingInv = await prisma.invoice.findFirst({
     where: { tenantId, ksefNumber: meta.ksefNumber },
-    select: { id: true },
+    select: { id: true, status: true, createdAt: true },
   });
   const existingDoc = await prisma.document.findFirst({
     where: { tenantId, sourceType: "KSEF", sourceExternalId: meta.ksefNumber },
@@ -566,7 +619,10 @@ async function processOneInvoice(
     return refetchAndStoreFile(prisma, client, tenantId, meta, existingDoc?.id, beforeXmlFetch);
   }
 
-  if (existingInv) return "skipped";
+  if (existingInv) {
+    const resumed = await tryAutoResumeKsefInvoiceProcessing(prisma, tenantId, existingInv);
+    return resumed ? "resumed" : "skipped";
+  }
 
   if (existingDoc) {
     const linked = await linkKsefNumberToInvoiceIfNeeded(
