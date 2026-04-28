@@ -165,6 +165,5 @@ function formatIssuerDN(raw: string): string {
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean)
-    .reverse()
-    .join(", ");
+    .join(",");
 }
