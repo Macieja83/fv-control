@@ -2,8 +2,7 @@
  * XAdES-BES signer for KSeF AuthTokenRequest.
  *
  * Produces an enveloped XAdES signature with ECDSA-SHA256.
- * Uses inclusive C14N — all in-scope namespace declarations must be
- * rendered on each element being digested/signed.
+ * Uses exclusive C14N for SignedInfo and Reference transforms.
  */
 
 import { createHash, createSign, X509Certificate, randomUUID } from "node:crypto";
@@ -12,14 +11,14 @@ const AUTH_NS = "http://ksef.mf.gov.pl/auth/token/2.0";
 const XSI_NS = "http://www.w3.org/2001/XMLSchema-instance";
 const DS_NS = "http://www.w3.org/2000/09/xmldsig#";
 const XADES_NS = "http://uri.etsi.org/01903/v1.3.2#";
+const EXC_C14N_ALG = "http://www.w3.org/2001/10/xml-exc-c14n#";
 
 /**
- * C14N namespace context at each nesting level (alphabetical by prefix, default first).
- * These must be declared on the opening tag of each element being independently digested/signed.
+ * Namespace context used to construct canonicalized fragments for digest/signature.
  */
-const NS_ROOT = `xmlns="${AUTH_NS}" xmlns:xsi="${XSI_NS}"`;
-const NS_SIG = `xmlns="${AUTH_NS}" xmlns:ds="${DS_NS}" xmlns:xsi="${XSI_NS}"`;
-const NS_PROPS = `xmlns="${AUTH_NS}" xmlns:ds="${DS_NS}" xmlns:xades="${XADES_NS}" xmlns:xsi="${XSI_NS}"`;
+const NS_ROOT = `xmlns="${AUTH_NS}"`;
+const NS_SIG = `xmlns:ds="${DS_NS}"`;
+const NS_PROPS = `xmlns:ds="${DS_NS}" xmlns:xades="${XADES_NS}"`;
 
 export type XadesSignParams = {
   challenge: string;
@@ -79,14 +78,18 @@ export function signAuthTokenRequest(params: XadesSignParams): string {
   // 3. SignedInfo C14N form (with all in-scope namespaces)
   const signedInfoC14n =
     `<ds:SignedInfo ${NS_SIG} Id="${signedInfoId}">` +
-    `<ds:CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"></ds:CanonicalizationMethod>` +
+    `<ds:CanonicalizationMethod Algorithm="${EXC_C14N_ALG}"></ds:CanonicalizationMethod>` +
     `<ds:SignatureMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha256"></ds:SignatureMethod>` +
     `<ds:Reference Id="${refBodyId}" URI="">` +
-    `<ds:Transforms><ds:Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"></ds:Transform></ds:Transforms>` +
+    `<ds:Transforms>` +
+    `<ds:Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"></ds:Transform>` +
+    `<ds:Transform Algorithm="${EXC_C14N_ALG}"></ds:Transform>` +
+    `</ds:Transforms>` +
     `<ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"></ds:DigestMethod>` +
     `<ds:DigestValue>${bodyDigest}</ds:DigestValue>` +
     `</ds:Reference>` +
     `<ds:Reference Id="${refPropsId}" Type="http://uri.etsi.org/01903#SignedProperties" URI="#${signedPropsId}">` +
+    `<ds:Transforms><ds:Transform Algorithm="${EXC_C14N_ALG}"></ds:Transform></ds:Transforms>` +
     `<ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"></ds:DigestMethod>` +
     `<ds:DigestValue>${propsDigest}</ds:DigestValue>` +
     `</ds:Reference>` +
@@ -103,14 +106,18 @@ export function signAuthTokenRequest(params: XadesSignParams): string {
   // 5. Assemble the final XML (non-canonical form for transport — verifier re-canonicalizes)
   const signedInfoXml =
     `<ds:SignedInfo Id="${signedInfoId}">` +
-    `<ds:CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>` +
+    `<ds:CanonicalizationMethod Algorithm="${EXC_C14N_ALG}"/>` +
     `<ds:SignatureMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha256"/>` +
     `<ds:Reference Id="${refBodyId}" URI="">` +
-    `<ds:Transforms><ds:Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/></ds:Transforms>` +
+    `<ds:Transforms>` +
+    `<ds:Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>` +
+    `<ds:Transform Algorithm="${EXC_C14N_ALG}"/>` +
+    `</ds:Transforms>` +
     `<ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>` +
     `<ds:DigestValue>${bodyDigest}</ds:DigestValue>` +
     `</ds:Reference>` +
     `<ds:Reference Id="${refPropsId}" Type="http://uri.etsi.org/01903#SignedProperties" URI="#${signedPropsId}">` +
+    `<ds:Transforms><ds:Transform Algorithm="${EXC_C14N_ALG}"/></ds:Transforms>` +
     `<ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>` +
     `<ds:DigestValue>${propsDigest}</ds:DigestValue>` +
     `</ds:Reference>` +
