@@ -1,0 +1,21 @@
+# FV Control — robots.txt
+# https://fv.resta.biz
+
+User-agent: *
+Allow: /
+Allow: /docs
+
+# Areas requiring auth — no point indexing
+Disallow: /dashboard
+Disallow: /login
+Disallow: /register
+Disallow: /verify
+Disallow: /forgot-password
+Disallow: /invoice-capture/
+
+# API endpoints — disallow crawlers, but allow OpenAPI spec (helps integrators)
+Disallow: /api/
+Allow: /docs
+Allow: /docs/json
+
+Sitemap: https://fv.resta.biz/sitemap.xml
