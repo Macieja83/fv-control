@@ -4,9 +4,10 @@ import './landing.css'
 type LandingPageProps = {
   onNavigateAuth: (target: 'login' | 'register') => void
   onNavigateLegal: (target: 'terms' | 'privacy') => void
+  onNavigatePricing: () => void
 }
 
-export default function LandingPage({ onNavigateAuth, onNavigateLegal }: LandingPageProps) {
+export default function LandingPage({ onNavigateAuth, onNavigateLegal, onNavigatePricing }: LandingPageProps) {
   const supportEmail =
     typeof import.meta.env.VITE_PUBLIC_SUPPORT_EMAIL === 'string' && import.meta.env.VITE_PUBLIC_SUPPORT_EMAIL.trim()
       ? import.meta.env.VITE_PUBLIC_SUPPORT_EMAIL.trim()
@@ -417,17 +418,23 @@ export default function LandingPage({ onNavigateAuth, onNavigateLegal }: Landing
                 <div className="plan__badge">Polecany</div>
                 <div className="plan__name">PRO</div>
                 <div className="plan__price">
-                  59 zł <span>/ mies.</span>
+                  67 zł <span>/ mies.</span>
                 </div>
                 <ul>
                   <li>Bez limitu dokumentów</li>
-                  <li>Płatność kartą, Google Pay, Apple Pay</li>
-                  <li>Stripe Customer Portal</li>
+                  <li>Karta · BLIK · Przelewy24</li>
+                  <li>Stripe Customer Portal — zarządzanie subskrypcją</li>
+                  <li>Faktura VAT (KSeF) za subskrypcję</li>
                 </ul>
                 <button type="button" className="btn-plan btn-plan--solid" onClick={() => onNavigateAuth('register')}>
                   Wybierz PRO
                 </button>
               </article>
+            </div>
+            <div className="pricing__cta-row">
+              <button type="button" className="btn-link" onClick={onNavigatePricing}>
+                Zobacz pełny cennik — FAQ + porównanie z Fakturownia/InFakt →
+              </button>
             </div>
           </div>
         </section>

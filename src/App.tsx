@@ -6,6 +6,7 @@ import { AppErrorBoundary } from './components/app/AppErrorBoundary'
 import { MobileInvoiceCapturePage } from './components/capture/MobileInvoiceCapturePage'
 import { NotFoundPage } from './components/error/NotFoundPage'
 import LandingPage from './landing/LandingPage'
+import PricingPage from './landing/PricingPage'
 import { PlaceholderLegalPage } from './legal/PlaceholderLegalPage'
 import './index.css'
 
@@ -17,6 +18,7 @@ type GuestRoute =
   | 'forgot'
   | 'legal_terms'
   | 'legal_privacy'
+  | 'pricing'
   | 'not_found'
 
 function resolveGuestRoute(pathname: string): GuestRoute {
@@ -27,6 +29,7 @@ function resolveGuestRoute(pathname: string): GuestRoute {
   if (pathname === '/forgot-password') return 'forgot'
   if (pathname === '/legal/regulamin') return 'legal_terms'
   if (pathname === '/legal/polityka-prywatnosci') return 'legal_privacy'
+  if (pathname === '/cennik' || pathname === '/pricing') return 'pricing'
   return 'not_found'
 }
 
@@ -75,6 +78,13 @@ function AuthGate() {
     setGuestRoute('landing')
   }, [])
 
+  const navigatePricing = useCallback(() => {
+    if (window.location.pathname !== '/cennik') {
+      window.history.pushState(null, '', '/cennik')
+    }
+    setGuestRoute('pricing')
+  }, [])
+
   const captureToken = publicInvoiceCaptureToken()
   if (captureToken) {
     return <MobileInvoiceCapturePage token={captureToken} />
@@ -91,7 +101,22 @@ function AuthGate() {
 
   if (status === 'guest') {
     if (guestRoute === 'landing') {
-      return <LandingPage onNavigateAuth={navigateGuestRoute} onNavigateLegal={navigateLegal} />
+      return (
+        <LandingPage
+          onNavigateAuth={navigateGuestRoute}
+          onNavigateLegal={navigateLegal}
+          onNavigatePricing={navigatePricing}
+        />
+      )
+    }
+    if (guestRoute === 'pricing') {
+      return (
+        <PricingPage
+          onNavigateAuth={navigateGuestRoute}
+          onNavigateLegal={navigateLegal}
+          onNavigateHome={navigateLanding}
+        />
+      )
     }
     if (guestRoute === 'legal_terms') {
       return <PlaceholderLegalPage kind="terms" onBack={navigateLanding} />
