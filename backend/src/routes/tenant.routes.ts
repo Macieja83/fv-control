@@ -18,6 +18,10 @@ import {
   getBillingCompanyData,
   upsertBillingCompanyData,
 } from "../modules/billing/auto-self-invoice.service.js";
+import {
+  assertExportRateLimit,
+  exportTenantDataAsJson,
+} from "../modules/tenant/data-export.service.js";
 
 /**
  * Dane firmowe klienta wymagane przed wystawieniem FV VAT za subskrypcję (B15 dogfood).
@@ -196,6 +200,52 @@ const tenantRoutes: FastifyPluginAsync = async (app) => {
         return testTenantKsefConnection(app.prisma, request.authUser!.tenantId, body);
       }
       return testTenantKsefConnection(app.prisma, request.authUser!.tenantId);
+    },
+  );
+
+  /**
+   * RODO art. 20 — prawo do przenoszenia danych.
+   * GET /api/v1/tenant/data-export → JSON download attachment.
+   * Rate limit: 1× / 24h per tenant (przez audit log lookup). Audit log entry "TENANT_DATA_EXPORTED" tworzony przed wysłaniem.
+   * Permission: OWNER/ADMIN/ACCOUNTANT (assertCanMutate) — chroni przed leaking przez wiewer/viewer roles.
+   */
+  app.get(
+    "/tenant/data-export",
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        tags: ["Tenant"],
+        summary: "RODO art. 20 — eksport danych tenanta (JSON, ZIP w przyszłej iteracji z PDF faktur)",
+        description:
+          "Pobranie wszystkich danych firmy w formacie JSON UTF-8: tenant + billingCompanyData + users (bez passwordHash) + contractors + agreements + invoices (bez raw XML/OCR) + subscriptions. Limit: 1× / 24h per tenant.",
+        response: {
+          200: { type: "object", additionalProperties: true },
+        },
+      },
+    },
+    async (request, reply) => {
+      assertCanMutate(request.authUser!.role);
+      const tenantId = request.authUser!.tenantId;
+      await assertExportRateLimit(app.prisma, tenantId);
+
+      const data = await exportTenantDataAsJson(app.prisma, tenantId, request.authUser!.email);
+
+      await app.prisma.auditLog.create({
+        data: {
+          tenantId,
+          actorId: request.authUser!.id,
+          action: "TENANT_DATA_EXPORTED",
+          entityType: "TENANT",
+          entityId: tenantId,
+          metadata: data.stats as object,
+        },
+      });
+
+      const filename = `fvcontrol-export-${new Date().toISOString().slice(0, 10)}-${tenantId.slice(0, 8)}.json`;
+      reply.header("Content-Type", "application/json; charset=utf-8");
+      reply.header("Content-Disposition", `attachment; filename="${filename}"`);
+      reply.header("Cache-Control", "no-store");
+      return reply.send(data);
     },
   );
 };
