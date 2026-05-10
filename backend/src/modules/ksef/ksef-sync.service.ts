@@ -146,7 +146,23 @@ export async function runKsefSyncJob(
   const cfg = loadConfig();
   const syncRunAt = () => new Date().toISOString();
 
-  const client = await loadKsefClientForTenant(prisma, data.tenantId);
+  // P0-1: load credentials musi być w try, żeby błąd (zły password / uszkodzony PKCS#5 / DB error)
+  // nie pominął zapisu telemetrii i audit logu — inaczej operator widzi stale `lastSync*` i nie wie że job pada.
+  let client: Awaited<ReturnType<typeof loadKsefClientForTenant>>;
+  try {
+    client = await loadKsefClientForTenant(prisma, data.tenantId);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    await mergeKsefSyncRunTelemetry(prisma, data.tenantId, {
+      runAt: syncRunAt(),
+      ok: false,
+      phase: "failed",
+      errorPreview: `loadKsefClientForTenant: ${msg}`.slice(0, 500),
+      queueJobId: ctx?.queueJobId ?? null,
+    });
+    throw e;
+  }
+
   if (!client) {
     console.warn(
       "KSeF sync skipped: brak realnego API (mock / brak nadpisania środowiska) lub brak poświadczeń (Ustawienia / KSeF albo KSEF_TOKEN+KSEF_NIP w .env).",
@@ -161,14 +177,18 @@ export async function runKsefSyncJob(
     return { fetched: 0, ingested: 0, skippedDuplicate: 0, refetched: 0, errors: [], newHwmDate: null };
   }
 
+  // P0-2: retryQueue trzymany na zewnątrz try, żeby outer catch mógł persistować numery
+  // dodane w bieżącym runie zanim throw (inaczej praca per-faktura w `processOneInvoice` ginie).
+  const state = await getKsefSyncState(prisma, data.tenantId);
+  const retryQueue = new Set(state.retryKsefNumbers);
+
   try {
   const apiEnv = await getEffectiveKsefApiEnv(prisma, data.tenantId);
   console.info(`[KSeF sync] Authenticating (env=${apiEnv}, tenant=${data.tenantId})…`);
   await client.authenticate();
   console.info("[KSeF sync] Authenticated.");
 
-  const state = await getKsefSyncState(prisma, data.tenantId);
-  const retryQueue = new Set(state.retryKsefNumbers);
+  // state + retryQueue zainicjowane PRZED try (P0-2), żeby outer catch widział referencję
   const hwmOnly = data.fromDate ? null : state.hwmDate;
   const from = resolveSyncFrom({
     fromOverride: data.fromDate,
@@ -244,21 +264,26 @@ export async function runKsefSyncJob(
 
       while (hasMore) {
         let page: KsefMetadataPage | undefined;
-        const issueMetaMaxAttempts = dateType === "Issue" ? 6 : 1;
+        // P0-2 część A: oba dateType dostają retry. Issue jest agresywniej throttled przez MF → 6 prób
+        // z dłuższym backoff (20s + 15s*attempt). PermanentStorage rzadziej 429, ale 502/503/504 zdarzają
+        // się równie często — bez retry pojedynczy transient błąd ginie cały run + retryQueue.
+        const metaMaxAttempts = dateType === "Issue" ? 6 : 4;
+        const baseWaitMs = dateType === "Issue" ? 20_000 : 15_000;
+        const stepWaitMs = dateType === "Issue" ? 15_000 : 10_000;
         let lastMetaErr: unknown;
-        for (let metaAttempt = 0; metaAttempt < issueMetaMaxAttempts; metaAttempt++) {
+        for (let metaAttempt = 0; metaAttempt < metaMaxAttempts; metaAttempt++) {
           try {
             page = await client.queryMetadata(currentFrom, to, pageOffset, PAGE_SIZE, subjectType, dateType);
             break;
           } catch (err) {
             lastMetaErr = err;
-            if (dateType !== "Issue" || metaAttempt + 1 >= issueMetaMaxAttempts) {
+            if (metaAttempt + 1 >= metaMaxAttempts) {
               throw err;
             }
-            const waitMs = 20_000 + metaAttempt * 15_000;
+            const waitMs = baseWaitMs + metaAttempt * stepWaitMs;
             const msg = err instanceof Error ? err.message : String(err);
             console.warn(
-              `[KSeF sync] Issue metadata błąd (próba ${metaAttempt + 1}/${issueMetaMaxAttempts}) ${subjectType} offset=${pageOffset}: ${msg} — czekam ${waitMs}ms`,
+              `[KSeF sync] ${dateType} metadata błąd (próba ${metaAttempt + 1}/${metaMaxAttempts}) ${subjectType} offset=${pageOffset}: ${msg} — czekam ${waitMs}ms`,
             );
             await delay(waitMs);
           }
@@ -370,6 +395,24 @@ export async function runKsefSyncJob(
   return result;
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
+    // P0-2: persist retryQueue (numery dodane przed throw w bieżącym runie) zanim re-throw,
+    // żeby BullMQ retry zaczął od pełnego stanu zamiast od ostatniego persisted DB snapshotu.
+    // Świadomie nie ruszamy hwmDate — pozostawiamy ostatnio zapisany przez completed run.
+    try {
+      const retryToPersist = [...retryQueue].slice(0, MAX_RETRY_QUEUE_SIZE);
+      await saveKsefSyncState(prisma, data.tenantId, {
+        hwmDate: state.hwmDate,
+        retryKsefNumbers: retryToPersist,
+      });
+      if (retryToPersist.length > state.retryKsefNumbers.length) {
+        console.warn(
+          `[KSeF sync] Persisted ${retryToPersist.length} retry numbers przed throw (było ${state.retryKsefNumbers.length} przed runem).`,
+        );
+      }
+    } catch (persistErr) {
+      const pmsg = persistErr instanceof Error ? persistErr.message : String(persistErr);
+      console.error(`[KSeF sync] Nie udało się persistować retryQueue w catch: ${pmsg}`);
+    }
     await mergeKsefSyncRunTelemetry(prisma, data.tenantId, {
       runAt: syncRunAt(),
       ok: false,
