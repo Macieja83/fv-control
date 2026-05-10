@@ -460,6 +460,9 @@ export default function LandingPage({ onNavigateAuth, onNavigateLegal }: Landing
             <button type="button" onClick={() => onNavigateLegal('terms')}>
               Regulamin
             </button>
+            <a href="/docs" target="_blank" rel="noopener noreferrer">
+              Dokumentacja API
+            </a>
             <a href={`mailto:${supportEmail}`}>Kontakt</a>
           </nav>
           <span className="footer-copy">© 2026 FV Control. Dane chronione zgodnie z RODO.</span>
