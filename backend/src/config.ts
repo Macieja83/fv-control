@@ -156,6 +156,15 @@ const envSchema = z.object({
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_PRICE_ID_STARTER: z.string().optional(),
   STRIPE_PRICE_ID_PRO: z.string().optional(),
+  /**
+   * UUID tenanta wystawcy własnych faktur za subskrypcje fv.resta.biz (TT Grupa Marcin Maciejewski).
+   * Gdy null → dogfood self-invoice wyłączony, webhook nie wystawia FV (Stripe Invoicing wciąż działa).
+   * Etap 1 z research/sales-ready-vat-invoice.md: Marcin manualnie tworzy tenanta + KSeF token + ustawia UUID tutaj.
+   */
+  BILLING_SELF_INVOICE_TENANT_ID: z.preprocess(
+    (v) => (v === "" || v === undefined ? undefined : v),
+    z.string().uuid().optional(),
+  ),
   STRIPE_BILLING_WEBHOOK_SECRET: z.preprocess(
     (v) => (v === "" || v === undefined ? undefined : v),
     z.string().min(16).optional(),

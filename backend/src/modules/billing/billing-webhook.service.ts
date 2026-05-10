@@ -1,7 +1,10 @@
 import { Prisma } from "@prisma/client";
 import type { PrismaClient, SubscriptionStatus } from "@prisma/client";
 import { AppError } from "../../lib/errors.js";
-import { PRO_PREPAID_PERIOD_DAYS } from "./billing-constants.js";
+import { PRO_PLAN_PRICE_PLN, PRO_PREPAID_PERIOD_DAYS } from "./billing-constants.js";
+import { createSelfInvoiceForSubscriptionPayment } from "./auto-self-invoice.service.js";
+import { submitInvoiceToKsef } from "../invoices/ksef-issuance.service.js";
+import { loadConfig } from "../../config.js";
 
 const inMemoryWebhookDedup = new Set<string>();
 let canUseBillingWebhookTable: boolean | null = null;
@@ -243,7 +246,67 @@ export async function handleStripeCheckoutSessionCompleted(
     });
   }
 
+  // B15 dogfood: wystaw FV VAT za subskrypcje przez fv.resta.biz (TT Grupa jako wystawca).
+  // Best-effort — jakikolwiek błąd nie wywraca webhook'a (Stripe musi dostać 200 inaczej retry).
+  // Wymaga: BILLING_SELF_INVOICE_TENANT_ID w env + TenantSetting[billing_company_data] dla klienta.
+  // Jeśli któregoś brak — log warn, FV nie powstaje, klient dostaje subskrypcję bez FV (do uzupełnienia manualnie).
+  await tryCreateAndSubmitSelfInvoice(prisma, {
+    customerTenantId: tenantId,
+    stripeEventId: eventId,
+    paymentMethod: extractPaymentMethodFromMetadata(meta),
+    amountPaidPln: PRO_PLAN_PRICE_PLN,
+    paidAt: now,
+    periodStart: now,
+    periodEnd: newEnd,
+  });
+
   return { accepted: true, eventType: "checkout.session.completed", updated: true };
+}
+
+function extractPaymentMethodFromMetadata(meta: Record<string, unknown> | null): "card" | "blik" | "p24" {
+  if (!meta) return "blik"; // legacy: pre-2026-05-10 sesje miały tylko BLIK
+  const raw = typeof meta.paymentMethod === "string" ? meta.paymentMethod.trim().toLowerCase() : "";
+  if (raw === "card" || raw === "blik" || raw === "p24") return raw;
+  return "blik";
+}
+
+async function tryCreateAndSubmitSelfInvoice(
+  prisma: PrismaClient,
+  payload: {
+    customerTenantId: string;
+    stripeEventId: string;
+    paymentMethod: "card" | "blik" | "p24";
+    amountPaidPln: number;
+    paidAt: Date;
+    periodStart: Date;
+    periodEnd: Date;
+  },
+): Promise<void> {
+  const cfg = loadConfig();
+  if (!cfg.BILLING_SELF_INVOICE_TENANT_ID) {
+    console.info("[self-invoice] BILLING_SELF_INVOICE_TENANT_ID nieskonfigurowane — pomijam wystawienie FV");
+    return;
+  }
+  try {
+    const result = await createSelfInvoiceForSubscriptionPayment(prisma, payload);
+    if (result.duplicated) {
+      console.info(`[self-invoice] Stripe event ${payload.stripeEventId} już zafakturowany (${result.invoiceNumber}), pomijam submit`);
+      return;
+    }
+    // Submit do KSeF — w stub mode tylko oznacza PENDING, w live wysyła do MF.
+    // Best-effort: jeśli pada (np. tenant TT Grupa nie ma KSeF token), zostaje INVOICE w bazie do manualnego review.
+    try {
+      await submitInvoiceToKsef(prisma, cfg.BILLING_SELF_INVOICE_TENANT_ID, result.invoiceId);
+      console.info(`[self-invoice] FV ${result.invoiceNumber} (id=${result.invoiceId}) submit do KSeF OK`);
+    } catch (ksefErr) {
+      const msg = ksefErr instanceof Error ? ksefErr.message : String(ksefErr);
+      console.warn(`[self-invoice] FV ${result.invoiceNumber} utworzona ale KSeF submit failed: ${msg}`);
+    }
+    // TODO B7: po deploy Resend → wyślij PDF + UPO mailem do billing.invoiceEmail.
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`[self-invoice] Nie udało się utworzyć FV za Stripe event ${payload.stripeEventId}: ${msg}`);
+  }
 }
 
 function mapP24Status(raw: unknown): SubscriptionStatus | null {
