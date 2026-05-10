@@ -4,20 +4,30 @@ import LoginPage from './auth/LoginPage'
 import DashboardApp from './DashboardApp'
 import { AppErrorBoundary } from './components/app/AppErrorBoundary'
 import { MobileInvoiceCapturePage } from './components/capture/MobileInvoiceCapturePage'
+import { NotFoundPage } from './components/error/NotFoundPage'
 import LandingPage from './landing/LandingPage'
 import { PlaceholderLegalPage } from './legal/PlaceholderLegalPage'
 import './index.css'
 
-type GuestRoute = 'landing' | 'login' | 'register' | 'verify' | 'forgot' | 'legal_terms' | 'legal_privacy'
+type GuestRoute =
+  | 'landing'
+  | 'login'
+  | 'register'
+  | 'verify'
+  | 'forgot'
+  | 'legal_terms'
+  | 'legal_privacy'
+  | 'not_found'
 
 function resolveGuestRoute(pathname: string): GuestRoute {
+  if (pathname === '/' || pathname === '') return 'landing'
   if (pathname === '/login') return 'login'
   if (pathname === '/register') return 'register'
   if (pathname === '/verify') return 'verify'
   if (pathname === '/forgot-password') return 'forgot'
   if (pathname === '/legal/regulamin') return 'legal_terms'
   if (pathname === '/legal/polityka-prywatnosci') return 'legal_privacy'
-  return 'landing'
+  return 'not_found'
 }
 
 function publicInvoiceCaptureToken(): string | null {
@@ -88,6 +98,9 @@ function AuthGate() {
     }
     if (guestRoute === 'legal_privacy') {
       return <PlaceholderLegalPage kind="privacy" onBack={navigateLanding} />
+    }
+    if (guestRoute === 'not_found') {
+      return <NotFoundPage onNavigateHome={navigateLanding} />
     }
     return (
       <LoginPage
