@@ -40,7 +40,9 @@
     "smoke:ksef-readiness": "tsx scripts/smoke-ksef-readiness.ts",
     "verify:production-readiness": "tsx scripts/verify-production-readiness.ts",
     "verify:billing-config": "tsx scripts/verify-stripe-billing-config.ts",
-    "print:go-live-checklist": "tsx scripts/print-go-live-checklist.ts"
+    "print:go-live-checklist": "tsx scripts/print-go-live-checklist.ts",
+    "setup:self-invoice-tenant": "tsx scripts/setup-self-invoice-tenant.ts",
+    "setup:billing-data": "tsx scripts/set-billing-company-data.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
