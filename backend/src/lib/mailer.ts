@@ -353,6 +353,83 @@ export async function sendSubscriptionCanceledEmail(
   });
 }
 
+/**
+ * Soft-delete tenant zostalo zgloszone (RODO art. 17).
+ * Informuje admina o grace period + link do anulowania.
+ */
+export async function sendTenantDeletionRequestedEmail(
+  cfg: AppConfig,
+  to: string,
+  params: { graceUntilIso: string; daysRemaining: number },
+): Promise<void> {
+  const billingUrl = buildBillingPortalUrl(cfg);
+  const subject = `Zgłoszenie usunięcia konta — ${cfg.APP_NAME}`;
+  const graceDate = params.graceUntilIso.slice(0, 10);
+
+  const text =
+    `Dzień dobry,\n\n` +
+    `Twoje konto w ${cfg.APP_NAME} zostało zgłoszone do usunięcia (RODO art. 17).\n\n` +
+    `Dane będą trwale usunięte: ${graceDate} (za ${params.daysRemaining} dni).\n\n` +
+    `W okresie karencji (30 dni) możesz anulować usunięcie i odzyskać konto:\n` +
+    `${billingUrl}\n\n` +
+    `Po tej dacie odzyskanie konta nie będzie możliwe. Jeśli to nie Ty zgłosiłeś usunięcie, ` +
+    `zaloguj się i anuluj operację albo napisz na kontakt@tuttopizza.pl.\n\n` +
+    `Pozdrawiamy,\n` +
+    `Zespół ${cfg.APP_NAME}\n`;
+
+  const inner =
+    `<p>Dzień dobry,</p>` +
+    `<p>Twoje konto w <strong>${escapeHtml(cfg.APP_NAME)}</strong> zostało zgłoszone do <strong>usunięcia</strong> (RODO art. 17 — prawo do bycia zapomnianym).</p>` +
+    `<p style="padding:14px 16px;background:#fef3c7;border-left:3px solid #f59e0b;color:#92400e;border-radius:4px">` +
+    `Dane będą trwale usunięte: <strong>${escapeHtml(graceDate)}</strong> (za <strong>${params.daysRemaining}</strong> dni).` +
+    `</p>` +
+    `<p>W okresie karencji <strong>30 dni</strong> możesz anulować usunięcie i odzyskać konto:</p>` +
+    `<p style="text-align:center;margin:28px 0">` +
+    `<a href="${escapeHtml(billingUrl)}" style="display:inline-block;padding:12px 28px;background:linear-gradient(135deg,#4f6ef7 0%,#a855f7 100%);color:#ffffff;text-decoration:none;border-radius:8px;font-weight:600">Anuluj usunięcie</a>` +
+    `</p>` +
+    `<p style="color:#6b7280;font-size:13px">Po tej dacie odzyskanie konta nie będzie możliwe. Jeśli to nie Ty zgłosiłeś usunięcie, zaloguj się i anuluj operację albo napisz na <a href="mailto:kontakt@tuttopizza.pl">kontakt@tuttopizza.pl</a>.</p>`;
+
+  await sendEmail(cfg, {
+    to,
+    subject,
+    text,
+    html: brandHtml(cfg, inner),
+    devLogHint: `deletion request dla ${to} (grace do ${graceDate})`,
+  });
+}
+
+/**
+ * Anulacja zgłoszenia usunięcia — konto przywrócone, dostęp wznowiony.
+ */
+export async function sendTenantDeletionCanceledEmail(cfg: AppConfig, to: string): Promise<void> {
+  const dashboardBase = cfg.WEB_APP_URL.replace(/\/$/, "");
+  const subject = `Konto przywrócone — ${cfg.APP_NAME}`;
+
+  const text =
+    `Dzień dobry,\n\n` +
+    `Zgłoszenie usunięcia Twojego konta w ${cfg.APP_NAME} zostało anulowane. ` +
+    `Dostęp jest w pełni przywrócony, wszystkie dane są nienaruszone.\n\n` +
+    `Zaloguj się:\n` +
+    `${dashboardBase}/login\n\n` +
+    `Pozdrawiamy,\n` +
+    `Zespół ${cfg.APP_NAME}\n`;
+
+  const inner =
+    `<p>Dzień dobry,</p>` +
+    `<p>Zgłoszenie usunięcia Twojego konta w <strong>${escapeHtml(cfg.APP_NAME)}</strong> zostało <span style="color:#16a34a;font-weight:600">anulowane</span>. Dostęp jest w pełni przywrócony, wszystkie dane są nienaruszone.</p>` +
+    `<p style="text-align:center;margin:28px 0">` +
+    `<a href="${escapeHtml(dashboardBase)}/login" style="display:inline-block;padding:12px 28px;background:linear-gradient(135deg,#4f6ef7 0%,#a855f7 100%);color:#ffffff;text-decoration:none;border-radius:8px;font-weight:600">Zaloguj się</a>` +
+    `</p>`;
+
+  await sendEmail(cfg, {
+    to,
+    subject,
+    text,
+    html: brandHtml(cfg, inner),
+    devLogHint: `deletion canceled dla ${to}`,
+  });
+}
+
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, "&amp;")

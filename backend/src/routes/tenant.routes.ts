@@ -22,6 +22,16 @@ import {
   assertExportRateLimit,
   exportTenantDataAsJson,
 } from "../modules/tenant/data-export.service.js";
+import {
+  cancelTenantDeletion,
+  getDeletionStatus,
+  requestTenantDeletion,
+} from "../modules/tenant/request-deletion.service.js";
+import {
+  sendTenantDeletionCanceledEmail,
+  sendTenantDeletionRequestedEmail,
+} from "../lib/mailer.js";
+import { loadConfig } from "../config.js";
 
 /**
  * Dane firmowe klienta wymagane przed wystawieniem FV VAT za subskrypcję (B15 dogfood).
@@ -246,6 +256,121 @@ const tenantRoutes: FastifyPluginAsync = async (app) => {
       reply.header("Content-Disposition", `attachment; filename="${filename}"`);
       reply.header("Cache-Control", "no-store");
       return reply.send(data);
+    },
+  );
+
+  /**
+   * RODO art. 17 — prawo do bycia zapomnianym (request deletion).
+   * Soft delete + grace period 30 dni + deactivate users + email do wszystkich admin/owner.
+   * Wymaga: brak aktywnej subskrypcji (najpierw anuluj w Stripe portal).
+   */
+  app.post(
+    "/tenant/request-deletion",
+    {
+      preHandler: [app.authenticate, app.checkIdempotency],
+      schema: {
+        tags: ["Tenant"],
+        summary: "RODO art. 17 — zgłoś usunięcie konta (soft delete + grace 30 dni)",
+        description:
+          "Konto zostaje oznaczone jako skasowane (Tenant.deletedAt), wszyscy użytkownicy deaktywowani. Karencja 30 dni — w tym czasie można anulować przez POST /tenant/cancel-deletion. Po grace cron trwale kasuje rekordy. Wymaga: brak aktywnej subskrypcji.",
+      },
+    },
+    async (request) => {
+      assertCanMutate(request.authUser!.role);
+      const tenantId = request.authUser!.tenantId;
+      const result = await requestTenantDeletion(app.prisma, tenantId, request.authUser!.id);
+
+      await app.prisma.auditLog.create({
+        data: {
+          tenantId,
+          actorId: request.authUser!.id,
+          action: "TENANT_DELETION_REQUESTED",
+          entityType: "TENANT",
+          entityId: tenantId,
+          metadata: {
+            graceUntil: result.graceUntil,
+            adminEmailsNotified: result.adminEmails.length,
+          } as object,
+        },
+      });
+
+      // Powiadom wszystkich OWNER/ADMIN (best-effort, NIE throw — request musi się powieść)
+      const cfg = loadConfig();
+      for (const email of result.adminEmails) {
+        try {
+          await sendTenantDeletionRequestedEmail(cfg, email, {
+            graceUntilIso: result.graceUntil,
+            daysRemaining: result.daysRemaining,
+          });
+        } catch (err) {
+          request.log.warn({ err, email }, "Nie udało się wysłać powiadomienia o usunięciu konta");
+        }
+      }
+
+      return {
+        message: "Konto zgłoszone do usunięcia. Otrzymasz e-mail z potwierdzeniem.",
+        graceUntil: result.graceUntil,
+        daysRemaining: result.daysRemaining,
+      };
+    },
+  );
+
+  /**
+   * RODO art. 17 — anuluj zgłoszenie usunięcia (w okresie karencji 30 dni).
+   * Przywraca Tenant.deletedAt=null + reaktywuje wszystkich users.
+   */
+  app.post(
+    "/tenant/cancel-deletion",
+    {
+      preHandler: [app.authenticate, app.checkIdempotency],
+      schema: {
+        tags: ["Tenant"],
+        summary: "Anuluj zgłoszenie usunięcia konta (w okresie karencji 30 dni)",
+      },
+    },
+    async (request) => {
+      assertCanMutate(request.authUser!.role);
+      const tenantId = request.authUser!.tenantId;
+      const result = await cancelTenantDeletion(app.prisma, tenantId);
+
+      await app.prisma.auditLog.create({
+        data: {
+          tenantId,
+          actorId: request.authUser!.id,
+          action: "TENANT_DELETION_CANCELED",
+          entityType: "TENANT",
+          entityId: tenantId,
+          metadata: { adminEmailsNotified: result.adminEmails.length } as object,
+        },
+      });
+
+      const cfg = loadConfig();
+      for (const email of result.adminEmails) {
+        try {
+          await sendTenantDeletionCanceledEmail(cfg, email);
+        } catch (err) {
+          request.log.warn({ err, email }, "Nie udało się wysłać powiadomienia o anulacji usunięcia");
+        }
+      }
+
+      return { message: "Zgłoszenie usunięcia konta zostało anulowane. Dostęp przywrócony." };
+    },
+  );
+
+  /**
+   * Status zgłoszenia usunięcia (do UI banner).
+   */
+  app.get(
+    "/tenant/deletion-status",
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        tags: ["Tenant"],
+        summary: "Status zgłoszenia usunięcia konta (czy w karencji, ile dni zostało)",
+      },
+    },
+    async (request) => {
+      return getDeletionStatus(app.prisma, request.authUser!.tenantId);
     },
   );
 };
