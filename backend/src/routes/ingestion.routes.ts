@@ -80,7 +80,7 @@ const ingestionRoutes: FastifyPluginAsync = async (app) => {
       assertCanMutate(request.authUser!.role);
       const data = await request.file();
       if (!data) {
-        throw AppError.validation("Missing file field");
+        throw AppError.validation("Brak pola pliku (file). Dołącz plik do żądania multipart.");
       }
       const buf = await data.toBuffer();
       const result = await manualUpload.manualUploadAndEnqueue(app.prisma, {

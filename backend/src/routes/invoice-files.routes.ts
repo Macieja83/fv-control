@@ -21,7 +21,7 @@ const invoiceFilesRoutes: FastifyPluginAsync = async (app) => {
       const { id } = request.params as { id: string };
       const data = await request.file();
       if (!data) {
-        throw AppError.validation("Missing file field");
+        throw AppError.validation("Brak pola pliku (file). Dołącz plik do żądania multipart.");
       }
       const row = await fileService.saveInvoiceFile(
         app.prisma,

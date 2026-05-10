@@ -119,7 +119,7 @@ const billingRoutes: FastifyPluginAsync = async (app) => {
       assertCanManageIntegrations(request.authUser!.role);
       const body = parseOrThrow(switchPlanSchema, request.body);
       if (body.planCode !== "free") {
-        throw AppError.validation("Unsupported plan switch");
+        throw AppError.validation("Ten plan nie jest obsługiwany w tym przejściu. Skontaktuj się z supportem.");
       }
       return { data: await switchToFreePlan(app.prisma, request.authUser!.tenantId) };
     },

@@ -43,7 +43,7 @@ export async function submitInvoiceToKsef(prisma: PrismaClient, tenantId: string
       files: true,
     },
   });
-  if (!inv) throw AppError.notFound("Invoice not found");
+  if (!inv) throw AppError.notFound("Nie znaleziono faktury.");
   if (inv.ledgerKind !== "SALE") {
     throw AppError.validation("Wysyłka do KSeF dotyczy wyłącznie faktur sprzedaży (zakładka Sprzedaż).");
   }
@@ -66,7 +66,7 @@ export async function submitInvoiceToKsef(prisma: PrismaClient, tenantId: string
       where: { id: invoiceId, tenantId },
       include: { contractor: true, items: { orderBy: { id: "asc" } }, files: true },
     });
-    if (!full) throw AppError.notFound("Invoice not found");
+    if (!full) throw AppError.notFound("Nie znaleziono faktury.");
     return serializeInvoiceDetail(full);
   }
 
@@ -185,6 +185,6 @@ export async function submitInvoiceToKsef(prisma: PrismaClient, tenantId: string
     where: { id: invoiceId, tenantId },
     include: { contractor: true, items: { orderBy: { id: "asc" } }, files: true },
   });
-  if (!full) throw AppError.notFound("Invoice not found");
+  if (!full) throw AppError.notFound("Nie znaleziono faktury.");
   return serializeInvoiceDetail(full);
 }

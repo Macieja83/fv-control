@@ -27,7 +27,7 @@ const documentsRoutes: FastifyPluginAsync = async (app) => {
     async (request, reply) => {
       const { id } = request.params as { id: string };
       const doc = await documentService.getDocument(app.prisma, request.authUser!.tenantId, id);
-      if (!doc) throw AppError.notFound("Document not found");
+      if (!doc) throw AppError.notFound("Nie znaleziono dokumentu.");
       return reply.send(doc);
     },
   );

@@ -66,7 +66,7 @@ const billingWebhooksRoutes: FastifyPluginAsync = async (app) => {
       { schema: { tags: ["Billing"], summary: "Stripe billing webhook" } },
       async (request, reply) => {
         const cfg = loadConfig();
-        if (!cfg.STRIPE_BILLING_WEBHOOK_SECRET) throw AppError.unavailable("Stripe webhook secret is not configured");
+        if (!cfg.STRIPE_BILLING_WEBHOOK_SECRET) throw AppError.unavailable("Webhook Stripe nie jest skonfigurowany (brak STRIPE_BILLING_WEBHOOK_SECRET).");
         const sig =
           (request.headers["stripe-signature"] as string | undefined)?.trim() ??
           (request.headers["x-billing-signature"] as string | undefined)?.trim();
