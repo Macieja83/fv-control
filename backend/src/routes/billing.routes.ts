@@ -17,7 +17,7 @@ const checkoutSchema = z.object({
   planCode: z.enum(["free", "pro"]),
   successUrl: z.string().url(),
   cancelUrl: z.string().url(),
-  paymentMethod: z.enum(["CARD", "BLIK", "GOOGLE_PAY", "APPLE_PAY"]).optional(),
+  paymentMethod: z.enum(["CARD", "BLIK", "P24", "GOOGLE_PAY", "APPLE_PAY"]).optional(),
 });
 
 const portalSchema = z.object({

@@ -6,7 +6,12 @@ import { PRO_PLAN_PRICE_PLN, PRO_PREPAID_PERIOD_DAYS } from "./billing-constants
 /** PRO w Stripe: cena miesięczna z `STRIPE_PRICE_ID_PRO` w Dashboard (np. 59 PLN / mies.). */
 
 type CheckoutProvider = "STRIPE" | "P24";
-type CheckoutPaymentMethod = "CARD" | "BLIK" | "GOOGLE_PAY" | "APPLE_PAY";
+type CheckoutPaymentMethod = "CARD" | "BLIK" | "P24" | "GOOGLE_PAY" | "APPLE_PAY";
+
+/** Mapowanie z naszego paymentMethod na Stripe API `payment_method_types[]` value. */
+function stripePaymentMethodType(method: "blik" | "p24"): string {
+  return method; // Stripe używa lower-case identyfikatorów — `blik`, `p24`. Mapowanie 1:1 dla MVP.
+}
 
 function resolveStripePriceId(planCode: string): string {
   const cfg = loadConfig();
@@ -25,9 +30,16 @@ export async function getCurrentSubscription(prisma: PrismaClient, tenantId: str
   return row;
 }
 
-async function createStripePrepaidBlikSession(
+/**
+ * Generyczny Stripe Checkout dla prepaid 30-day (jednorazowa płatność 59 zł, dostęp PRO 30 dni).
+ * Wspiera BLIK i P24 — oba są single-payment methods w Stripe (nie wspierają recurring billing).
+ * Subscription.billingKind = STRIPE_PREPAID_BLIK (legacy enum value, semantyka rozszerzona na P24).
+ * Konkretna metoda (BLIK vs P24) trafia do Stripe metadata[paymentMethod] do śledzenia w webhook + UI.
+ */
+async function createStripePrepaid30dSession(
   prisma: PrismaClient,
   tenantId: string,
+  method: "blik" | "p24",
   input: { successUrl: string; cancelUrl: string },
 ) {
   const cfg = loadConfig();
@@ -42,6 +54,7 @@ async function createStripePrepaidBlikSession(
   });
 
   const unitAmount = PRO_PLAN_PRICE_PLN * 100;
+  const methodLabel = method === "p24" ? "Przelewy24" : "BLIK";
   const params = new URLSearchParams({
     mode: "payment",
     locale: "pl",
@@ -49,12 +62,13 @@ async function createStripePrepaidBlikSession(
     cancel_url: input.cancelUrl,
     "metadata[tenantId]": tenantId,
     "metadata[purpose]": "pro_prepaid_month",
+    "metadata[paymentMethod]": method,
     "line_items[0][quantity]": "1",
     "line_items[0][price_data][currency]": "pln",
     "line_items[0][price_data][unit_amount]": String(unitAmount),
-    "line_items[0][price_data][product_data][name]": `FV Control PRO (${PRO_PREPAID_PERIOD_DAYS} dni)`,
+    "line_items[0][price_data][product_data][name]": `FV Control PRO (${PRO_PREPAID_PERIOD_DAYS} dni, ${methodLabel})`,
   });
-  params.append("payment_method_types[]", "blik");
+  params.append("payment_method_types[]", stripePaymentMethodType(method));
   if (current?.providerCustomerId) params.set("customer", current.providerCustomerId);
   if (tenant.nip) params.set("customer_email", `${tenantId.slice(0, 8)}+${tenant.nip}@example.invalid`);
 
@@ -68,7 +82,7 @@ async function createStripePrepaidBlikSession(
   });
   const body = (await res.json()) as { id?: string; url?: string; customer?: string; error?: { message?: string } };
   if (!res.ok || !body.id || !body.url) {
-    throw AppError.unavailable(body.error?.message ?? "Stripe BLIK checkout session failed");
+    throw AppError.unavailable(body.error?.message ?? `Stripe ${methodLabel} checkout session failed`);
   }
 
   return { checkoutUrl: body.url, sessionId: body.id };
@@ -88,12 +102,27 @@ export async function createCheckoutSession(
   if (input.planCode !== "pro") {
     throw AppError.validation("Checkout session is available only for PRO plan");
   }
+  // Provider "P24" historycznie zarezerwowane dla bezpośredniej integracji P24.pl (osobny gateway).
+  // Decyzja 2026-05-10 (research/sales-ready-p24.md): używamy P24 jako Stripe payment method (Ścieżka A
+  // z research) — jeden gateway, koszt 2.4%+1.50zł, MVP-friendly. Bezpośrednia integracja P24 dopiero
+  // przy >100 klientów/mc gdy 1% prowizji ma znaczenie.
   if (input.provider === "P24") {
-    throw AppError.unavailable("P24 checkout session endpoint is not configured yet");
+    throw AppError.unavailable(
+      "P24 wybierany teraz jako Stripe payment method (provider=STRIPE, paymentMethod=P24). Bezpośrednia integracja P24.pl nie jest skonfigurowana.",
+    );
   }
 
   if (input.paymentMethod === "BLIK") {
-    return createStripePrepaidBlikSession(prisma, tenantId, {
+    return createStripePrepaid30dSession(prisma, tenantId, "blik", {
+      successUrl: input.successUrl,
+      cancelUrl: input.cancelUrl,
+    });
+  }
+
+  if (input.paymentMethod === "P24") {
+    // 2026-05-10: P24 jako Stripe payment method (Ścieżka A z research/sales-ready-p24.md).
+    // Stripe nie wspiera recurring billing dla P24 → traktujemy jak prepaid 30-day (analogicznie BLIK).
+    return createStripePrepaid30dSession(prisma, tenantId, "p24", {
       successUrl: input.successUrl,
       cancelUrl: input.cancelUrl,
     });
