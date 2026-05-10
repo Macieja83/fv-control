@@ -45,7 +45,7 @@ export async function registerTenantAccount(prisma: PrismaClient, input: Registe
   }
 
   const exists = await prisma.user.findUnique({ where: { email: input.email.toLowerCase() } });
-  if (exists) throw AppError.conflict("Email already exists");
+  if (exists) throw AppError.conflict("Konto z tym adresem e-mail już istnieje.");
 
   const passwordHash = await hashPassword(input.password);
 
@@ -129,14 +129,14 @@ export async function login(prisma: PrismaClient, input: LoginInput) {
       where: { email: input.email.toLowerCase() },
     });
     if (!user?.isActive) {
-      throw AppError.unauthorized("Invalid credentials");
+      throw AppError.unauthorized("Nieprawidłowy e-mail lub hasło.");
     }
     if (!user.passwordHash) {
-      throw AppError.unauthorized("Use Google sign-in for this account");
+      throw AppError.unauthorized('To konto używa logowania przez Google — kliknij "Zaloguj się z Google".');
     }
     const ok = await verifyPassword(input.password, user.passwordHash);
     if (!ok) {
-      throw AppError.unauthorized("Invalid credentials");
+      throw AppError.unauthorized("Nieprawidłowy e-mail lub hasło.");
     }
     if (!user.emailVerified) {
       throw AppError.forbidden(
@@ -182,10 +182,10 @@ export async function refreshSession(prisma: PrismaClient, refreshToken: string)
     include: { user: true },
   });
   if (!row || row.revokedAt || row.expiresAt < new Date()) {
-    throw AppError.unauthorized("Invalid refresh token");
+    throw AppError.unauthorized("Sesja wygasła — zaloguj się ponownie.");
   }
   if (!row.user.isActive) {
-    throw AppError.unauthorized("User inactive");
+    throw AppError.unauthorized("Konto jest nieaktywne — skontaktuj się z administratorem.");
   }
   if (!row.user.emailVerified) {
     throw AppError.forbidden(
@@ -277,7 +277,7 @@ export async function verifyEmail(prisma: PrismaClient, token: string) {
     include: { user: true },
   });
   if (!row || row.consumedAt || row.expiresAt < new Date()) {
-    throw AppError.validation("Invalid or expired verification token");
+    throw AppError.validation("Link weryfikacyjny jest nieprawidłowy lub wygasł. Poproś o nowy e-mail z linkiem.");
   }
   await prisma.$transaction([
     prisma.user.update({
@@ -412,9 +412,9 @@ export async function loginWithGoogleCode(
   const googleRedirectUri = cfg.GOOGLE_OAUTH_REDIRECT_URI!;
   try {
     const decoded = jwt.verify(state, cfg.JWT_ACCESS_SECRET, { algorithms: ["HS256"] }) as Record<string, unknown>;
-    if (decoded.typ !== "google_state") throw new Error("bad state");
+    if (decoded.typ !== "google_state") throw new Error("Nieprawidłowy stan autoryzacji Google.");
   } catch {
-    throw AppError.validation("Invalid OAuth state");
+    throw AppError.validation("Stan autoryzacji Google jest nieprawidłowy — spróbuj zalogować się ponownie.");
   }
 
   const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
@@ -428,14 +428,14 @@ export async function loginWithGoogleCode(
       grant_type: "authorization_code",
     }),
   });
-  if (!tokenRes.ok) throw AppError.unauthorized("Google OAuth token exchange failed");
+  if (!tokenRes.ok) throw AppError.unauthorized("Nie udało się dokończyć logowania przez Google (wymiana tokenu). Spróbuj ponownie.");
   const tokenBody = (await tokenRes.json()) as { access_token?: string };
-  if (!tokenBody.access_token) throw AppError.unauthorized("Google OAuth missing access token");
+  if (!tokenBody.access_token) throw AppError.unauthorized("Logowanie przez Google nie zwróciło wymaganego tokenu. Spróbuj ponownie.");
 
   const userInfoRes = await fetch("https://openidconnect.googleapis.com/v1/userinfo", {
     headers: { authorization: `Bearer ${tokenBody.access_token}` },
   });
-  if (!userInfoRes.ok) throw AppError.unauthorized("Google OAuth userinfo failed");
+  if (!userInfoRes.ok) throw AppError.unauthorized("Nie udało się pobrać danych konta Google. Spróbuj ponownie.");
   const userInfo = (await userInfoRes.json()) as {
     sub?: string;
     email?: string;
@@ -443,7 +443,7 @@ export async function loginWithGoogleCode(
     name?: string;
   };
   if (!userInfo.sub || !userInfo.email || userInfo.email_verified !== true) {
-    throw AppError.unauthorized("Google account must have verified email");
+    throw AppError.unauthorized("Konto Google musi mieć potwierdzony adres e-mail.");
   }
 
   const providerUserId = userInfo.sub;
@@ -513,8 +513,8 @@ export async function loginWithGoogleCode(
     }
   }
 
-  if (!identity) throw AppError.internal("Google identity not found after login flow");
-  if (!identity.user.isActive) throw AppError.unauthorized("User inactive");
+  if (!identity) throw AppError.internal("Nie znaleziono tożsamości Google po logowaniu. Spróbuj ponownie.");
+  if (!identity.user.isActive) throw AppError.unauthorized("Konto jest nieaktywne — skontaktuj się z administratorem.");
 
   if (!identity.user.emailVerified) {
     const verificationToken = await issueEmailVerificationToken(
@@ -594,7 +594,7 @@ export async function listTenantsForSuperAdmin(prisma: PrismaClient, limit = 200
 async function assertPlatformAdminActor(prisma: PrismaClient, actorUserId: string) {
   const actor = await prisma.user.findUnique({ where: { id: actorUserId } });
   if (!actor?.isActive || !isPlatformAdminEmail(actor.email)) {
-    throw AppError.forbidden("Platform admin required");
+    throw AppError.forbidden("Wymagane uprawnienia administratora platformy.");
   }
   return actor;
 }
@@ -606,7 +606,7 @@ export async function setTenantManualProSubscription(
 ) {
   const actor = await assertPlatformAdminActor(prisma, actorUserId);
   const tenant = await prisma.tenant.findUnique({ where: { id: targetTenantId } });
-  if (!tenant) throw AppError.notFound("Tenant not found");
+  if (!tenant) throw AppError.notFound("Nie znaleziono firmy (tenant).");
 
   const current = await prisma.subscription.findFirst({
     where: { tenantId: targetTenantId },
@@ -661,7 +661,7 @@ export async function archiveTenantByPlatformAdmin(
 ) {
   const actor = await assertPlatformAdminActor(prisma, actorUserId);
   const tenant = await prisma.tenant.findUnique({ where: { id: targetTenantId } });
-  if (!tenant) throw AppError.notFound("Tenant not found");
+  if (!tenant) throw AppError.notFound("Nie znaleziono firmy (tenant).");
   if (!tenant.deletedAt) {
     await prisma.tenant.update({ where: { id: targetTenantId }, data: { deletedAt: new Date() } });
   }
@@ -684,7 +684,7 @@ export async function unarchiveTenantByPlatformAdmin(
 ) {
   const actor = await assertPlatformAdminActor(prisma, actorUserId);
   const tenant = await prisma.tenant.findUnique({ where: { id: targetTenantId } });
-  if (!tenant) throw AppError.notFound("Tenant not found");
+  if (!tenant) throw AppError.notFound("Nie znaleziono firmy (tenant).");
   if (tenant.deletedAt) {
     await prisma.tenant.update({ where: { id: targetTenantId }, data: { deletedAt: null } });
   }
@@ -708,7 +708,7 @@ export async function setTenantUsersActiveStateByPlatformAdmin(
 ) {
   const actor = await assertPlatformAdminActor(prisma, actorUserId);
   const tenant = await prisma.tenant.findUnique({ where: { id: targetTenantId } });
-  if (!tenant) throw AppError.notFound("Tenant not found");
+  if (!tenant) throw AppError.notFound("Nie znaleziono firmy (tenant).");
 
   const users = await prisma.user.findMany({
     where: { tenantId: targetTenantId },
@@ -747,10 +747,10 @@ export async function issueTenantImpersonationAccessToken(
 ) {
   const user = await prisma.user.findUnique({ where: { id: superAdminUserId } });
   if (!user?.isActive || !isPlatformAdminEmail(user.email)) {
-    throw AppError.forbidden("Platform admin required");
+    throw AppError.forbidden("Wymagane uprawnienia administratora platformy.");
   }
   const tenant = await prisma.tenant.findUnique({ where: { id: targetTenantId } });
-  if (!tenant) throw AppError.notFound("Tenant not found");
+  if (!tenant) throw AppError.notFound("Nie znaleziono firmy (tenant).");
   const cfg = loadConfig();
   await prisma.auditLog.create({
     data: {

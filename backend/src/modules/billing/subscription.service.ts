@@ -16,10 +16,10 @@ function stripePaymentMethodType(method: "blik" | "p24"): string {
 function resolveStripePriceId(planCode: string): string {
   const cfg = loadConfig();
   if (planCode === "pro") {
-    if (!cfg.STRIPE_PRICE_ID_PRO) throw AppError.unavailable("Missing STRIPE_PRICE_ID_PRO");
+    if (!cfg.STRIPE_PRICE_ID_PRO) throw AppError.unavailable("Płatności nie są skonfigurowane (brak STRIPE_PRICE_ID_PRO). Spróbuj później lub napisz na support.");
     return cfg.STRIPE_PRICE_ID_PRO;
   }
-  throw AppError.validation("Only PRO plan requires checkout");
+  throw AppError.validation("Checkout dostępny tylko dla planu PRO.");
 }
 
 export async function getCurrentSubscription(prisma: PrismaClient, tenantId: string) {
@@ -43,10 +43,10 @@ async function createStripePrepaid30dSession(
   input: { successUrl: string; cancelUrl: string },
 ) {
   const cfg = loadConfig();
-  if (!cfg.STRIPE_SECRET_KEY) throw AppError.unavailable("Missing STRIPE_SECRET_KEY");
+  if (!cfg.STRIPE_SECRET_KEY) throw AppError.unavailable("Płatności są tymczasowo niedostępne (brak konfiguracji Stripe). Spróbuj za chwilę.");
 
   const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
-  if (!tenant) throw AppError.notFound("Tenant not found");
+  if (!tenant) throw AppError.notFound("Nie znaleziono firmy (tenant).");
 
   const current = await prisma.subscription.findFirst({
     where: { tenantId },
@@ -100,7 +100,7 @@ export async function createCheckoutSession(
   },
 ) {
   if (input.planCode !== "pro") {
-    throw AppError.validation("Checkout session is available only for PRO plan");
+    throw AppError.validation("Sesja Checkout jest dostępna tylko dla planu PRO.");
   }
   // Provider "P24" historycznie zarezerwowane dla bezpośredniej integracji P24.pl (osobny gateway).
   // Decyzja 2026-05-10 (research/sales-ready-p24.md): używamy P24 jako Stripe payment method (Ścieżka A
@@ -129,11 +129,11 @@ export async function createCheckoutSession(
   }
 
   const cfg = loadConfig();
-  if (!cfg.STRIPE_SECRET_KEY) throw AppError.unavailable("Missing STRIPE_SECRET_KEY");
+  if (!cfg.STRIPE_SECRET_KEY) throw AppError.unavailable("Płatności są tymczasowo niedostępne (brak konfiguracji Stripe). Spróbuj za chwilę.");
 
   const priceId = resolveStripePriceId(input.planCode);
   const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
-  if (!tenant) throw AppError.notFound("Tenant not found");
+  if (!tenant) throw AppError.notFound("Nie znaleziono firmy (tenant).");
 
   const current = await prisma.subscription.findFirst({
     where: { tenantId },
@@ -236,14 +236,14 @@ export async function createBillingPortalSession(
   input: { returnUrl: string },
 ) {
   const cfg = loadConfig();
-  if (!cfg.STRIPE_SECRET_KEY) throw AppError.unavailable("Missing STRIPE_SECRET_KEY");
+  if (!cfg.STRIPE_SECRET_KEY) throw AppError.unavailable("Płatności są tymczasowo niedostępne (brak konfiguracji Stripe). Spróbuj za chwilę.");
 
   const current = await prisma.subscription.findFirst({
     where: { tenantId },
     orderBy: { createdAt: "desc" },
   });
   if (!current?.providerCustomerId) {
-    throw AppError.validation("No Stripe customer assigned for this tenant yet");
+    throw AppError.validation("Ta firma nie ma jeszcze przypisanego klienta Stripe — najpierw przejdź przez Checkout.");
   }
   if (current.billingKind === "STRIPE_PREPAID_BLIK") {
     throw AppError.validation(

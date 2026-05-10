@@ -36,7 +36,7 @@ export async function getTenantProfile(prisma: PrismaClient, tenantId: string) {
   const t = await prisma.tenant.findFirst({
     where: { id: tenantId, deletedAt: null },
   });
-  if (!t) throw AppError.notFound("Tenant not found");
+  if (!t) throw AppError.notFound("Nie znaleziono firmy (tenant).");
   const setting = await prisma.tenantSetting.findUnique({
     where: { tenantId_key: { tenantId, key: PORTAL_INTEGRATIONS_KEY } },
   });
