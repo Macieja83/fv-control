@@ -65,6 +65,48 @@ export async function getBillingCompanyData(
 }
 
 /**
+ * Zapisz dane firmy klienta (upsert TenantSetting[billing_company_data]).
+ * Walidacja: NIP musi mieć 10 cyfr, legalName min 3, address min 10, invoiceEmail format.
+ * Caller (route) wywołuje audit log osobno.
+ */
+export async function upsertBillingCompanyData(
+  prisma: PrismaClient,
+  customerTenantId: string,
+  input: BillingCompanyData,
+  actorUserId: string | null,
+): Promise<BillingCompanyData> {
+  // Normalizacja + walidacja (Zod schema w route powinna to już złapać, tu defensywnie)
+  const normalized: BillingCompanyData = {
+    legalName: input.legalName.trim(),
+    nip: input.nip.replace(/\D/g, ""),
+    address: input.address.trim(),
+    invoiceEmail: input.invoiceEmail.trim().toLowerCase(),
+  };
+  if (normalized.legalName.length < 3) throw new Error("legalName min 3 znaki");
+  if (normalized.nip.length !== 10) throw new Error("nip musi mieć 10 cyfr");
+  if (normalized.address.length < 10) throw new Error("address min 10 znaków");
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized.invoiceEmail)) {
+    throw new Error("invoiceEmail nie pasuje do formatu email");
+  }
+
+  await prisma.tenantSetting.upsert({
+    where: { tenantId_key: { tenantId: customerTenantId, key: BILLING_COMPANY_DATA_SETTING_KEY } },
+    create: {
+      tenantId: customerTenantId,
+      key: BILLING_COMPANY_DATA_SETTING_KEY,
+      valueJson: normalized as object,
+      updatedById: actorUserId,
+    },
+    update: {
+      valueJson: normalized as object,
+      updatedById: actorUserId,
+    },
+  });
+
+  return normalized;
+}
+
+/**
  * Generuje następny numer faktury w serii TT Grupa: `FA/YYYY-MM/NNN`.
  * NNN to liczba faktur SALE w tym tenancie w danym miesiącu issueDate + 1, padded do 3 cyfr.
  * Race condition: unique `(tenantId, number)` wyłapie kolizję — caller retry.

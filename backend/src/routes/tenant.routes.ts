@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
+import { z } from "zod";
 import { assertCanManageIntegrations, assertCanMutate } from "../lib/roles.js";
 import { parseOrThrow } from "../lib/validate.js";
 import {
@@ -13,6 +14,24 @@ import {
   testTenantKsefConnection,
   upsertTenantKsefCredentials,
 } from "../modules/ksef/ksef-tenant-credentials.service.js";
+import {
+  getBillingCompanyData,
+  upsertBillingCompanyData,
+} from "../modules/billing/auto-self-invoice.service.js";
+
+/**
+ * Dane firmowe klienta wymagane przed wystawieniem FV VAT za subskrypcję (B15 dogfood).
+ * Wymuszane przy upgrade na PRO — gdy któreś pole null, frontend pokazuje modal NIP.
+ */
+const billingCompanyDataSchema = z.object({
+  legalName: z.string().trim().min(3, "min 3 znaki").max(200),
+  nip: z
+    .string()
+    .transform((s) => s.replace(/\D/g, ""))
+    .pipe(z.string().length(10, "NIP musi mieć dokładnie 10 cyfr")),
+  address: z.string().trim().min(10, "min 10 znaków").max(500),
+  invoiceEmail: z.string().trim().toLowerCase().email("nieprawidłowy email"),
+});
 
 const tenantRoutes: FastifyPluginAsync = async (app) => {
   app.get(
@@ -99,6 +118,53 @@ const tenantRoutes: FastifyPluginAsync = async (app) => {
       assertCanManageIntegrations(request.authUser!.role);
       await deleteTenantKsefCredentials(app.prisma, request.authUser!.tenantId, request.authUser!.id);
       return { ok: true };
+    },
+  );
+
+  app.get(
+    "/tenant/billing-data",
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        tags: ["Tenant"],
+        summary: "Get tenant billing company data (for self-invoice PRO subscription)",
+      },
+    },
+    async (request) => {
+      const data = await getBillingCompanyData(app.prisma, request.authUser!.tenantId);
+      return { data, complete: data !== null };
+    },
+  );
+
+  app.patch(
+    "/tenant/billing-data",
+    {
+      preHandler: [app.authenticate, app.checkIdempotency],
+      schema: {
+        tags: ["Tenant"],
+        summary: "Upsert tenant billing company data (legalName, nip, address, invoiceEmail) — wymagane przed upgrade PRO",
+      },
+    },
+    async (request) => {
+      assertCanMutate(request.authUser!.role);
+      const body = parseOrThrow(billingCompanyDataSchema, request.body);
+      const saved = await upsertBillingCompanyData(
+        app.prisma,
+        request.authUser!.tenantId,
+        body,
+        request.authUser!.id,
+      );
+      await app.prisma.auditLog.create({
+        data: {
+          tenantId: request.authUser!.tenantId,
+          actorId: request.authUser!.id,
+          action: "TENANT_BILLING_DATA_UPDATED",
+          entityType: "TENANT",
+          entityId: request.authUser!.tenantId,
+          metadata: { nip: saved.nip, legalName: saved.legalName } as object,
+        },
+      });
+      return { data: saved, complete: true };
     },
   );
 
