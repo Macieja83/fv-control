@@ -54,8 +54,17 @@ const imapZenboxWorker = new Worker<ImapZenboxSyncJobData>(
   { connection, prefix: cfg.BULLMQ_PREFIX, concurrency: 1 },
 );
 
-/** Domyślny lock BullMQ (~30s) jest za krótki: sync KSeF czeka na 429 MF (nawet kilka min) i ma pauzę przed Issue — bez tego: „could not renew lock”. */
-const KSEF_SYNC_LOCK_MS = 3_600_000;
+/**
+ * Domyślny lock BullMQ (~30s) jest za krótki: sync KSeF czeka na 429 MF (nawet kilka min) i ma pauzę przed Issue — bez tego: „could not renew lock".
+ *
+ * P1-4 (research/ksef-batch-stability.md): bump 1h → 2h. BullMQ Worker ma auto-renew co
+ * `lockDuration / 2` (=1h), więc happy path lock jest stale renewany przez worker.run(). Bufor
+ * 2h chroni przed Redis disconnect / GC pause / process freeze przy >800 faktur w jednym oknie
+ * (math: 4.5s throttle × 100/page × 5 pages = 2250s ≈ 37 min sam fetch + 429 backoff + 5xx
+ * transient = łatwo >60 min worst case). Koszt: po crash workera zombie lock siedzi do 2h
+ * zamiast 1h — ale tylko 1 tenant Tutto, restart workera robi się manualnie.
+ */
+const KSEF_SYNC_LOCK_MS = 7_200_000;
 
 const ksefWorker = new Worker<KsefSyncJobData>(
   KSEF_SYNC_QUEUE_NAME,
