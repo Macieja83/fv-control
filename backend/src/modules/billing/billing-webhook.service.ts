@@ -2,9 +2,13 @@ import { Prisma } from "@prisma/client";
 import type { PrismaClient, SubscriptionStatus } from "@prisma/client";
 import { AppError } from "../../lib/errors.js";
 import { PRO_PLAN_PRICE_PLN, PRO_PREPAID_PERIOD_DAYS } from "./billing-constants.js";
-import { createSelfInvoiceForSubscriptionPayment } from "./auto-self-invoice.service.js";
+import {
+  createSelfInvoiceForSubscriptionPayment,
+  getBillingCompanyData,
+} from "./auto-self-invoice.service.js";
 import { submitInvoiceToKsef } from "../invoices/ksef-issuance.service.js";
 import { loadConfig } from "../../config.js";
+import { sendSubscriptionInvoiceEmail } from "../../lib/mailer.js";
 
 const inMemoryWebhookDedup = new Set<string>();
 let canUseBillingWebhookTable: boolean | null = null;
@@ -263,6 +267,12 @@ export async function handleStripeCheckoutSessionCompleted(
   return { accepted: true, eventType: "checkout.session.completed", updated: true };
 }
 
+function formatPeriodLabel(start: Date, end: Date): string {
+  const f = (d: Date) =>
+    `${String(d.getUTCDate()).padStart(2, "0")}.${String(d.getUTCMonth() + 1).padStart(2, "0")}.${d.getUTCFullYear()}`;
+  return `${f(start)}–${f(end)}`;
+}
+
 function extractPaymentMethodFromMetadata(meta: Record<string, unknown> | null): "card" | "blik" | "p24" {
   if (!meta) return "blik"; // legacy: pre-2026-05-10 sesje miały tylko BLIK
   const raw = typeof meta.paymentMethod === "string" ? meta.paymentMethod.trim().toLowerCase() : "";
@@ -295,14 +305,41 @@ async function tryCreateAndSubmitSelfInvoice(
     }
     // Submit do KSeF — w stub mode tylko oznacza PENDING, w live wysyła do MF.
     // Best-effort: jeśli pada (np. tenant TT Grupa nie ma KSeF token), zostaje INVOICE w bazie do manualnego review.
+    let ksefNumber: string | null = null;
     try {
       await submitInvoiceToKsef(prisma, cfg.BILLING_SELF_INVOICE_TENANT_ID, result.invoiceId);
       console.info(`[self-invoice] FV ${result.invoiceNumber} (id=${result.invoiceId}) submit do KSeF OK`);
+      // Odczyt ksefNumber po submit (jeśli live mode i MF przydzielił numer)
+      const refreshed = await prisma.invoice.findUnique({
+        where: { id: result.invoiceId },
+        select: { ksefNumber: true },
+      });
+      ksefNumber = refreshed?.ksefNumber ?? null;
     } catch (ksefErr) {
       const msg = ksefErr instanceof Error ? ksefErr.message : String(ksefErr);
       console.warn(`[self-invoice] FV ${result.invoiceNumber} utworzona ale KSeF submit failed: ${msg}`);
     }
-    // TODO B7: po deploy Resend → wyślij PDF + UPO mailem do billing.invoiceEmail.
+
+    // Email do klienta — best-effort. SMTP fallback w dev = console.info, w prod throw (lib/mailer.ts).
+    // Próba wysyłki tylko gdy mamy invoiceEmail w billing_company_data klienta.
+    try {
+      const billing = await getBillingCompanyData(prisma, payload.customerTenantId);
+      if (billing?.invoiceEmail) {
+        await sendSubscriptionInvoiceEmail(cfg, billing.invoiceEmail, {
+          invoiceNumber: result.invoiceNumber,
+          grossTotalPln: payload.amountPaidPln,
+          issueDateIso: payload.paidAt.toISOString(),
+          ksefNumber,
+          periodLabel: formatPeriodLabel(payload.periodStart, payload.periodEnd),
+        });
+        console.info(`[self-invoice] Email wysłany dla FV ${result.invoiceNumber} → ${billing.invoiceEmail}`);
+      } else {
+        console.warn(`[self-invoice] Brak invoiceEmail w billing_company_data klienta ${payload.customerTenantId} — pomijam email`);
+      }
+    } catch (emailErr) {
+      const msg = emailErr instanceof Error ? emailErr.message : String(emailErr);
+      console.warn(`[self-invoice] Email send failed dla FV ${result.invoiceNumber}: ${msg}`);
+    }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.warn(`[self-invoice] Nie udało się utworzyć FV za Stripe event ${payload.stripeEventId}: ${msg}`);
