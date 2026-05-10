@@ -58,8 +58,11 @@ export async function loginRequest(email: string, password: string): Promise<Log
       body: JSON.stringify({ email, password }),
     })
   } catch {
+    const isDev = import.meta.env.MODE !== 'production'
     throw new Error(
-      'Brak połączenia z API (czy coś nasłuchuje na porcie z FV_RESTA_API_URL?). Pełny stos: uruchom Docker Desktop, potem z katalogu głównego `npm run dev:stack` (albo `infra:up` + w backend: migrate/seed + `dev:all`). Szybki front bez bazy: `npm run dev:web`.',
+      isDev
+        ? 'Brak połączenia z API (czy coś nasłuchuje na porcie z FV_RESTA_API_URL?). Pełny stos: uruchom Docker Desktop, potem z katalogu głównego `npm run dev:stack` (albo `infra:up` + w backend: migrate/seed + `dev:all`). Szybki front bez bazy: `npm run dev:web`.'
+        : 'Nie udało się połączyć z serwerem logowania. Sprawdź połączenie z internetem i spróbuj ponownie za chwilę. Jeśli problem się powtarza, napisz na kontakt@tuttopizza.pl.',
     )
   }
   const rawText = await res.text()
@@ -67,11 +70,15 @@ export async function loginRequest(email: string, password: string): Promise<Log
   try {
     data = rawText ? (JSON.parse(rawText) as BackendLoginBody & BackendErrorBody) : {}
   } catch {
-    throw new Error(
-      res.status === 502 || res.status === 504
-        ? 'Proxy Vite nie łączy się z API (zwykle nic nie nasłuchuje na localhost:3000). Uruchom stack albo tymczasowo: npm run dev:web.'
-        : `Niepoprawna odpowiedź serwera (${res.status}).`,
-    )
+    const isDev = import.meta.env.MODE !== 'production'
+    if (res.status === 502 || res.status === 504) {
+      throw new Error(
+        isDev
+          ? 'Proxy Vite nie łączy się z API (zwykle nic nie nasłuchuje na localhost:3000). Uruchom stack albo tymczasowo: npm run dev:web.'
+          : 'Serwer logowania jest tymczasowo niedostępny (502/504). Spróbuj ponownie za 1-2 minuty. Jeśli problem trwa, napisz na kontakt@tuttopizza.pl.',
+      )
+    }
+    throw new Error(`Niepoprawna odpowiedź serwera (${res.status}).`)
   }
   if (!res.ok) {
     throw new Error(readLoginErrorMessage(data, res.status))
