@@ -33,6 +33,12 @@ import { getEffectiveKsefApiEnv, KSEF_INGESTION_SOURCE_LABEL } from "./ksef-effe
 import { loadKsefClientForTenant } from "./ksef-tenant-credentials.service.js";
 import { recoverStaleInflightPipelineJobsForInvoice } from "../pipeline/pipeline-stale-inflight.service.js";
 import { retryInvoiceExtraction } from "../pipeline/retry-invoice-extraction.service.js";
+import {
+  ksefSyncRunsTotal,
+  ksefSyncDurationSeconds,
+  ksefRetryQueueSize,
+  ksefInvoicesProcessedTotal,
+} from "../../lib/metrics.js";
 
 export type KsefSyncJobData = {
   tenantId: string;
@@ -145,6 +151,9 @@ export async function runKsefSyncJob(
 ): Promise<KsefSyncResult> {
   const cfg = loadConfig();
   const syncRunAt = () => new Date().toISOString();
+  // P1-5: zacznij timer na samym wejściu — duration obejmuje load credentials + auth + cały sync.
+  // Wywołaj `endTimer()` przy KAŻDEJ ścieżce wyjścia (3 miejsca: skipped, completed, failed).
+  const endTimer = ksefSyncDurationSeconds.startTimer({ tenant_id: data.tenantId });
 
   // P0-1: load credentials musi być w try, żeby błąd (zły password / uszkodzony PKCS#5 / DB error)
   // nie pominął zapisu telemetrii i audit logu — inaczej operator widzi stale `lastSync*` i nie wie że job pada.
@@ -160,6 +169,8 @@ export async function runKsefSyncJob(
       errorPreview: `loadKsefClientForTenant: ${msg}`.slice(0, 500),
       queueJobId: ctx?.queueJobId ?? null,
     });
+    ksefSyncRunsTotal.inc({ tenant_id: data.tenantId, phase: "failed" });
+    endTimer();
     throw e;
   }
 
@@ -174,6 +185,8 @@ export async function runKsefSyncJob(
       skippedReason: "missing_credentials",
       errorPreview: null,
     });
+    ksefSyncRunsTotal.inc({ tenant_id: data.tenantId, phase: "skipped_no_credentials" });
+    endTimer();
     return { fetched: 0, ingested: 0, skippedDuplicate: 0, refetched: 0, errors: [], newHwmDate: null };
   }
 
@@ -297,14 +310,22 @@ export async function runKsefSyncJob(
         for (const inv of metaPage.invoices) {
           try {
             const outcome = await processOneInvoice(prisma, client, data.tenantId, inv, force, beforeXmlFetch);
-            if (outcome === "ingested" || outcome === "linked" || outcome === "resumed") result.ingested++;
-            else if (outcome === "refetched") result.refetched++;
-            else result.skippedDuplicate++;
+            if (outcome === "ingested" || outcome === "linked" || outcome === "resumed") {
+              result.ingested++;
+              ksefInvoicesProcessedTotal.inc({ tenant_id: data.tenantId, outcome: "ingested" });
+            } else if (outcome === "refetched") {
+              result.refetched++;
+              ksefInvoicesProcessedTotal.inc({ tenant_id: data.tenantId, outcome: "refetched" });
+            } else {
+              result.skippedDuplicate++;
+              ksefInvoicesProcessedTotal.inc({ tenant_id: data.tenantId, outcome: "skipped_duplicate" });
+            }
           } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
             console.error(`[KSeF sync] Error processing ${inv.ksefNumber}: ${msg}`);
             result.errors.push(`${inv.ksefNumber}: ${msg}`);
             retryQueue.add(inv.ksefNumber);
+            ksefInvoicesProcessedTotal.inc({ tenant_id: data.tenantId, outcome: "error" });
           }
         }
 
@@ -404,6 +425,11 @@ export async function runKsefSyncJob(
     );
   }
 
+  // P1-5: zapisz finalne gauges + counter completed.
+  ksefRetryQueueSize.set({ tenant_id: data.tenantId }, retryToPersist.length);
+  ksefSyncRunsTotal.inc({ tenant_id: data.tenantId, phase: "completed" });
+  endTimer();
+
   console.info(
     `[KSeF sync] Done: fetched=${result.fetched}, ingested=${result.ingested}, refetched=${result.refetched}, dupes=${result.skippedDuplicate}, errors=${result.errors.length}`,
   );
@@ -435,6 +461,10 @@ export async function runKsefSyncJob(
       errorPreview: msg.slice(0, 500),
       queueJobId: ctx?.queueJobId ?? null,
     });
+    // P1-5: gauge wciąż użyteczny w stanie failed (operator widzi retry queue rośnie).
+    ksefRetryQueueSize.set({ tenant_id: data.tenantId }, retryQueue.size);
+    ksefSyncRunsTotal.inc({ tenant_id: data.tenantId, phase: "failed" });
+    endTimer();
     throw e;
   }
 }

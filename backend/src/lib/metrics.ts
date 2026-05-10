@@ -110,6 +110,37 @@ export const imapLastUidGauge = new Gauge({
   registers: [registry],
 });
 
+// ─── KSeF sync (P1-5 z research/ksef-batch-stability.md) ───
+
+export const ksefSyncRunsTotal = new Counter({
+  name: "fvcontrol_ksef_sync_runs_total",
+  help: "KSeF sync job terminal outcomes",
+  labelNames: ["tenant_id", "phase"] as const, // phase: completed | failed | skipped_no_credentials
+  registers: [registry],
+});
+
+export const ksefSyncDurationSeconds = new Histogram({
+  name: "fvcontrol_ksef_sync_duration_seconds",
+  help: "Wall time of a KSeF sync job",
+  buckets: [1, 5, 15, 30, 60, 120, 300, 600, 1800, 3600],
+  labelNames: ["tenant_id"] as const,
+  registers: [registry],
+});
+
+export const ksefRetryQueueSize = new Gauge({
+  name: "fvcontrol_ksef_retry_queue_size",
+  help: "Liczba numerów KSeF czekających na ponowny ingest (per tenant). Alert przy >100 = MF outage albo recurring failure.",
+  labelNames: ["tenant_id"] as const,
+  registers: [registry],
+});
+
+export const ksefInvoicesProcessedTotal = new Counter({
+  name: "fvcontrol_ksef_invoices_processed_total",
+  help: "KSeF invoice processing outcomes per sync run",
+  labelNames: ["tenant_id", "outcome"] as const, // outcome: ingested | skipped_duplicate | refetched | error
+  registers: [registry],
+});
+
 export function getMetricsRegistry(): Registry {
   return registry;
 }
