@@ -316,12 +316,27 @@ export async function runKsefSyncJob(
         if (hasMore && metaPage.isTruncated) {
           const lastInvoice = metaPage.invoices[metaPage.invoices.length - 1];
           if (lastInvoice) {
-            currentFrom = nextMetadataQueryFrom(dateType, lastInvoice);
-            console.info(
-              `[KSeF sync] isTruncated dateType=${dateType} → next from=${currentFrom} (po ${lastInvoice.ksefNumber})`,
-            );
+            const computedNext = nextMetadataQueryFrom(dateType, lastInvoice);
+            // P2-6: clamp żeby zapobiec infinite loop. Dla Issue, gdy `invoicingDate` puste i `issueDate`
+            // jest YMD-only, helper konstruuje `T00:00:00.000Z` — to może być WCZEŚNIEJ niż obecne `currentFrom`,
+            // szczególnie jeśli MF zwróci `isTruncated: true` na końcu strony z tylko jedną unikalną issueDate.
+            // Sort Asc po stronie MF powinien chronić, ale tu defensywnie: jeśli next <= current → zatrzymaj
+            // dalsze stronicowanie (kontynuujemy w następnym auto-sync).
+            if (computedNext <= currentFrom) {
+              console.warn(
+                `[KSeF sync] Loop guard: next from (${computedNext}) <= current (${currentFrom}) dla dateType=${dateType} po ${lastInvoice.ksefNumber} — przerywam stronicowanie tej kombinacji.`,
+              );
+              hasMore = false;
+            } else {
+              currentFrom = computedNext;
+              console.info(
+                `[KSeF sync] isTruncated dateType=${dateType} → next from=${currentFrom} (po ${lastInvoice.ksefNumber})`,
+              );
+              pageOffset = 0;
+            }
+          } else {
+            pageOffset = 0;
           }
-          pageOffset = 0;
         } else if (hasMore) {
           pageOffset++;
         }
@@ -428,6 +443,13 @@ type ProcessOutcome = "ingested" | "refetched" | "skipped" | "linked" | "resumed
 
 const AUTO_RETRY_FRESH_KSEF_WINDOW_MS = 3 * 60 * 60 * 1000;
 const AUTO_RETRY_MIN_GAP_MS = 90 * 1000;
+const AUTO_RESUME_MAX_ATTEMPTS = 3;
+
+// P2-7: per-process counter prób auto-resume per invoice. Bez tego invoice w stanie FAILED_NEEDS_REVIEW
+// był wskrzeszany w każdej rundzie auto-sync (co 5 min) przez całe 3h okno = do 36 prób, spam audit log + Redis.
+// In-memory celowo — restart workera resetuje, ale i tak po restarcie zwykle minęło >3h od `createdAt`,
+// więc okno freshness odcina kolejne próby. Czyszczone leniwie przy każdym hit (sprawdzenie ageMs > window).
+const autoResumeAttemptsByInvoice = new Map<string, number>();
 
 async function tryAutoResumeKsefInvoiceProcessing(
   prisma: PrismaClient,
@@ -436,7 +458,16 @@ async function tryAutoResumeKsefInvoiceProcessing(
 ): Promise<boolean> {
   if (invoice.status !== "INGESTING" && invoice.status !== "FAILED_NEEDS_REVIEW") return false;
   const ageMs = Date.now() - invoice.createdAt.getTime();
-  if (ageMs > AUTO_RETRY_FRESH_KSEF_WINDOW_MS) return false;
+  if (ageMs > AUTO_RETRY_FRESH_KSEF_WINDOW_MS) {
+    autoResumeAttemptsByInvoice.delete(invoice.id); // lazy cleanup poza oknem
+    return false;
+  }
+
+  const prevAttempts = autoResumeAttemptsByInvoice.get(invoice.id) ?? 0;
+  if (prevAttempts >= AUTO_RESUME_MAX_ATTEMPTS) {
+    // P2-7: cap przekroczony — zostaw operatorowi manual review zamiast spamować.
+    return false;
+  }
 
   await recoverStaleInflightPipelineJobsForInvoice(prisma, tenantId, invoice.id);
 
@@ -463,9 +494,17 @@ async function tryAutoResumeKsefInvoiceProcessing(
 
   try {
     const res = await retryInvoiceExtraction(prisma, tenantId, invoice.id);
+    // P2-7: zwiększ counter PO udanym retry (przed throw → counter nie rośnie, kolejna próba możliwa).
+    const newAttempts = prevAttempts + 1;
+    autoResumeAttemptsByInvoice.set(invoice.id, newAttempts);
     console.info(
-      `[KSeF sync] auto-resume pipeline: invoice=${invoice.id} processingJob=${res.processingJobId}`,
+      `[KSeF sync] auto-resume pipeline: invoice=${invoice.id} processingJob=${res.processingJobId} (attempt ${newAttempts}/${AUTO_RESUME_MAX_ATTEMPTS})`,
     );
+    if (newAttempts >= AUTO_RESUME_MAX_ATTEMPTS) {
+      console.warn(
+        `[KSeF sync] auto-resume cap osiągnięty dla invoice=${invoice.id} (${newAttempts}/${AUTO_RESUME_MAX_ATTEMPTS}) — kolejne auto-resume zablokowane, wymagane manual review.`,
+      );
+    }
     return true;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
