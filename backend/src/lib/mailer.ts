@@ -11,6 +11,78 @@ function buildPasswordResetUrl(cfg: AppConfig, token: string): string {
   return `${base}/login?pwd_reset=${encodeURIComponent(token)}`;
 }
 
+function buildBillingPortalUrl(cfg: AppConfig): string {
+  const base = cfg.WEB_APP_URL.replace(/\/$/, "");
+  return `${base}/ustawienia/platnosci`;
+}
+
+/**
+ * Minimalny brand wrapper — header z marka + footer RODO + kontakt.
+ * Spojny stylistycznie dla wszystkich emaili transakcyjnych.
+ */
+function brandHtml(cfg: AppConfig, innerHtml: string): string {
+  const appName = escapeHtml(cfg.APP_NAME);
+  const supportLink = `<a href="mailto:kontakt@tuttopizza.pl" style="color:#a855f7;text-decoration:none">kontakt@tuttopizza.pl</a>`;
+  return `<!DOCTYPE html>
+<html lang="pl"><head><meta charset="utf-8"><title>${appName}</title></head>
+<body style="margin:0;padding:0;background:#f4f5f7;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;color:#1f2937">
+<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:#f4f5f7;padding:32px 0">
+  <tr><td align="center">
+    <table role="presentation" cellpadding="0" cellspacing="0" width="560" style="max-width:560px;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.05)">
+      <tr><td style="padding:20px 28px;background:linear-gradient(135deg,#4f6ef7 0%,#a855f7 100%);color:#ffffff;font-size:18px;font-weight:600">
+        ${appName}
+      </td></tr>
+      <tr><td style="padding:28px;font-size:15px;line-height:1.6;color:#1f2937">
+        ${innerHtml}
+      </td></tr>
+      <tr><td style="padding:18px 28px;background:#f9fafb;border-top:1px solid #e5e7eb;font-size:12px;color:#6b7280;line-height:1.5">
+        Wiadomość wysłana automatycznie przez ${appName}. Pomoc i kontakt: ${supportLink}.<br/>
+        Dane przetwarzane zgodnie z RODO — szczegóły w polityce prywatności w panelu klienta.
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+</body></html>`;
+}
+
+/**
+ * Wspolny helper — buduje transporter (jezeli SMTP skonfigurowany) i wysyla.
+ * Bez SMTP w development: loguje info do konsoli (bez throw).
+ * Bez SMTP w production: throw — najpierw skonfiguruj Resend/SMTP.
+ */
+async function sendEmail(
+  cfg: AppConfig,
+  args: { to: string; subject: string; text: string; html: string; devLogHint: string },
+): Promise<void> {
+  if (!isSmtpConfigured(cfg)) {
+    if (cfg.NODE_ENV === "production") {
+      throw new Error(
+        "SMTP nie jest skonfigurowany. Ustaw SMTP_HOST, SMTP_USER, SMTP_PASS, EMAIL_FROM w .env (zalecane: Resend smtp.resend.com:465).",
+      );
+    }
+    console.info(`[email] (dev, brak SMTP) ${args.devLogHint}`);
+    return;
+  }
+
+  const transporter = nodemailer.createTransport({
+    host: cfg.SMTP_HOST,
+    port: cfg.SMTP_PORT,
+    secure: cfg.SMTP_SECURE,
+    auth:
+      cfg.SMTP_USER && cfg.SMTP_PASS !== undefined
+        ? { user: cfg.SMTP_USER, pass: cfg.SMTP_PASS }
+        : undefined,
+  });
+
+  await transporter.sendMail({
+    from: cfg.EMAIL_FROM,
+    to: args.to,
+    subject: args.subject,
+    text: args.text,
+    html: args.html,
+  });
+}
+
 /**
  * Wysyła link aktywacyjny na adres użytkownika (rejestracja hasłem lub Google).
  * Bez SMTP w development: loguje link do konsoli (bez rzucania wyjątku).
@@ -24,37 +96,22 @@ export async function sendTenantVerificationEmail(cfg: AppConfig, to: string, to
     `Aby aktywować konto w ${cfg.APP_NAME}, otwórz w przeglądarce:\n\n` +
     `${verifyUrl}\n\n` +
     `Link jest ważny 48 godzin. Jeśli to nie Ty zakładałeś konto, zignoruj tę wiadomość.\n`;
-  const html =
+  const inner =
     `<p>Dzień dobry,</p>` +
-    `<p>Aby <strong>aktywować konto</strong> w ${escapeHtml(cfg.APP_NAME)}, kliknij:</p>` +
-    `<p><a href="${escapeHtml(verifyUrl)}">Potwierdź adres e-mail</a></p>` +
-    `<p style="color:#666;font-size:12px">Jeśli przycisk nie działa, wklej ten adres w przeglądarkę:<br/>` +
+    `<p>Aby <strong>aktywować konto</strong> w ${escapeHtml(cfg.APP_NAME)}, kliknij przycisk poniżej:</p>` +
+    `<p style="text-align:center;margin:28px 0">` +
+    `<a href="${escapeHtml(verifyUrl)}" style="display:inline-block;padding:12px 28px;background:linear-gradient(135deg,#4f6ef7 0%,#a855f7 100%);color:#ffffff;text-decoration:none;border-radius:8px;font-weight:600">Potwierdź adres e-mail</a>` +
+    `</p>` +
+    `<p style="color:#6b7280;font-size:13px">Link jest ważny <strong>48 godzin</strong>. Jeśli to nie Ty zakładałeś konto, zignoruj tę wiadomość.</p>` +
+    `<p style="color:#9ca3af;font-size:12px;margin-top:20px">Jeśli przycisk nie działa, wklej ten adres w przeglądarkę:<br/>` +
     `<span style="word-break:break-all">${escapeHtml(verifyUrl)}</span></p>`;
 
-  if (!isSmtpConfigured(cfg)) {
-    if (cfg.NODE_ENV === "production") {
-      throw new Error("SMTP is not configured (set SMTP_HOST and related variables)");
-    }
-    console.info(`[email] (dev, brak SMTP) weryfikacja dla ${to}: ${verifyUrl}`);
-    return;
-  }
-
-  const transporter = nodemailer.createTransport({
-    host: cfg.SMTP_HOST,
-    port: cfg.SMTP_PORT,
-    secure: cfg.SMTP_SECURE,
-    auth:
-      cfg.SMTP_USER && cfg.SMTP_PASS !== undefined
-        ? { user: cfg.SMTP_USER, pass: cfg.SMTP_PASS }
-        : undefined,
-  });
-
-  await transporter.sendMail({
-    from: cfg.EMAIL_FROM,
+  await sendEmail(cfg, {
     to,
     subject,
     text,
-    html,
+    html: brandHtml(cfg, inner),
+    devLogHint: `weryfikacja dla ${to}: ${verifyUrl}`,
   });
 }
 
@@ -67,48 +124,28 @@ export async function sendPasswordResetEmail(cfg: AppConfig, to: string, token: 
     `Aby ustawić nowe hasło w ${cfg.APP_NAME}, otwórz w przeglądarce:\n\n` +
     `${resetUrl}\n\n` +
     `Link jest ważny ok. 1 godziny. Jeśli to nie Ty prosiłeś o reset, zignoruj tę wiadomość.\n`;
-  const html =
+  const inner =
     `<p>Dzień dobry,</p>` +
-    `<p>Aby <strong>ustawić nowe hasło</strong> w ${escapeHtml(cfg.APP_NAME)}, kliknij:</p>` +
-    `<p><a href="${escapeHtml(resetUrl)}">Ustaw nowe hasło</a></p>` +
-    `<p style="color:#666;font-size:12px">Jeśli przycisk nie działa, wklej ten adres w przeglądarkę:<br/>` +
+    `<p>Aby <strong>ustawić nowe hasło</strong> w ${escapeHtml(cfg.APP_NAME)}, kliknij przycisk poniżej:</p>` +
+    `<p style="text-align:center;margin:28px 0">` +
+    `<a href="${escapeHtml(resetUrl)}" style="display:inline-block;padding:12px 28px;background:linear-gradient(135deg,#4f6ef7 0%,#a855f7 100%);color:#ffffff;text-decoration:none;border-radius:8px;font-weight:600">Ustaw nowe hasło</a>` +
+    `</p>` +
+    `<p style="color:#6b7280;font-size:13px">Link jest ważny <strong>około 1 godziny</strong>. Jeśli to nie Ty prosiłeś o reset, zignoruj tę wiadomość — hasło nie zostanie zmienione.</p>` +
+    `<p style="color:#9ca3af;font-size:12px;margin-top:20px">Jeśli przycisk nie działa, wklej ten adres w przeglądarkę:<br/>` +
     `<span style="word-break:break-all">${escapeHtml(resetUrl)}</span></p>`;
 
-  if (!isSmtpConfigured(cfg)) {
-    if (cfg.NODE_ENV === "production") {
-      throw new Error("SMTP is not configured (set SMTP_HOST and related variables)");
-    }
-    console.info(`[email] (dev, brak SMTP) reset hasła dla ${to}: ${resetUrl}`);
-    return;
-  }
-
-  const transporter = nodemailer.createTransport({
-    host: cfg.SMTP_HOST,
-    port: cfg.SMTP_PORT,
-    secure: cfg.SMTP_SECURE,
-    auth:
-      cfg.SMTP_USER && cfg.SMTP_PASS !== undefined
-        ? { user: cfg.SMTP_USER, pass: cfg.SMTP_PASS }
-        : undefined,
-  });
-
-  await transporter.sendMail({
-    from: cfg.EMAIL_FROM,
+  await sendEmail(cfg, {
     to,
     subject,
     text,
-    html,
+    html: brandHtml(cfg, inner),
+    devLogHint: `reset hasła dla ${to}: ${resetUrl}`,
   });
 }
 
 /**
  * Wysyła powiadomienie o wystawionej fakturze VAT za subskrypcję PRO (B15 dogfood).
- * Bez SMTP w development: loguje do konsoli (zgodnie z konwencją tego pliku).
- * W production bez SMTP: throw — najpierw skonfiguruj Resend/SMTP (B7).
- *
- * Po deploy B7 + Resend env (SMTP_HOST=smtp.resend.com, SMTP_USER=resend,
- * SMTP_PASS=re_xxx API key) ten email pójdzie do klienta automatycznie po
- * KSeF submit. PDF + UPO attachments w przyszłej iteracji (etap 6+).
+ * Po deploy B7 + Resend env ten email pójdzie do klienta automatycznie po KSeF submit.
  */
 export async function sendSubscriptionInvoiceEmail(
   cfg: AppConfig,
@@ -139,43 +176,180 @@ export async function sendSubscriptionInvoiceEmail(
     `Pozdrawiamy,\n` +
     `Zespół ${cfg.APP_NAME}\n`;
 
-  const html =
+  const inner =
     `<p>Dzień dobry,</p>` +
     `<p>Dziękujemy za płatność za subskrypcję <strong>${escapeHtml(cfg.APP_NAME)}</strong> (okres ${escapeHtml(params.periodLabel)}).</p>` +
     `<p>Wystawiliśmy fakturę VAT:</p>` +
-    `<ul>` +
-    `<li>Numer: <strong>${escapeHtml(params.invoiceNumber)}</strong></li>` +
-    `<li>Data wystawienia: ${escapeHtml(dateLabel)}</li>` +
-    `<li>Kwota brutto: <strong>${params.grossTotalPln.toFixed(2)} PLN</strong></li>` +
-    (params.ksefNumber ? `<li>Numer KSeF (MF): ${escapeHtml(params.ksefNumber)}</li>` : "") +
-    `</ul>` +
-    `<p><a href="${escapeHtml(dashboardBase)}/faktury">Otwórz fakturę w panelu klienta</a></p>` +
-    `<p style="color:#666;font-size:12px">Pozdrawiamy,<br/>Zespół ${escapeHtml(cfg.APP_NAME)}</p>`;
+    `<table cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:12px 0">` +
+    `<tr><td style="padding:6px 14px 6px 0;color:#6b7280">Numer:</td><td style="padding:6px 0"><strong>${escapeHtml(params.invoiceNumber)}</strong></td></tr>` +
+    `<tr><td style="padding:6px 14px 6px 0;color:#6b7280">Data wystawienia:</td><td style="padding:6px 0">${escapeHtml(dateLabel)}</td></tr>` +
+    `<tr><td style="padding:6px 14px 6px 0;color:#6b7280">Kwota brutto:</td><td style="padding:6px 0"><strong>${params.grossTotalPln.toFixed(2)} PLN</strong></td></tr>` +
+    (params.ksefNumber
+      ? `<tr><td style="padding:6px 14px 6px 0;color:#6b7280">Numer KSeF (MF):</td><td style="padding:6px 0">${escapeHtml(params.ksefNumber)}</td></tr>`
+      : "") +
+    `</table>` +
+    `<p style="text-align:center;margin:28px 0">` +
+    `<a href="${escapeHtml(dashboardBase)}/faktury" style="display:inline-block;padding:12px 28px;background:linear-gradient(135deg,#4f6ef7 0%,#a855f7 100%);color:#ffffff;text-decoration:none;border-radius:8px;font-weight:600">Otwórz fakturę</a>` +
+    `</p>`;
 
-  if (!isSmtpConfigured(cfg)) {
-    if (cfg.NODE_ENV === "production") {
-      throw new Error("SMTP is not configured (set SMTP_HOST and related variables)");
-    }
-    console.info(`[email] (dev, brak SMTP) FV ${params.invoiceNumber} dla ${to}: ${dashboardBase}/faktury`);
-    return;
-  }
-
-  const transporter = nodemailer.createTransport({
-    host: cfg.SMTP_HOST,
-    port: cfg.SMTP_PORT,
-    secure: cfg.SMTP_SECURE,
-    auth:
-      cfg.SMTP_USER && cfg.SMTP_PASS !== undefined
-        ? { user: cfg.SMTP_USER, pass: cfg.SMTP_PASS }
-        : undefined,
-  });
-
-  await transporter.sendMail({
-    from: cfg.EMAIL_FROM,
+  await sendEmail(cfg, {
     to,
     subject,
     text,
-    html,
+    html: brandHtml(cfg, inner),
+    devLogHint: `FV ${params.invoiceNumber} dla ${to}: ${dashboardBase}/faktury`,
+  });
+}
+
+/**
+ * Welcome / aktywacja subskrypcji PRO — po pierwszej udanej platnosci Stripe.
+ * Trigger: handleStripeCheckoutSessionCompleted + (BILLING_SELF_INVOICE_TENANT_ID == null
+ * lub osobno od FV maila zeby klient zawsze dostal "subskrypcja aktywna").
+ */
+export async function sendSubscriptionActivatedEmail(
+  cfg: AppConfig,
+  to: string,
+  params: { planLabel: string; activeUntilDate?: string | null; method?: string | null },
+): Promise<void> {
+  const billingUrl = buildBillingPortalUrl(cfg);
+  const subject = `Subskrypcja ${params.planLabel} aktywna — ${cfg.APP_NAME}`;
+  const until = params.activeUntilDate ? params.activeUntilDate.slice(0, 10) : null;
+
+  const text =
+    `Dzień dobry,\n\n` +
+    `Twoja subskrypcja ${params.planLabel} w ${cfg.APP_NAME} jest aktywna. Dziękujemy!\n\n` +
+    (until ? `Okres rozliczeniowy do: ${until}\n` : "") +
+    (params.method ? `Metoda płatności: ${params.method}\n` : "") +
+    `\n` +
+    `Zarządzaj subskrypcją (zmiana karty, faktury, anulacja):\n` +
+    `${billingUrl}\n\n` +
+    `Powodzenia z porządkowaniem faktur!\n` +
+    `Zespół ${cfg.APP_NAME}\n`;
+
+  const inner =
+    `<p>Dzień dobry,</p>` +
+    `<p>Twoja subskrypcja <strong>${escapeHtml(params.planLabel)}</strong> w ${escapeHtml(cfg.APP_NAME)} jest <span style="color:#16a34a;font-weight:600">aktywna</span>. Dziękujemy!</p>` +
+    (until || params.method
+      ? `<table cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:12px 0">` +
+        (until
+          ? `<tr><td style="padding:6px 14px 6px 0;color:#6b7280">Okres do:</td><td style="padding:6px 0"><strong>${escapeHtml(until)}</strong></td></tr>`
+          : "") +
+        (params.method
+          ? `<tr><td style="padding:6px 14px 6px 0;color:#6b7280">Metoda płatności:</td><td style="padding:6px 0">${escapeHtml(params.method)}</td></tr>`
+          : "") +
+        `</table>`
+      : "") +
+    `<p style="text-align:center;margin:28px 0">` +
+    `<a href="${escapeHtml(billingUrl)}" style="display:inline-block;padding:12px 28px;background:linear-gradient(135deg,#4f6ef7 0%,#a855f7 100%);color:#ffffff;text-decoration:none;border-radius:8px;font-weight:600">Zarządzaj subskrypcją</a>` +
+    `</p>` +
+    `<p style="color:#6b7280;font-size:13px">Możesz w dowolnym momencie zmienić kartę, pobrać faktury lub anulować subskrypcję — anulacja zachowuje dostęp do końca opłaconego okresu.</p>`;
+
+  await sendEmail(cfg, {
+    to,
+    subject,
+    text,
+    html: brandHtml(cfg, inner),
+    devLogHint: `aktywacja ${params.planLabel} dla ${to}`,
+  });
+}
+
+/**
+ * Platnosc nie powiodla sie (Stripe charge.failed / invoice.payment_failed webhook).
+ * Daje klientowi prosty link do panelu zeby zaktualizowal karte.
+ */
+export async function sendPaymentFailedEmail(
+  cfg: AppConfig,
+  to: string,
+  params: { planLabel: string; reason?: string | null; retryDate?: string | null },
+): Promise<void> {
+  const billingUrl = buildBillingPortalUrl(cfg);
+  const subject = `Nieudana płatność za subskrypcję — ${cfg.APP_NAME}`;
+  const retry = params.retryDate ? params.retryDate.slice(0, 10) : null;
+  const reasonText = params.reason && params.reason.trim().length > 0 ? params.reason.trim() : null;
+
+  const text =
+    `Dzień dobry,\n\n` +
+    `Niestety, nie udało nam się pobrać płatności za Twoją subskrypcję ${params.planLabel} w ${cfg.APP_NAME}.\n\n` +
+    (reasonText ? `Powód: ${reasonText}\n` : "") +
+    (retry ? `Ponowna próba: ${retry}\n` : "Spróbujemy automatycznie jeszcze raz w ciągu kilku dni.\n") +
+    `\n` +
+    `Aby uniknąć przerwy w dostępie, zaktualizuj kartę lub wybierz inną metodę płatności:\n` +
+    `${billingUrl}\n\n` +
+    `Jeśli potrzebujesz pomocy, napisz na kontakt@tuttopizza.pl.\n\n` +
+    `Pozdrawiamy,\n` +
+    `Zespół ${cfg.APP_NAME}\n`;
+
+  const inner =
+    `<p>Dzień dobry,</p>` +
+    `<p>Niestety, nie udało nam się pobrać płatności za Twoją subskrypcję <strong>${escapeHtml(params.planLabel)}</strong>.</p>` +
+    (reasonText
+      ? `<p style="padding:10px 14px;background:#fef2f2;border-left:3px solid #ef4444;color:#991b1b;font-size:14px;border-radius:4px"><strong>Powód:</strong> ${escapeHtml(reasonText)}</p>`
+      : "") +
+    `<p>${retry ? `Ponowna próba: <strong>${escapeHtml(retry)}</strong>.` : "Spróbujemy automatycznie jeszcze raz w ciągu kilku dni."}</p>` +
+    `<p style="text-align:center;margin:28px 0">` +
+    `<a href="${escapeHtml(billingUrl)}" style="display:inline-block;padding:12px 28px;background:linear-gradient(135deg,#4f6ef7 0%,#a855f7 100%);color:#ffffff;text-decoration:none;border-radius:8px;font-weight:600">Zaktualizuj metodę płatności</a>` +
+    `</p>` +
+    `<p style="color:#6b7280;font-size:13px">Aby uniknąć przerwy w dostępie, zaktualizuj kartę lub wybierz inną metodę płatności.</p>`;
+
+  await sendEmail(cfg, {
+    to,
+    subject,
+    text,
+    html: brandHtml(cfg, inner),
+    devLogHint: `nieudana płatność ${params.planLabel} dla ${to}`,
+  });
+}
+
+/**
+ * Subskrypcja anulowana (przez klienta w Stripe Portal lub przez admin/policy).
+ * Komunikuje do kiedy dzialaja funkcje PRO + jak wznowic.
+ */
+export async function sendSubscriptionCanceledEmail(
+  cfg: AppConfig,
+  to: string,
+  params: { planLabel: string; accessUntilDate?: string | null; canceledBy?: "customer" | "admin" | "payment_failed" | null },
+): Promise<void> {
+  const billingUrl = buildBillingPortalUrl(cfg);
+  const subject = `Subskrypcja ${params.planLabel} anulowana — ${cfg.APP_NAME}`;
+  const until = params.accessUntilDate ? params.accessUntilDate.slice(0, 10) : null;
+
+  const reasonByLabel: Record<string, string> = {
+    customer: "Anulacja zgłoszona przez Ciebie",
+    admin: "Anulacja przez zespół FV Control",
+    payment_failed: "Anulacja po nieudanych próbach pobrania płatności",
+  };
+  const reasonLine = params.canceledBy ? reasonByLabel[params.canceledBy] : null;
+
+  const text =
+    `Dzień dobry,\n\n` +
+    `Twoja subskrypcja ${params.planLabel} w ${cfg.APP_NAME} została anulowana.\n\n` +
+    (reasonLine ? `${reasonLine}.\n\n` : "") +
+    (until
+      ? `Dostęp do funkcji PRO zachowujesz do: ${until}. Po tej dacie konto wróci do planu Free.\n\n`
+      : "Dostęp do funkcji PRO zostaje wyłączony. Konto wraca do planu Free (Twoje dane zostają).\n\n") +
+    `Jeśli chcesz wznowić subskrypcję, możesz to zrobić w dowolnym momencie:\n` +
+    `${billingUrl}\n\n` +
+    `Dziękujemy za korzystanie z ${cfg.APP_NAME}!\n` +
+    `Zespół ${cfg.APP_NAME}\n`;
+
+  const inner =
+    `<p>Dzień dobry,</p>` +
+    `<p>Twoja subskrypcja <strong>${escapeHtml(params.planLabel)}</strong> w ${escapeHtml(cfg.APP_NAME)} została anulowana.</p>` +
+    (reasonLine ? `<p style="color:#6b7280;font-size:14px">${escapeHtml(reasonLine)}.</p>` : "") +
+    (until
+      ? `<p>Dostęp do funkcji PRO zachowujesz <strong>do ${escapeHtml(until)}</strong>. Po tej dacie konto wróci do planu Free.</p>`
+      : `<p>Dostęp do funkcji PRO zostaje wyłączony. Konto wraca do planu Free — Twoje dane <strong>zostają</strong>.</p>`) +
+    `<p style="text-align:center;margin:28px 0">` +
+    `<a href="${escapeHtml(billingUrl)}" style="display:inline-block;padding:12px 28px;background:linear-gradient(135deg,#4f6ef7 0%,#a855f7 100%);color:#ffffff;text-decoration:none;border-radius:8px;font-weight:600">Wznów subskrypcję</a>` +
+    `</p>` +
+    `<p style="color:#6b7280;font-size:13px">Dziękujemy za korzystanie z ${escapeHtml(cfg.APP_NAME)}. Możesz wrócić w dowolnym momencie — Twoje konto, faktury i konfiguracja KSeF czekają.</p>`;
+
+  await sendEmail(cfg, {
+    to,
+    subject,
+    text,
+    html: brandHtml(cfg, inner),
+    devLogHint: `anulacja ${params.planLabel} dla ${to}`,
   });
 }
 
