@@ -471,9 +471,9 @@ export async function runKsefSyncJob(
 
 type ProcessOutcome = "ingested" | "refetched" | "skipped" | "linked" | "resumed";
 
-const AUTO_RETRY_FRESH_KSEF_WINDOW_MS = 3 * 60 * 60 * 1000;
-const AUTO_RETRY_MIN_GAP_MS = 90 * 1000;
-const AUTO_RESUME_MAX_ATTEMPTS = 3;
+export const AUTO_RETRY_FRESH_KSEF_WINDOW_MS = 3 * 60 * 60 * 1000;
+export const AUTO_RETRY_MIN_GAP_MS = 90 * 1000;
+export const AUTO_RESUME_MAX_ATTEMPTS = 3;
 
 // P2-7: per-process counter prób auto-resume per invoice. Bez tego invoice w stanie FAILED_NEEDS_REVIEW
 // był wskrzeszany w każdej rundzie auto-sync (co 5 min) przez całe 3h okno = do 36 prób, spam audit log + Redis.
@@ -541,6 +541,26 @@ async function tryAutoResumeKsefInvoiceProcessing(
     console.warn(`[KSeF sync] auto-resume skipped for ${invoice.id}: ${msg}`);
     return false;
   }
+}
+
+// ─── Test-only helpery dla P2-7 in-memory auto-resume counter ───
+// Per-process Map nie da się inspekcjonować z testów bez exportu — te helpery są wyłącznie
+// dla `ksef-sync.service.test.ts` (regression guards na cap=3 + cleanup zachowanie).
+// NIE używaj w production code — auto-resume logic jest enkapsulowana w `tryAutoResumeKsefInvoiceProcessing`.
+
+/** @internal Test-only */
+export function __testGetAutoResumeAttempts(invoiceId: string): number {
+  return autoResumeAttemptsByInvoice.get(invoiceId) ?? 0;
+}
+
+/** @internal Test-only */
+export function __testSetAutoResumeAttempts(invoiceId: string, attempts: number): void {
+  autoResumeAttemptsByInvoice.set(invoiceId, attempts);
+}
+
+/** @internal Test-only — clear in-memory state between tests. */
+export function __testResetAutoResumeAttempts(): void {
+  autoResumeAttemptsByInvoice.clear();
 }
 
 /**

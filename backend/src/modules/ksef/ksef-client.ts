@@ -31,8 +31,8 @@ const KSEF_URLS: Record<string, string> = {
 // P2-8 z research/ksef-batch-stability.md (Resta-FV vault): poprzedni budżet 20×3s=60s był za krótki
 // na peak hours MF (np. styczeń deadline JPK, ~10. dnia miesiąca) — XAdES auth wolniejszy.
 // Bump do 40×3s=120s. AUTH_POLL_INTERVAL_MS bez zmian (3s krok zachowuje granulację raportowania).
-const MAX_AUTH_POLL_ATTEMPTS = 40;
-const AUTH_POLL_INTERVAL_MS = 3_000;
+export const MAX_AUTH_POLL_ATTEMPTS = 40;
+export const AUTH_POLL_INTERVAL_MS = 3_000;
 
 // ─── Types ───
 
