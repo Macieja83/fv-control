@@ -18,7 +18,20 @@ BACKUP_DIR="${BACKUP_DIR:-$HOME/backups/fv-control-db}"
 mkdir -p "$BACKUP_DIR"
 BACKUP_FILE="$BACKUP_DIR/fv-control-${STAMP}.dump"
 RESTORE_DB="${DB_NAME}_restore_test_${STAMP}"
-PG_CONTAINER="${PG_CONTAINER:-backend-postgres-1}"
+
+detect_pg_container() {
+  if [[ -n "${PG_CONTAINER:-}" ]]; then
+    echo "$PG_CONTAINER"
+    return
+  fi
+  docker ps --format '{{.Names}}' 2>/dev/null | grep -E '(^|-)postgres(-|$)' | head -1 || true
+}
+
+PG_CONTAINER="$(detect_pg_container)"
+if [[ -z "$PG_CONTAINER" ]]; then
+  echo "Postgres Docker container not found. Set PG_CONTAINER=fv-control-postgres-1." >&2
+  exit 1
+fi
 
 export PGPASSWORD="$DB_PASS"
 
