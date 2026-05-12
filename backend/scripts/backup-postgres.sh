@@ -10,10 +10,7 @@ if [[ ! -f .env ]]; then
   echo "Brak pliku .env w $ROOT — ustaw DATABASE_URL i uruchom ponownie." >&2
   exit 1
 fi
-set -a
-# shellcheck disable=SC1091
-source .env
-set +a
+DATABASE_URL="$(awk -F= '/^DATABASE_URL=/{sub(/\r$/,"",$0); print substr($0,index($0,"=")+1); exit}' .env)"
 if [[ -z "${DATABASE_URL:-}" ]]; then
   echo "DATABASE_URL jest pusty w .env." >&2
   exit 1
