@@ -137,3 +137,37 @@ export async function postTenantKsefConnectionTest(
   if (!res.ok) throw new Error(await readApiErrorMessage(res))
   return (await res.json()) as TenantKsefTestResult
 }
+
+export type BillingCompanyData = {
+  legalName: string
+  nip: string
+  address: string
+  invoiceEmail: string
+}
+
+export type TenantBillingDataResponse = {
+  data: BillingCompanyData | null
+  complete: boolean
+}
+
+export async function fetchTenantBillingData(token: string): Promise<TenantBillingDataResponse> {
+  const res = await fetch(`${API}/tenant/billing-data`, { headers: { Authorization: `Bearer ${token}` } })
+  if (!res.ok) throw new Error(await readApiErrorMessage(res))
+  return (await res.json()) as TenantBillingDataResponse
+}
+
+export async function patchTenantBillingData(
+  token: string,
+  body: BillingCompanyData,
+): Promise<TenantBillingDataResponse> {
+  const res = await fetch(`${API}/tenant/billing-data`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error(await readApiErrorMessage(res))
+  return (await res.json()) as TenantBillingDataResponse
+}

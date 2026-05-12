@@ -18,11 +18,17 @@ import {
 
 } from '../../api/billingApi'
 
-import { fetchTenantProfile, patchTenantProfile, type TenantProfileResponse } from '../../api/tenantApi'
+import {
+  fetchTenantBillingData,
+  fetchTenantProfile,
+  patchTenantProfile,
+  type TenantProfileResponse,
+} from '../../api/tenantApi'
 
 import { changePasswordRequest, setInitialPasswordRequest } from '../../auth/authApi'
 import { getStoredToken } from '../../auth/session'
 import { useAuth } from '../../auth/AuthContext'
+import { BillingDataModal } from './BillingDataModal'
 import { PaymentsPanel } from './PaymentsPanel'
 
 export function SettingsPanel() {
@@ -68,6 +74,8 @@ export function SettingsPanel() {
   const [subErr, setSubErr] = useState<string | null>(null)
 
   const [checkoutLoadingMethod, setCheckoutLoadingMethod] = useState<'BLIK' | 'P24' | null>(null)
+
+  const [billingModalMethod, setBillingModalMethod] = useState<'BLIK' | 'P24' | null>(null)
 
 
 
@@ -218,7 +226,7 @@ export function SettingsPanel() {
 
 
 
-  const onCheckout = async (
+  const proceedCheckout = async (
 
     planCode: 'pro',
 
@@ -257,6 +265,48 @@ export function SettingsPanel() {
       setSubErr(e instanceof Error ? e.message : String(e))
 
     } finally {
+
+      setCheckoutLoadingMethod(null)
+
+    }
+
+  }
+
+  const onCheckout = async (
+
+    planCode: 'pro',
+
+    paymentMethod: 'BLIK' | 'P24',
+
+  ) => {
+
+    const token = getStoredToken()
+
+    if (!token) return
+
+    try {
+
+      setCheckoutLoadingMethod(paymentMethod)
+
+      setSubErr(null)
+
+      const billing = await fetchTenantBillingData(token)
+
+      if (!billing.complete) {
+
+        setBillingModalMethod(paymentMethod)
+
+        setCheckoutLoadingMethod(null)
+
+        return
+
+      }
+
+      await proceedCheckout(planCode, paymentMethod)
+
+    } catch (e: unknown) {
+
+      setSubErr(e instanceof Error ? e.message : String(e))
 
       setCheckoutLoadingMethod(null)
 
@@ -825,6 +875,16 @@ export function SettingsPanel() {
         onPortalIntegrationsChange={(portalIntegrations) =>
           setTenantProfile((prev) => (prev ? { ...prev, portalIntegrations } : prev))
         }
+      />
+
+      <BillingDataModal
+        open={billingModalMethod !== null}
+        onClose={() => setBillingModalMethod(null)}
+        onSuccess={() => {
+          const method = billingModalMethod
+          setBillingModalMethod(null)
+          if (method) void proceedCheckout('pro', method)
+        }}
       />
 
     </div>
