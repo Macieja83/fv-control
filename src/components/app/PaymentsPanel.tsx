@@ -82,8 +82,11 @@ function fileToCertField(file: File): Promise<string> {
   })
 }
 
-export function PaymentsPanel(props: { embedded?: boolean }) {
-  const { embedded = false } = props
+export function PaymentsPanel(props: {
+  embedded?: boolean
+  onPortalIntegrationsChange?: (state: TenantProfileResponse['portalIntegrations']) => void
+}) {
+  const { embedded = false, onPortalIntegrationsChange } = props
   const [state, setState] = useState<TenantProfileResponse['portalIntegrations'] | null>(null)
   const [ksefMeta, setKsefMeta] = useState<TenantKsefCredentialsPublic | null>(null)
   const [loading, setLoading] = useState(true)
@@ -117,6 +120,7 @@ export function PaymentsPanel(props: { embedded?: boolean }) {
         fetchKsefConnectorStatus(token).catch(() => null),
       ])
       setState(t.portalIntegrations)
+      onPortalIntegrationsChange?.(t.portalIntegrations)
       setKsefMeta(k)
       setKsefConnector(sync)
     } catch (e: unknown) {
@@ -124,7 +128,7 @@ export function PaymentsPanel(props: { embedded?: boolean }) {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [onPortalIntegrationsChange])
 
   useEffect(() => {
     void load()

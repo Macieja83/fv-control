@@ -67,11 +67,7 @@ export function SettingsPanel() {
 
   const [subErr, setSubErr] = useState<string | null>(null)
 
-  const [checkoutLoadingMethod, setCheckoutLoadingMethod] = useState<
-
-    'CARD' | 'BLIK' | 'GOOGLE_PAY' | 'APPLE_PAY' | null
-
-  >(null)
+  const [checkoutLoadingMethod, setCheckoutLoadingMethod] = useState<'BLIK' | 'P24' | null>(null)
 
 
 
@@ -226,7 +222,7 @@ export function SettingsPanel() {
 
     planCode: 'pro',
 
-    paymentMethod: 'CARD' | 'BLIK' | 'GOOGLE_PAY' | 'APPLE_PAY',
+    paymentMethod: 'BLIK' | 'P24',
 
   ) => {
 
@@ -472,11 +468,11 @@ export function SettingsPanel() {
 
           <div className="app-banner app-banner--warn" role="status">
 
-            <strong>PRO (BLIK):</strong> zostało ok. <strong>{prepaid.prepaidDaysRemaining}</strong> dni do końca opłaconego
+            <strong>PRO prepaid:</strong> zostało ok. <strong>{prepaid.prepaidDaysRemaining}</strong> dni do końca opłaconego
 
-            okresu ({new Date(prepaid.prepaidEndsAt).toLocaleString('pl-PL')}). Możesz przedłużyć dostęp przyciskiem „BLIK
+            okresu ({new Date(prepaid.prepaidEndsAt).toLocaleString('pl-PL')}). Możesz przedłużyć dostęp BLIK albo Przelewy24
 
-            — 30 dni”.
+            na kolejne 30 dni.
 
           </div>
 
@@ -486,9 +482,9 @@ export function SettingsPanel() {
 
           <div className="app-banner app-banner--error" role="alert">
 
-            <strong>PRO (BLIK):</strong> opłacony okres minął. Aby z powrotem korzystać z limitów PRO, opłać kolejny miesiąc
+            <strong>PRO prepaid:</strong> opłacony okres minął. Aby z powrotem korzystać z limitów PRO, opłać kolejny miesiąc
 
-            BLIKiem lub wybierz płatność kartą (subskrypcja miesięczna).
+            BLIKiem albo Przelewami24.
 
           </div>
 
@@ -570,7 +566,7 @@ export function SettingsPanel() {
 
                 <h4 className="settings-plan-tile__title">PRO</h4>
 
-                <p className="settings-plan-tile__price">59 zł</p>
+                <p className="settings-plan-tile__price">67 zł</p>
 
                 <ul className="settings-plan-tile__list">
 
@@ -582,9 +578,9 @@ export function SettingsPanel() {
 
                 <p className="workspace-panel__muted settings-plan-tile__sub">
 
-                  <strong>Karta:</strong> subskrypcja miesięczna w Stripe. <strong>BLIK:</strong> jednorazowo za 30 dni —
+                  MVP: płatność jednorazowa <strong>BLIK</strong> albo <strong>Przelewy24</strong> za 30 dni —
 
-                  przed końcem pokażemy przypomnienie.
+                  przed końcem pokażemy przypomnienie. Karta wróci po domknięciu automatycznej FV dla recurring billing.
 
                 </p>
 
@@ -592,7 +588,7 @@ export function SettingsPanel() {
 
                   <p className="workspace-panel__muted settings-plan-tile__sub">
 
-                    Koniec okresu (BLIK): <strong>{new Date(prepaid.prepaidEndsAt).toLocaleString('pl-PL')}</strong> · zostało{' '}
+                    Koniec okresu prepaid: <strong>{new Date(prepaid.prepaidEndsAt).toLocaleString('pl-PL')}</strong> · zostało{' '}
 
                     <strong>{prepaid.prepaidDaysRemaining}</strong> dni
 
@@ -601,22 +597,6 @@ export function SettingsPanel() {
                 )}
 
                 <div className="settings-plan-tile__actions">
-
-                  <button
-
-                    type="button"
-
-                    className="btn-primary settings-plan-tile__btn"
-
-                    disabled={checkoutLoadingMethod !== null}
-
-                    onClick={() => void onCheckout('pro', 'CARD')}
-
-                  >
-
-                    {checkoutLoadingMethod === 'CARD' ? 'Przekierowanie…' : 'Karta — subskrypcja miesięczna'}
-
-                  </button>
 
                   <button
 
@@ -638,37 +618,21 @@ export function SettingsPanel() {
 
                     type="button"
 
-                    className="btn-ghost settings-plan-tile__btn"
+                    className="btn-primary settings-plan-tile__btn"
 
                     disabled={checkoutLoadingMethod !== null}
 
-                    onClick={() => void onCheckout('pro', 'GOOGLE_PAY')}
+                    onClick={() => void onCheckout('pro', 'P24')}
 
                   >
 
-                    {checkoutLoadingMethod === 'GOOGLE_PAY' ? '…' : 'Google Pay'}
-
-                  </button>
-
-                  <button
-
-                    type="button"
-
-                    className="btn-ghost settings-plan-tile__btn"
-
-                    disabled={checkoutLoadingMethod !== null}
-
-                    onClick={() => void onCheckout('pro', 'APPLE_PAY')}
-
-                  >
-
-                    {checkoutLoadingMethod === 'APPLE_PAY' ? '…' : 'Apple Pay'}
+                    {checkoutLoadingMethod === 'P24' ? 'Przekierowanie…' : 'Przelewy24 — 30 dni'}
 
                   </button>
 
                 </div>
 
-                {subscription?.billingKind !== 'STRIPE_PREPAID_BLIK' && (
+                {subscription && subscription.billingKind !== 'STRIPE_PREPAID_BLIK' && (
 
                   <button
 
@@ -690,7 +654,7 @@ export function SettingsPanel() {
 
                   <p className="workspace-panel__muted settings-plan-tile__hint">
 
-                    PRO opłacony BLIKiem — przedłuż kolejną płatnością BLIK lub przejdź na kartę.
+                    PRO opłacony prepaid — przedłuż kolejną płatnością BLIK albo Przelewy24.
 
                   </p>
 
@@ -702,9 +666,8 @@ export function SettingsPanel() {
 
             <p className="workspace-panel__muted" style={{ marginTop: 12 }}>
 
-              W Stripe Dashboard ustaw produkt PRO (karta) na 59 PLN / mies. (<span className="mono">STRIPE_PRICE_ID_PRO</span>
-
-              ); BLIK używa kwoty 59 PLN z aplikacji (30 dni).
+              MVP używa płatności prepaid BLIK / Przelewy24 za 67 PLN brutto (30 dni). Karta recurring jest wyłączona do Sprint 2,
+              żeby każda płatność miała spójny flow FV VAT + KSeF.
 
             </p>
 
@@ -736,7 +699,7 @@ export function SettingsPanel() {
               KSeF poniżej)
             </li>
             <li>
-              {workspace?.hasProEntitlement ? '✅' : '⬜'} Aktywny plan PRO (karta lub BLIK)
+              {workspace?.hasProEntitlement ? '✅' : '⬜'} Aktywny plan PRO (BLIK / Przelewy24)
             </li>
           </ul>
         </section>
@@ -857,7 +820,12 @@ export function SettingsPanel() {
 
       )}
 
-      <PaymentsPanel embedded />
+      <PaymentsPanel
+        embedded
+        onPortalIntegrationsChange={(portalIntegrations) =>
+          setTenantProfile((prev) => (prev ? { ...prev, portalIntegrations } : prev))
+        }
+      />
 
     </div>
 

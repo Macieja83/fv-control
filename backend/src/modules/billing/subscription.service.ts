@@ -3,7 +3,7 @@ import { loadConfig } from "../../config.js";
 import { AppError } from "../../lib/errors.js";
 import { PRO_PLAN_PRICE_PLN, PRO_PREPAID_PERIOD_DAYS } from "./billing-constants.js";
 
-/** PRO w Stripe: cena miesięczna z `STRIPE_PRICE_ID_PRO` w Dashboard (np. 59 PLN / mies.). */
+/** PRO w Stripe: MVP uses prepaid BLIK/P24 until card recurring dogfood invoicing is implemented. */
 
 type CheckoutProvider = "STRIPE" | "P24";
 type CheckoutPaymentMethod = "CARD" | "BLIK" | "P24" | "GOOGLE_PAY" | "APPLE_PAY";
@@ -11,15 +11,6 @@ type CheckoutPaymentMethod = "CARD" | "BLIK" | "P24" | "GOOGLE_PAY" | "APPLE_PAY
 /** Mapowanie z naszego paymentMethod na Stripe API `payment_method_types[]` value. */
 function stripePaymentMethodType(method: "blik" | "p24"): string {
   return method; // Stripe używa lower-case identyfikatorów — `blik`, `p24`. Mapowanie 1:1 dla MVP.
-}
-
-function resolveStripePriceId(planCode: string): string {
-  const cfg = loadConfig();
-  if (planCode === "pro") {
-    if (!cfg.STRIPE_PRICE_ID_PRO) throw AppError.unavailable("Płatności nie są skonfigurowane (brak STRIPE_PRICE_ID_PRO). Spróbuj później lub napisz na support.");
-    return cfg.STRIPE_PRICE_ID_PRO;
-  }
-  throw AppError.validation("Checkout dostępny tylko dla planu PRO.");
 }
 
 export async function getCurrentSubscription(prisma: PrismaClient, tenantId: string) {
@@ -31,7 +22,7 @@ export async function getCurrentSubscription(prisma: PrismaClient, tenantId: str
 }
 
 /**
- * Generyczny Stripe Checkout dla prepaid 30-day (jednorazowa płatność 59 zł, dostęp PRO 30 dni).
+ * Generyczny Stripe Checkout dla prepaid 30-day (jednorazowa płatność 67 zł, dostęp PRO 30 dni).
  * Wspiera BLIK i P24 — oba są single-payment methods w Stripe (nie wspierają recurring billing).
  * Subscription.billingKind = STRIPE_PREPAID_BLIK (legacy enum value, semantyka rozszerzona na P24).
  * Konkretna metoda (BLIK vs P24) trafia do Stripe metadata[paymentMethod] do śledzenia w webhook + UI.
@@ -128,72 +119,9 @@ export async function createCheckoutSession(
     });
   }
 
-  const cfg = loadConfig();
-  if (!cfg.STRIPE_SECRET_KEY) throw AppError.unavailable("Płatności są tymczasowo niedostępne (brak konfiguracji Stripe). Spróbuj za chwilę.");
-
-  const priceId = resolveStripePriceId(input.planCode);
-  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
-  if (!tenant) throw AppError.notFound("Nie znaleziono firmy (tenant).");
-
-  const current = await prisma.subscription.findFirst({
-    where: { tenantId },
-    orderBy: { createdAt: "desc" },
-  });
-
-  const params = new URLSearchParams({
-    mode: "subscription",
-    locale: "pl",
-    "line_items[0][price]": priceId,
-    "line_items[0][quantity]": "1",
-    success_url: input.successUrl,
-    cancel_url: input.cancelUrl,
-    "metadata[tenantId]": tenantId,
-    "subscription_data[metadata][tenantId]": tenantId,
-    "client_reference_id": tenantId,
-  });
-  params.append("payment_method_types[]", "card");
-  if (current?.providerCustomerId) params.set("customer", current.providerCustomerId);
-  if (tenant.nip) params.set("customer_email", `${tenantId.slice(0, 8)}+${tenant.nip}@example.invalid`);
-
-  const res = await fetch("https://api.stripe.com/v1/checkout/sessions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${cfg.STRIPE_SECRET_KEY}`,
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: params.toString(),
-  });
-  const body = (await res.json()) as { id?: string; url?: string; customer?: string; error?: { message?: string } };
-  if (!res.ok || !body.id || !body.url) {
-    throw AppError.unavailable(body.error?.message ?? "Stripe checkout session failed");
-  }
-
-  if (current) {
-    await prisma.subscription.update({
-      where: { id: current.id },
-      data: {
-        provider: "STRIPE",
-        planCode: input.planCode,
-        status: current.status,
-        billingKind: "STRIPE_RECURRING",
-        providerCustomerId: typeof body.customer === "string" ? body.customer : current.providerCustomerId,
-      },
-    });
-  } else {
-    await prisma.subscription.create({
-      data: {
-        tenantId,
-        provider: "STRIPE",
-        planCode: input.planCode,
-        status: "TRIALING",
-        billingKind: "STRIPE_RECURRING",
-        providerCustomerId: typeof body.customer === "string" ? body.customer : null,
-        currentPeriodStart: new Date(),
-      },
-    });
-  }
-
-  return { checkoutUrl: body.url, sessionId: body.id };
+  throw AppError.unavailable(
+    "Płatność kartą jest tymczasowo wyłączona w MVP. Wybierz BLIK albo Przelewy24 — oba dają dostęp PRO na 30 dni i są zgodne z aktualnym flow faktury VAT.",
+  );
 }
 
 export async function switchToFreePlan(prisma: PrismaClient, tenantId: string) {
@@ -247,7 +175,7 @@ export async function createBillingPortalSession(
   }
   if (current.billingKind === "STRIPE_PREPAID_BLIK") {
     throw AppError.validation(
-      "Portal Stripe dotyczy subskrypcji z kartą. Przy PRO na BLIK przedłuż dostęp przyciskiem „Zapłać BLIKiem”.",
+      "Portal Stripe dotyczy subskrypcji z kartą. Przy PRO prepaid przedłuż dostęp płatnością BLIK albo Przelewy24.",
     );
   }
 

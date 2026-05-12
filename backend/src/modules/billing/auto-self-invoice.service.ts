@@ -136,7 +136,7 @@ export async function nextSelfInvoiceNumber(
 export type SelfInvoicePayload = {
   /** Tenant klienta subskrybującego (kontrahent FV). */
   customerTenantId: string;
-  /** Stripe `event.id` — idempotency key. */
+  /** Idempotency key: Stripe `event.id` dla prepaid checkout, Stripe `invoice.id` dla recurring billing. */
   stripeEventId: string;
   /** Metoda płatności użyta przez klienta. */
   paymentMethod: "card" | "blik" | "p24";
@@ -182,7 +182,7 @@ export async function createSelfInvoiceForSubscriptionPayment(
     );
   }
 
-  // Idempotency: ten Stripe event już zafakturowany?
+  // Idempotency: ta płatność Stripe już zafakturowana?
   // Używamy `RESTA_API` jako IngestionSourceType (best-fit semantycznie: faktura przyszła przez Resta API webhook).
   // Unique constraint `(tenantId, ingestionKind, sourceExternalId)` zapewnia idempotency na poziomie DB.
   const existing = await prisma.invoice.findFirst({
@@ -266,7 +266,7 @@ export async function createSelfInvoiceForSubscriptionPayment(
       status: "PAID", // subskrypcja już opłacona przez Stripe → FV od razu w stanie PAID
       source: "MANUAL",
       ingestionKind: "RESTA_API", // webhook Stripe → nasz API endpoint → Invoice (semantycznie zgodne)
-      sourceExternalId: payload.stripeEventId, // idempotency key
+      sourceExternalId: payload.stripeEventId, // idempotency key: event id albo invoice id
       createdById: actor.id,
       ledgerKind: "SALE",
       intakeSourceType: "UPLOAD", // brak enum value dla "webhook/API" — UPLOAD najbliższe (system upload)

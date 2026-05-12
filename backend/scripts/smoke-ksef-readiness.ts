@@ -9,6 +9,7 @@
  *
  * Optional:
  *   SMOKE_ALLOW_KSEF_MISSING=1   # nie failuj gdy tenant nie ma jeszcze zapisanych poświadczeń
+ *   SMOKE_RUN_KSEF_SYNC=1         # po udanym teście połączenia zakolejkuj ręczny sync i odczytaj status
  */
 
 type Json = Record<string, unknown>;
@@ -47,6 +48,7 @@ async function main() {
   const email = env("SMOKE_EMAIL");
   const password = env("SMOKE_PASSWORD");
   const allowMissing = process.env.SMOKE_ALLOW_KSEF_MISSING === "1";
+  const runSync = process.env.SMOKE_RUN_KSEF_SYNC === "1";
   const rows: Array<{ step: string; ok: boolean; note: string }> = [];
 
   const loginRes = await fetch(`${base}/api/v1/auth/login`, {
@@ -123,6 +125,39 @@ async function main() {
       return;
     }
     rows.push({ step: "ksef-test", ok: true, note: "connection test passed" });
+  }
+
+  if (runSync) {
+    const syncRes = await fetch(`${base}/api/v1/connectors/ksef/sync`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({}),
+    });
+    const syncBody = await readJsonSafe(syncRes);
+    if (!syncRes.ok) throw new Error(`ksef sync failed: ${errMessage(syncBody, syncRes.status)}`);
+    rows.push({
+      step: "ksef-sync",
+      ok: true,
+      note: `queued=${String((syncBody as { queued?: unknown }).queued ?? false)}, job=${String(
+        (syncBody as { jobId?: unknown }).jobId ?? "—",
+      )}`,
+    });
+
+    const statusAfterSyncRes = await fetch(`${base}/api/v1/connectors/ksef/status`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const statusAfterSyncBody = await readJsonSafe(statusAfterSyncRes);
+    if (!statusAfterSyncRes.ok) {
+      throw new Error(`connectors/ksef/status after sync failed: ${errMessage(statusAfterSyncBody, statusAfterSyncRes.status)}`);
+    }
+    rows.push({
+      step: "ksef-status-after-sync",
+      ok: true,
+      note: `invoiceCount=${String((statusAfterSyncBody as { invoiceCount?: unknown }).invoiceCount ?? 0)}`,
+    });
   }
 
   console.log("[smoke-ksef] PASS");

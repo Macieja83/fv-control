@@ -48,6 +48,49 @@ function parseUnixSecDate(v: unknown): Date | null {
   return null;
 }
 
+function extractStripeInvoiceAmountPln(invoice: Record<string, unknown>): number {
+  const currency = typeof invoice.currency === "string" ? invoice.currency.trim().toLowerCase() : "";
+  if (currency && currency !== "pln") {
+    console.warn(`[self-invoice] Pomijam recurring invoice w walucie ${currency.toUpperCase()} — obsługiwane jest PLN`);
+    return 0;
+  }
+  const cents =
+    typeof invoice.amount_paid === "number" && Number.isFinite(invoice.amount_paid)
+      ? invoice.amount_paid
+      : typeof invoice.total === "number" && Number.isFinite(invoice.total)
+        ? invoice.total
+        : typeof invoice.amount_due === "number" && Number.isFinite(invoice.amount_due)
+          ? invoice.amount_due
+          : PRO_PLAN_PRICE_PLN * 100;
+  return Math.round(cents) / 100;
+}
+
+function firstStripeLinePeriod(invoice: Record<string, unknown>): { start: Date | null; end: Date | null } {
+  const lines = invoice.lines && typeof invoice.lines === "object" ? (invoice.lines as Record<string, unknown>) : null;
+  const data = Array.isArray(lines?.data) ? lines.data : [];
+  const firstLine = data[0] && typeof data[0] === "object" ? (data[0] as Record<string, unknown>) : null;
+  const period = firstLine?.period && typeof firstLine.period === "object" ? (firstLine.period as Record<string, unknown>) : null;
+  return {
+    start: parseUnixSecDate(period?.start),
+    end: parseUnixSecDate(period?.end),
+  };
+}
+
+function extractStripeInvoicePeriod(invoice: Record<string, unknown>): { start: Date; end: Date } {
+  const fromLine = firstStripeLinePeriod(invoice);
+  const start =
+    fromLine.start ??
+    parseUnixSecDate(invoice.period_start) ??
+    parseUnixSecDate(invoice.current_period_start) ??
+    new Date();
+  const end =
+    fromLine.end ??
+    parseUnixSecDate(invoice.period_end) ??
+    parseUnixSecDate(invoice.current_period_end) ??
+    new Date(start.getTime() + PRO_PREPAID_PERIOD_DAYS * 24 * 60 * 60 * 1000);
+  return { start, end };
+}
+
 async function claimWebhookEvent(
   prisma: PrismaClient,
   provider: "STRIPE" | "P24",
@@ -153,18 +196,50 @@ export async function handleStripeWebhookEvent(prisma: PrismaClient, payload: Re
   const currentPeriodStart = parseUnixSecDate(dataObj.current_period_start);
   const trialEndsAt = parseUnixSecDate(dataObj.trial_end);
 
-  await prisma.subscription.update({
+  const updatedSubscription = await prisma.subscription.update({
     where: { id: row.id },
     data: {
       status,
       provider: "STRIPE",
       providerCustomerId: providerCustomerId ?? row.providerCustomerId,
       providerSubscriptionId: providerSubscriptionId ?? row.providerSubscriptionId,
+      ...(eventType === "invoice.paid" && (providerSubscriptionId ?? row.providerSubscriptionId)
+        ? { billingKind: "STRIPE_RECURRING" }
+        : {}),
       ...(currentPeriodStart ? { currentPeriodStart } : {}),
       ...(currentPeriodEnd ? { currentPeriodEnd } : {}),
       ...(trialEndsAt ? { trialEndsAt } : {}),
     },
   });
+
+  if (eventType === "invoice.paid" && (providerSubscriptionId ?? updatedSubscription.providerSubscriptionId)) {
+    const stripeInvoiceId = typeof dataObj.id === "string" && dataObj.id.trim() ? dataObj.id.trim() : "";
+    const amountPaidPln = extractStripeInvoiceAmountPln(dataObj);
+    if (!stripeInvoiceId) {
+      console.warn("[self-invoice] Pomijam recurring invoice.paid bez invoice.id");
+    } else if (amountPaidPln <= 0) {
+      console.info(`[self-invoice] Pomijam recurring invoice ${stripeInvoiceId} z kwotą 0 PLN`);
+    } else {
+      const paidAt =
+        parseUnixSecDate(
+          dataObj.status_transitions && typeof dataObj.status_transitions === "object"
+            ? (dataObj.status_transitions as Record<string, unknown>).paid_at
+            : null,
+        ) ??
+        parseUnixSecDate(dataObj.created) ??
+        new Date();
+      const period = extractStripeInvoicePeriod(dataObj);
+      await tryCreateAndSubmitSelfInvoice(prisma, {
+        customerTenantId: updatedSubscription.tenantId,
+        stripeEventId: stripeInvoiceId,
+        paymentMethod: "card",
+        amountPaidPln,
+        paidAt,
+        periodStart: period.start,
+        periodEnd: period.end,
+      });
+    }
+  }
 
   return { accepted: true, eventType, updated: true };
 }
@@ -318,6 +393,10 @@ async function tryCreateAndSubmitSelfInvoice(
     } catch (ksefErr) {
       const msg = ksefErr instanceof Error ? ksefErr.message : String(ksefErr);
       console.warn(`[self-invoice] FV ${result.invoiceNumber} utworzona ale KSeF submit failed: ${msg}`);
+      await prisma.invoice.update({
+        where: { id: result.invoiceId },
+        data: { ksefStatus: "PENDING" },
+      });
     }
 
     // Email do klienta — best-effort. SMTP fallback w dev = console.info, w prod throw (lib/mailer.ts).

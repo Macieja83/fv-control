@@ -15,11 +15,11 @@ const FAQ: Array<{ q: string; a: string }> = [
   },
   {
     q: 'Czy mogę zrezygnować w trakcie miesiąca?',
-    a: 'Tak. Subskrypcja jest miesięczna — anulujesz w panelu Stripe Customer Portal jednym kliknięciem. Dostęp zostaje aktywny do końca opłaconego okresu, potem konto wraca do planu Free (Twoje dane zostają).',
+    a: 'W MVP PRO jest opłacany jednorazowo na 30 dni przez BLIK albo Przelewy24. Nie ma automatycznego odnowienia — po końcu okresu możesz opłacić kolejny miesiąc.',
   },
   {
     q: 'Jakie metody płatności obsługujecie?',
-    a: 'Plan PRO przyjmuje płatność kartą (subskrypcja recurring), BLIK-iem (jednorazowo, dostęp na 30 dni) oraz Przelewami24 (jednorazowo, 30 dni). Płatności obsługuje Stripe — PCI-DSS Level 1, dane karty nigdy nie trafiają do nas.',
+    a: 'Plan PRO w MVP przyjmuje BLIK oraz Przelewy24 jako jednorazową płatność za 30 dni dostępu. Płatności obsługuje Stripe — PCI-DSS Level 1.',
   },
   {
     q: 'Czy dostanę fakturę VAT za subskrypcję?',
@@ -107,8 +107,8 @@ export default function PricingPage({ onNavigateAuth, onNavigateLegal, onNavigat
                 <p className="pricing-plan__lead">Dla firm aktywnie wystawiających i odbierających faktury.</p>
                 <ul className="pricing-plan__features">
                   <li><strong>Bez limitu</strong> dokumentów</li>
-                  <li>Karta · BLIK · Przelewy24</li>
-                  <li>Stripe Customer Portal — zarządzaj subskrypcją sam</li>
+                  <li>BLIK · Przelewy24 (prepaid 30 dni)</li>
+                  <li>Bez automatycznego odnowienia w MVP</li>
                   <li><strong>Faktura VAT (KSeF)</strong> za subskrypcję — automatycznie</li>
                   <li>Synchronizacja KSeF i IMAP w czasie rzeczywistym</li>
                   <li>Workflow + reguły deduplikacji</li>
@@ -123,7 +123,7 @@ export default function PricingPage({ onNavigateAuth, onNavigateLegal, onNavigat
             </div>
 
             <p className="pricing-plans__note">
-              Wszystkie ceny brutto. Płatność cykliczna kartą lub jednorazowa BLIK / Przelewy24 (dostęp na 30 dni).
+              Wszystkie ceny brutto. MVP: jednorazowa płatność BLIK / Przelewy24 (dostęp na 30 dni).
               Płatności obsługuje Stripe (PCI-DSS Level 1).
             </p>
           </div>
@@ -192,7 +192,7 @@ export default function PricingPage({ onNavigateAuth, onNavigateLegal, onNavigat
                   </tr>
                   <tr>
                     <td>Płatność BLIK / P24</td>
-                    <td className="td-highlight">✓ Karta + BLIK + P24</td>
+                    <td className="td-highlight">✓ BLIK + P24</td>
                     <td>Karta + przelew</td>
                     <td>Karta + przelew</td>
                   </tr>

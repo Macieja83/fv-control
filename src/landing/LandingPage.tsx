@@ -422,8 +422,8 @@ export default function LandingPage({ onNavigateAuth, onNavigateLegal, onNavigat
                 </div>
                 <ul>
                   <li>Bez limitu dokumentów</li>
-                  <li>Karta · BLIK · Przelewy24</li>
-                  <li>Stripe Customer Portal — zarządzanie subskrypcją</li>
+                  <li>BLIK · Przelewy24 (prepaid 30 dni)</li>
+                  <li>Bez automatycznego odnowienia w MVP</li>
                   <li>Faktura VAT (KSeF) za subskrypcję</li>
                 </ul>
                 <button type="button" className="btn-plan btn-plan--solid" onClick={() => onNavigateAuth('register')}>

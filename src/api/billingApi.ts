@@ -69,7 +69,7 @@ export async function createSubscriptionCheckout(
     planCode: 'free' | 'pro'
     successUrl: string
     cancelUrl: string
-    paymentMethod?: 'CARD' | 'BLIK' | 'GOOGLE_PAY' | 'APPLE_PAY'
+    paymentMethod?: 'CARD' | 'BLIK' | 'P24' | 'GOOGLE_PAY' | 'APPLE_PAY'
   },
 ): Promise<{ checkoutUrl: string }> {
   const res = await fetch('/api/v1/billing/subscription/checkout', {
