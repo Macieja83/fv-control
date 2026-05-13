@@ -11,6 +11,8 @@
 #   SKIP_GIT=1   — pomiń `git pull` (np. już ściągnięte)
 #   SKIP_MIGRATIONS=1 — pomiń `prisma migrate deploy` (odważ używać tylko świadomie)
 #   SKIP_SYSTEMD=1  — pomiń restart usług usera
+#   SKIP_SMOKE=1    — pomiń post-deploy smoke (np. smoke zepsuty a deploy musi przejść)
+#   SMOKE_ENV_FILE  — alternatywa dla ~/.smoke-env (np. /etc/fv-control/smoke.env)
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
@@ -65,4 +67,22 @@ if curl -fsS "http://127.0.0.1:3000/api/v1/ready" >/dev/null 2>&1; then
 else
   echo "Nie odpowiada :3000/api/v1/ready (sprawdź PORT w backend/.env)." >&2
 fi
+
+if [[ "${SKIP_SMOKE:-0}" != "1" ]]; then
+  echo "==> post-deploy smoke gate"
+  SMOKE_ENV_FILE="${SMOKE_ENV_FILE:-$HOME/.smoke-env}"
+  if [[ -f "$SMOKE_ENV_FILE" ]]; then
+    # shellcheck disable=SC1090
+    source "$SMOKE_ENV_FILE"
+    if ! "$ROOT/scripts/post-deploy-smoke.sh"; then
+      echo "Ostrzeżenie: post-deploy smoke FAIL — sprawdź logi. Deploy NIE jest rollback'owany automatycznie." >&2
+      exit 1
+    fi
+  else
+    echo "Ostrzeżenie: brak $SMOKE_ENV_FILE — smoke pominięty. Ustaw SMOKE_BASE_URL/SMOKE_EMAIL/SMOKE_PASSWORD." >&2
+  fi
+else
+  echo "==> SKIP_SMOKE=1"
+fi
+
 echo "OK: vps-update zakończony."
