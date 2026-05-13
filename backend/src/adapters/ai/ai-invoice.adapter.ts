@@ -10,6 +10,9 @@ export type ExtractedInvoiceDraft = {
   /** Nazwa sprzedawcy (Sprzedawca) — nie Nabywca */
   contractorName?: string | null;
   contractorNip?: string | null;
+  /** Nabywca z Podmiot2 (FA XML) — do wizualizacji PDF */
+  buyerName?: string | null;
+  buyerNip?: string | null;
   /** Kod FormaPlatnosci z FA (np. "6") — opcjonalnie */
   paymentFormCode?: string | null;
   /** Czytelna forma płatności (np. „Przelew”) */
@@ -23,6 +26,8 @@ export type ExtractedInvoiceDraft = {
   lineItems?: Array<{
     name: string;
     quantity: string;
+    /** Jednostka miary (np. l, kWh) z P_8A FA */
+    unit?: string;
     netPrice: string;
     vatRate: string;
     netValue: string;

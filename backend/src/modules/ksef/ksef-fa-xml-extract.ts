@@ -366,6 +366,7 @@ export function tryExtractDraftFromKsefFaXml(
       lineItems.push({
         name,
         quantity: pickText(wr.P_8B) || "1",
+        unit: pickText(wr.P_8A) || undefined,
         netPrice: normalizeMoneyStr(pickText(wr.P_9A) || "0"),
         vatRate: rate,
         netValue: netVal,
@@ -396,6 +397,20 @@ export function tryExtractDraftFromKsefFaXml(
 
   const paymentFields = extractPaymentFromFaBlock(fa);
 
+  const pod2InsideFa = asRecord(
+    oneOrFirst(fa.Podmiot2 as Record<string, unknown> | Record<string, unknown>[] | undefined),
+  );
+  const pod2AtFaktura =
+    fakturaNode?.Podmiot2 != null
+      ? asRecord(
+          oneOrFirst(fakturaNode.Podmiot2 as Record<string, unknown> | Record<string, unknown>[] | undefined),
+        )
+      : null;
+  let buyerParty = extractSellerFromPodmiot1(pod2InsideFa);
+  if (!buyerParty.contractorNip && !buyerParty.contractorName) {
+    buyerParty = extractSellerFromPodmiot1(pod2AtFaktura);
+  }
+
   const draft: ExtractedInvoiceDraft = {
     number: num,
     issueDate,
@@ -405,6 +420,8 @@ export function tryExtractDraftFromKsefFaXml(
     grossTotal: normalizeMoneyStr(gross),
     contractorNip,
     contractorName,
+    buyerNip: buyerParty.contractorNip,
+    buyerName: buyerParty.contractorName,
     lineItems: lineItems.length > 0 ? lineItems : undefined,
     ...paymentFields,
   };

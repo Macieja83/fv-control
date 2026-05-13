@@ -51,6 +51,23 @@ describe("tryExtractDraftFromKsefFaXml", () => {
     expect(r!.draft.paymentDescription).toBe("fv/2026/test");
   });
 
+  it("parses nabywca from Podmiot2", () => {
+    const xml = SAMPLE_FA.replace(
+      "</Podmiot1>",
+      `</Podmiot1>
+    <Podmiot2>
+      <DaneIdentyfikacyjne>
+        <NIP>9988776655</NIP>
+        <Nazwa>NABYWCA TEST SP Z O O</Nazwa>
+      </DaneIdentyfikacyjne>
+    </Podmiot2>`,
+    );
+    const r = tryExtractDraftFromKsefFaXml(Buffer.from(xml, "utf8"), "application/xml");
+    expect(r).not.toBeNull();
+    expect(r!.draft.buyerNip).toBe("9988776655");
+    expect(r!.draft.buyerName).toContain("NABYWCA");
+  });
+
   it("returns null for non-XML", () => {
     const r = tryExtractDraftFromKsefFaXml(Buffer.from("%PDF-1.4"), "application/pdf");
     expect(r).toBeNull();

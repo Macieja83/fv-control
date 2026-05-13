@@ -17,7 +17,7 @@ function zipPdfFileName(index: number, row: InvoiceRecord): string {
  * Paczka ZIP z plikami PDF dla księgowości.
  * — Gdy na liście coś jest zaznaczone: tylko zaznaczone wiersze (w ramach widocznej listy po filtrach).
  * — Gdy nic nie zaznaczono: wszystkie widoczne wiersze (ta sama lista co po filtrach dat itd.).
- * PDF: oryginalny plik PDF albo ten sam „podgląd” co w UI dla KSeF (FA XML → PDF), skan JPG/PNG → PDF.
+ * PDF: oryginalny plik PDF albo PDF z pelna struktura FA (parsowanie XML KSeF), skan JPG/PNG → PDF.
  */
 export async function downloadInvoicePdfPackage(
   visibleRows: InvoiceRecord[],

@@ -8,6 +8,7 @@ import {
   buildInvoiceDataSummaryPdf,
   buildKsefInvoiceSummaryPdf,
 } from "../ksef/ksef-invoice-summary-pdf.js";
+import { buildKsefFaXmlVisualPdf } from "../ksef/ksef-fa-visual-pdf.js";
 
 export type PrimaryDocumentStreamOptions = {
   /**
@@ -16,8 +17,8 @@ export type PrimaryDocumentStreamOptions = {
    */
   ksefFaXml?: boolean;
   /**
-   * Paczka księgowa / ZIP: zawsze `application/pdf` — treść oryg. PDF, przerysowanie KSeF XML
-   * na ten sam „podgląd” co w UI, albo skan w PDF (JPG/PNG) / zestawienie pól gdy inny typ.
+   * Paczka księgowa / ZIP: zawsze `application/pdf` — treść oryg. PDF, z FA XML generowany PDF
+   * z tabelą pozycji (jak dane w strukturze FA), albo skan w PDF (JPG/PNG) / zestawienie pól gdy inny typ.
    */
   accountantPdf?: boolean;
 };
@@ -155,6 +156,45 @@ export async function openInvoicePrimaryDocumentStream(
     const downloadName = `${safeBase}__${inv.id.replace(/-/g, "").slice(0, 8)}.pdf`;
     const mimeL = (pdoc.mimeType || "").toLowerCase();
 
+    const primaryMeta = pdoc.metadata as Record<string, unknown> | null;
+    const primaryKind = primaryMeta?.kind;
+    if (mimeL.includes("pdf") && primaryKind === "ksef_summary_pdf") {
+      const derivedRaw = primaryMeta?.derivedFromDocumentId;
+      if (typeof derivedRaw === "string" && derivedRaw.trim().length > 0) {
+        const xmlDoc = await prisma.document.findFirst({
+          where: { id: derivedRaw.trim(), tenantId, deletedAt: null },
+        });
+        if (xmlDoc && !xmlDoc.deletedAt) {
+          const mtXml = (xmlDoc.mimeType || "").toLowerCase();
+          if (mtXml.includes("xml") || mtXml === "text/plain" || mtXml === "application/xml") {
+            try {
+              const { stream: xmlStream } = await storage0.getObjectStream({
+                key: xmlDoc.storageKey,
+                bucket: xmlDoc.storageBucket,
+              });
+              const xmlBuf = await streamToBuffer(xmlStream);
+              const kn = (inv.ksefNumber ?? inv.sourceExternalId ?? "").trim() || "—";
+              const visual = await buildKsefFaXmlVisualPdf({
+                xmlBuffer: xmlBuf,
+                mimeType: xmlDoc.mimeType || "application/xml",
+                ksefNumber: kn,
+              });
+              if (visual) {
+                return {
+                  stream: Readable.from([Buffer.from(visual)]) as Readable,
+                  mimeType: "application/pdf",
+                  downloadName,
+                  contentLength: visual.length,
+                };
+              }
+            } catch {
+              /* fall through to streaming summary PDF */
+            }
+          }
+        }
+      }
+    }
+
     if (mimeL.includes("pdf")) {
       return {
         stream: Readable.from([fileBuf]) as Readable,
@@ -172,6 +212,19 @@ export async function openInvoicePrimaryDocumentStream(
       (mimeL.includes("xml") || mimeL === "text/plain" || mimeL === "application/xml");
     if (isKsefXml) {
       const kn = (inv.ksefNumber ?? inv.sourceExternalId ?? "").trim() || "—";
+      const visual = await buildKsefFaXmlVisualPdf({
+        xmlBuffer: fileBuf,
+        mimeType: pdoc.mimeType || "application/xml",
+        ksefNumber: kn,
+      });
+      if (visual) {
+        return {
+          stream: Readable.from([Buffer.from(visual)]) as Readable,
+          mimeType: "application/pdf",
+          downloadName,
+          contentLength: visual.length,
+        };
+      }
       const out = await buildKsefInvoiceSummaryPdf({
         ksefNumber: kn,
         invoiceNumber: inv.number,

@@ -1,6 +1,5 @@
 /**
- * Renders a KSeF FA XML as a formatted invoice document
- * matching the official KSeF PDF layout.
+ * Renders a KSeF FA XML as a formatted invoice document (FV Control layout from FA fields).
  */
 
 import { useCallback, useRef } from 'react'
