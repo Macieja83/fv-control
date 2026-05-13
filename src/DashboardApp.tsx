@@ -4,6 +4,7 @@ import { ActivityDrawer } from './components/app/ActivityDrawer'
 import { AdminPanel } from './components/app/AdminPanel'
 import { ImpersonationBanner } from './components/app/ImpersonationBanner'
 import { OnboardingChecklistBanner } from './components/app/OnboardingChecklistBanner'
+import { PlanStatusBanner } from './components/app/PlanStatusBanner'
 import {
   APP_NAV_ITEMS,
   PLATFORM_ADMIN_NAV_ITEM,
@@ -168,6 +169,7 @@ export default function DashboardApp() {
         onNavChange={setNav}
         navTabs={topNavTabs}
       />
+      {!user?.isPlatformAdmin && <PlanStatusBanner onGoToNav={setNav} />}
       {!user?.isPlatformAdmin && (
         <OnboardingChecklistBanner user={user} onGoToNav={setNav} />
       )}

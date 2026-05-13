@@ -92,6 +92,22 @@ html[data-theme='dark'] .app-shell {
   gap: 0.6rem 1rem;
   background: color-mix(in srgb, #0284c7 12%, var(--surface-1));
 }
+.app-banner--plan {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem 1rem;
+}
+.app-banner--plan-pro {
+  background: color-mix(in srgb, #16a34a 12%, var(--surface-1));
+}
+.app-banner--plan-free {
+  background: color-mix(in srgb, #4f46e5 10%, var(--surface-1));
+}
+.app-banner--plan-warn {
+  background: color-mix(in srgb, #ca8a04 15%, var(--surface-1));
+}
 .app-banner__sub {
   display: flex;
   flex-wrap: wrap;
