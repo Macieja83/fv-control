@@ -132,6 +132,7 @@ function AuthGate() {
         initialMode={guestRoute === 'forgot' ? 'forgot' : guestRoute === 'register' ? 'register' : guestRoute === 'verify' ? 'verify' : 'login'}
         onNavigateForgot={() => navigateGuestRoute('forgot')}
         onNavigateLogin={navigateToLoginOnly}
+        onNavigateHome={navigateLanding}
       />
     )
   }

@@ -14,6 +14,8 @@ type LoginPageProps = {
   initialMode?: 'login' | 'register' | 'verify' | 'forgot'
   onNavigateForgot?: () => void
   onNavigateLogin?: () => void
+  /** Powrót na landing (/) — logowanie, rejestracja, weryfikacja, reset hasła. */
+  onNavigateHome?: () => void
 }
 
 function readInitialModeFromUrl(prop: LoginPageProps['initialMode']): PageMode {
@@ -26,6 +28,7 @@ export default function LoginPage({
   initialMode = 'login',
   onNavigateForgot,
   onNavigateLogin,
+  onNavigateHome,
 }: LoginPageProps) {
   const { login, loginWithVerificationToken, loginAfterPasswordReset } = useAuth()
   const [mode, setMode] = useState<PageMode>(() => readInitialModeFromUrl(initialMode))
@@ -180,6 +183,11 @@ export default function LoginPage({
   return (
     <div className="login-page">
       <div className="login-card" role="main" aria-labelledby="login-title">
+        {onNavigateHome && (
+          <button type="button" className="login-back-home" onClick={onNavigateHome} aria-label="Powrót na stronę główną">
+            ← Strona główna
+          </button>
+        )}
         <div className="login-card__brand">
           <span className="login-card__logo" aria-hidden />
           <div>

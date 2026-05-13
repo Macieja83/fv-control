@@ -26,6 +26,32 @@ html[data-theme='dark'] .login-page {
   box-shadow: 0 12px 40px rgba(15, 23, 42, 0.08);
 }
 
+.login-back-home {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 0 1rem;
+  padding: 0;
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-muted, #6b7285);
+  cursor: pointer;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.login-back-home:hover {
+  color: #2563eb;
+}
+
+html[data-theme='dark'] .login-back-home:hover {
+  color: #60a5fa;
+}
+
 html[data-theme='dark'] .login-card {
   background: var(--surface-1, #141821);
   border-color: var(--border, #2a3142);
