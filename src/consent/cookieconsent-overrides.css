@@ -1,0 +1,23 @@
+/* Harmonize banner with FV landing (light footer / readable links). */
+#cc-main .cm,
+#cc-main .pm {
+  --cc-bg: #f8fafc;
+  --cc-primary-color: #4f6ef7;
+  --cc-secondary-color: #64748b;
+  --cc-btn-primary-bg: #4f6ef7;
+  --cc-btn-primary-hover-bg: #3d5ae6;
+  --cc-btn-primary-color: #fff;
+  --cc-btn-secondary-bg: #e2e8f0;
+  --cc-btn-secondary-hover-bg: #cbd5e1;
+  --cc-btn-secondary-color: #0f172a;
+  --cc-separator-border-color: #e2e8f0;
+  --cc-footer-bg: #f1f5f9;
+  --cc-footer-color: #475569;
+  --cc-footer-border-color: #e2e8f0;
+  --cc-link: #4f6ef7;
+}
+
+#cc-main .cm__footer a,
+#cc-main .pm__body a {
+  color: var(--cc-link);
+}

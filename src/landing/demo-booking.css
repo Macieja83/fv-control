@@ -1,0 +1,28 @@
+.demo-booking {
+  padding: clamp(2.5rem, 5vw, 4rem) clamp(1rem, 4vw, 4rem);
+  background: linear-gradient(180deg, #f8fafc 0%, #eef1f8 100%);
+  border-block: 1px solid var(--border, #e2e8f4);
+}
+
+.demo-booking__frame-wrap {
+  margin-top: 1.5rem;
+  border-radius: var(--radius, 14px);
+  overflow: hidden;
+  border: 1px solid var(--border, #e2e8f4);
+  box-shadow: var(--shadow-md, 0 8px 30px rgba(15, 23, 42, 0.08));
+  background: #fff;
+  min-height: 640px;
+}
+
+.demo-booking__frame {
+  display: block;
+  width: 100%;
+  min-height: 680px;
+  border: 0;
+}
+
+@media (max-width: 640px) {
+  .demo-booking__frame {
+    min-height: 720px;
+  }
+}

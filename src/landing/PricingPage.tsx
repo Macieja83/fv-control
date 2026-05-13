@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { openCookieConsentPreferences } from '../consent/initCookieConsent'
+import { DemoBookingSection } from './DemoBookingSection'
 import './landing.css'
 import './pricing.css'
 
@@ -249,6 +251,8 @@ export default function PricingPage({ onNavigateAuth, onNavigateLegal, onNavigat
           </div>
         </section>
 
+        <DemoBookingSection />
+
         <section className="pricing-cta">
           <div className="section-inner">
             <h2 className="cta-h2">Załóż konto — sprawdź FV Control za darmo</h2>
@@ -281,6 +285,9 @@ export default function PricingPage({ onNavigateAuth, onNavigateLegal, onNavigat
               Dokumentacja API
             </a>
             <a href={`mailto:${supportEmail}`}>Kontakt</a>
+            <button type="button" onClick={() => openCookieConsentPreferences()}>
+              Pliki cookie
+            </button>
           </nav>
           <span className="footer-copy">© 2026 FV Control. Dane chronione zgodnie z RODO.</span>
         </div>

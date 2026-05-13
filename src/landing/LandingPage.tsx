@@ -1,4 +1,6 @@
 import { useEffect } from 'react'
+import { openCookieConsentPreferences } from '../consent/initCookieConsent'
+import { DemoBookingSection } from './DemoBookingSection'
 import './landing.css'
 
 type LandingPageProps = {
@@ -439,6 +441,8 @@ export default function LandingPage({ onNavigateAuth, onNavigateLegal, onNavigat
           </div>
         </section>
 
+        <DemoBookingSection />
+
         <section className="cta-section reveal">
           <div className="section-inner">
             <h2 className="cta-h2">Uporządkuj finanse firmy i odzyskaj kontrolę</h2>
@@ -471,6 +475,9 @@ export default function LandingPage({ onNavigateAuth, onNavigateLegal, onNavigat
               Dokumentacja API
             </a>
             <a href={`mailto:${supportEmail}`}>Kontakt</a>
+            <button type="button" onClick={() => openCookieConsentPreferences()}>
+              Pliki cookie
+            </button>
           </nav>
           <span className="footer-copy">© 2026 FV Control. Dane chronione zgodnie z RODO.</span>
         </div>
