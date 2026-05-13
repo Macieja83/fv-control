@@ -282,13 +282,14 @@ export default function LoginPage({
 
           {(mode === 'login' || mode === 'register') && (
             <label className="login-field">
-              <span className="login-field__label">Hasło</span>
+              <span className="login-field__label">Hasło{mode === 'register' ? ' (min. 8 znaków)' : ''}</span>
               <input
                 className="login-input"
                 name="password"
                 type="password"
                 autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
                 required
+                minLength={mode === 'register' ? 8 : undefined}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={loading}

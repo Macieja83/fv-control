@@ -2,13 +2,13 @@ import { z } from "zod";
 
 const passwordSchema = z
   .string()
-  .min(8, "Password must be at least 8 characters")
-  .max(128);
+  .min(8, "musi mieć co najmniej 8 znaków")
+  .max(128, "nie może być dłuższe niż 128 znaków");
 
 export const registerSchema = z.object({
-  tenantName: z.string().min(1).max(200),
+  tenantName: z.string().min(1, "podaj nazwę firmy").max(200, "maksymalnie 200 znaków"),
   tenantNip: z.string().max(20).optional().nullable(),
-  email: z.string().email().max(320),
+  email: z.string().email("nieprawidłowy adres e-mail").max(320),
   password: passwordSchema,
   planCode: z.enum(["free", "pro"]).default("free"),
 });

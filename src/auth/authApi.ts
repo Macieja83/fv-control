@@ -38,15 +38,37 @@ type BackendLoginBody = {
   user?: BackendLoginUser
 }
 
-type BackendErrorBody = {
-  error?: string | { message?: string; code?: string }
+type BackendValidationDetails = {
+  fieldErrors?: Record<string, string[] | undefined>
+  formErrors?: string[]
 }
 
-function readLoginErrorMessage(data: BackendErrorBody, status: number): string {
-  const e = data.error
+type BackendErrorBody = {
+  error?: string | { message?: string; code?: string; details?: BackendValidationDetails }
+}
+
+function readApiErrorMessage(body: BackendErrorBody, status: number, context: 'login' | 'generic' = 'login'): string {
+  const e = body.error
   if (typeof e === 'string') return e
-  if (e && typeof e === 'object' && typeof e.message === 'string') return e.message
-  return `Błąd logowania (${status})`
+  if (e && typeof e === 'object' && typeof e.message === 'string') {
+    const msg = e.message
+    const details = e.details
+    if (msg && msg !== 'Validation failed') return msg
+    if (details?.fieldErrors && typeof details.fieldErrors === 'object') {
+      const parts: string[] = []
+      for (const [, msgs] of Object.entries(details.fieldErrors)) {
+        const first = Array.isArray(msgs) ? msgs[0] : undefined
+        if (first && String(first).trim()) parts.push(String(first).trim())
+      }
+      if (parts.length > 0) return parts.join(' ')
+    }
+    if (details?.formErrors?.length) {
+      const fe = details.formErrors.filter((x) => x.trim())
+      if (fe.length) return fe.join(' ')
+    }
+    return msg
+  }
+  return context === 'login' ? `Błąd logowania (${status})` : `Żądanie nie powiodło się (${status})`
 }
 
 export async function loginRequest(email: string, password: string): Promise<LoginSuccess> {
@@ -81,7 +103,7 @@ export async function loginRequest(email: string, password: string): Promise<Log
     throw new Error(`Niepoprawna odpowiedź serwera (${res.status}).`)
   }
   if (!res.ok) {
-    throw new Error(readLoginErrorMessage(data, res.status))
+    throw new Error(readApiErrorMessage(data, res.status))
   }
   const accessToken = data.accessToken
   if (!accessToken) {
@@ -188,8 +210,8 @@ export async function registerRequest(input: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
   })
-  const body = (await res.json()) as { needsEmailVerification?: boolean; verificationToken?: string; error?: { message?: string } }
-  if (!res.ok) throw new Error(body.error?.message ?? `Rejestracja nieudana (${res.status})`)
+  const body = (await res.json()) as { needsEmailVerification?: boolean; verificationToken?: string } & BackendErrorBody
+  if (!res.ok) throw new Error(readApiErrorMessage(body, res.status, 'generic'))
   return {
     needsEmailVerification: body.needsEmailVerification === true,
     verificationToken: typeof body.verificationToken === 'string' ? body.verificationToken : undefined,
@@ -202,8 +224,8 @@ export async function forgotPasswordRequest(email: string): Promise<{ sent: true
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email }),
   })
-  const body = (await res.json()) as { sent?: boolean; resetToken?: string; error?: { message?: string } }
-  if (!res.ok) throw new Error(body.error?.message ?? `Nie udało się wysłać (${res.status})`)
+  const body = (await res.json()) as { sent?: boolean; resetToken?: string } & BackendErrorBody
+  if (!res.ok) throw new Error(readApiErrorMessage(body, res.status, 'generic'))
   return { sent: true, resetToken: typeof body.resetToken === 'string' ? body.resetToken : undefined }
 }
 
@@ -214,7 +236,7 @@ export async function resetPasswordRequest(token: string, password: string): Pro
     body: JSON.stringify({ token, password }),
   })
   const body = (await res.json()) as BackendLoginBody & BackendErrorBody
-  if (!res.ok) throw new Error(readLoginErrorMessage(body, res.status))
+  if (!res.ok) throw new Error(readApiErrorMessage(body, res.status, 'generic'))
   const accessToken = body.accessToken
   if (!accessToken || !body.user?.email) throw new Error('Brak poprawnej odpowiedzi resetu hasła.')
   const hasPassword =
@@ -239,7 +261,7 @@ export async function verifyEmailRequest(token: string): Promise<LoginSuccess> {
     body: JSON.stringify({ token }),
   })
   const body = (await res.json()) as BackendLoginBody & BackendErrorBody
-  if (!res.ok) throw new Error(readLoginErrorMessage(body, res.status))
+  if (!res.ok) throw new Error(readApiErrorMessage(body, res.status, 'generic'))
   const accessToken = body.accessToken
   if (!accessToken || !body.user?.email) throw new Error('Brak poprawnej odpowiedzi weryfikacji.')
   const hasPassword =
@@ -271,7 +293,7 @@ export async function setInitialPasswordRequest(token: string, password: string)
   let msg = `Nie udało się zapisać hasła (${res.status})`
   try {
     const j = raw ? (JSON.parse(raw) as BackendErrorBody) : {}
-    msg = readLoginErrorMessage(j, res.status)
+    msg = readApiErrorMessage(j, res.status, 'generic')
   } catch {
     /* ignore */
   }
@@ -296,7 +318,7 @@ export async function changePasswordRequest(
   let msg = `Zmiana hasła nieudana (${res.status})`
   try {
     const j = raw ? (JSON.parse(raw) as BackendErrorBody) : {}
-    msg = readLoginErrorMessage(j, res.status)
+    msg = readApiErrorMessage(j, res.status, 'generic')
   } catch {
     /* ignore */
   }
@@ -309,8 +331,8 @@ export async function resendVerificationRequest(email: string): Promise<{ verifi
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email }),
   })
-  const body = (await res.json()) as { verificationToken?: string; error?: { message?: string } }
-  if (!res.ok) throw new Error(body.error?.message ?? `Nie udało się wysłać ponownie (${res.status})`)
+  const body = (await res.json()) as { verificationToken?: string } & BackendErrorBody
+  if (!res.ok) throw new Error(readApiErrorMessage(body, res.status, 'generic'))
   return { verificationToken: typeof body.verificationToken === 'string' ? body.verificationToken : undefined }
 }
 
@@ -322,6 +344,6 @@ export async function getGoogleStartUrl(mode: 'login' | 'register'): Promise<str
   } catch {
     /* ignore */
   }
-  if (!res.ok || !body.url) throw new Error(readLoginErrorMessage(body, res.status))
+  if (!res.ok || !body.url) throw new Error(readApiErrorMessage(body, res.status, 'generic'))
   return body.url
 }

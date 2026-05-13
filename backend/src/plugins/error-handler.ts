@@ -2,6 +2,7 @@ import fp from "fastify-plugin";
 import type { FastifyError, FastifyPluginAsync } from "fastify";
 import { ZodError } from "zod";
 import { AppError } from "../lib/errors.js";
+import { formatUserFacingZodMessage } from "../lib/validate.js";
 
 function isFastifyValidationError(err: unknown): err is FastifyError {
   return typeof err === "object" && err !== null && "validation" in err;
@@ -28,7 +29,7 @@ const errorHandlerPlugin: FastifyPluginAsync = async (app) => {
       return reply.status(400).send({
         error: {
           code: "VALIDATION_ERROR",
-          message: "Validation failed",
+          message: formatUserFacingZodMessage(err),
           details: err.flatten(),
           requestId: reqId,
         },

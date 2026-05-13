@@ -16,6 +16,31 @@ function buildBillingPortalUrl(cfg: AppConfig): string {
   return `${base}/ustawienia/platnosci`;
 }
 
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+/**
+ * CTA w mailu — tabela + jednoliniowy href zwiększa klikalność w Outlooku i niektórych klientach,
+ * gdzie „gradientowy” inline-block na elemencie <a> bywa nieklikalny.
+ */
+function ctaButtonTable(href: string, label: string): string {
+  const safeHref = escapeHtml(href);
+  const safeLabel = escapeHtml(label);
+  return (
+    `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:28px auto">` +
+    `<tr><td align="center" bgcolor="#4f46e5" style="border-radius:8px;mso-padding-alt:12px 28px">` +
+    `<a href="${safeHref}" target="_blank" rel="noopener noreferrer" ` +
+    `style="display:inline-block;padding:12px 28px;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:8px">` +
+    `${safeLabel}</a>` +
+    `</td></tr></table>`
+  );
+}
+
 /**
  * Minimalny brand wrapper — header z marka + footer RODO + kontakt.
  * Spojny stylistycznie dla wszystkich emaili transakcyjnych.
@@ -98,13 +123,11 @@ export async function sendTenantVerificationEmail(cfg: AppConfig, to: string, to
     `Link jest ważny 48 godzin. Jeśli to nie Ty zakładałeś konto, zignoruj tę wiadomość.\n`;
   const inner =
     `<p>Dzień dobry,</p>` +
-    `<p>Aby <strong>aktywować konto</strong> w ${escapeHtml(cfg.APP_NAME)}, kliknij przycisk poniżej:</p>` +
-    `<p style="text-align:center;margin:28px 0">` +
-    `<a href="${escapeHtml(verifyUrl)}" style="display:inline-block;padding:12px 28px;background:linear-gradient(135deg,#4f6ef7 0%,#a855f7 100%);color:#ffffff;text-decoration:none;border-radius:8px;font-weight:600">Potwierdź adres e-mail</a>` +
-    `</p>` +
+    `<p>Aby <strong>aktywować konto</strong> w ${escapeHtml(cfg.APP_NAME)}, kliknij przycisk poniżej (otwiera się w nowej karcie). Jeśli przycisk nie reaguje, użyj linku tekstowego pod spodem — to ten sam adres.</p>` +
+    ctaButtonTable(verifyUrl, "Potwierdź adres e-mail") +
     `<p style="color:#6b7280;font-size:13px">Link jest ważny <strong>48 godzin</strong>. Jeśli to nie Ty zakładałeś konto, zignoruj tę wiadomość.</p>` +
-    `<p style="color:#9ca3af;font-size:12px;margin-top:20px">Jeśli przycisk nie działa, wklej ten adres w przeglądarkę:<br/>` +
-    `<span style="word-break:break-all">${escapeHtml(verifyUrl)}</span></p>`;
+    `<p style="color:#9ca3af;font-size:12px;margin-top:20px">Link bezpośredni (skopiuj do przeglądarki):<br/>` +
+    `<a href="${escapeHtml(verifyUrl)}" target="_blank" rel="noopener noreferrer" style="word-break:break-all;color:#4f46e5">${escapeHtml(verifyUrl)}</a></p>`;
 
   await sendEmail(cfg, {
     to,
@@ -126,13 +149,11 @@ export async function sendPasswordResetEmail(cfg: AppConfig, to: string, token: 
     `Link jest ważny ok. 1 godziny. Jeśli to nie Ty prosiłeś o reset, zignoruj tę wiadomość.\n`;
   const inner =
     `<p>Dzień dobry,</p>` +
-    `<p>Aby <strong>ustawić nowe hasło</strong> w ${escapeHtml(cfg.APP_NAME)}, kliknij przycisk poniżej:</p>` +
-    `<p style="text-align:center;margin:28px 0">` +
-    `<a href="${escapeHtml(resetUrl)}" style="display:inline-block;padding:12px 28px;background:linear-gradient(135deg,#4f6ef7 0%,#a855f7 100%);color:#ffffff;text-decoration:none;border-radius:8px;font-weight:600">Ustaw nowe hasło</a>` +
-    `</p>` +
+    `<p>Aby <strong>ustawić nowe hasło</strong> w ${escapeHtml(cfg.APP_NAME)}, kliknij przycisk poniżej (nowa karta). Jeśli przycisk nie reaguje — użyj linku pod spodem.</p>` +
+    ctaButtonTable(resetUrl, "Ustaw nowe hasło") +
     `<p style="color:#6b7280;font-size:13px">Link jest ważny <strong>około 1 godziny</strong>. Jeśli to nie Ty prosiłeś o reset, zignoruj tę wiadomość — hasło nie zostanie zmienione.</p>` +
-    `<p style="color:#9ca3af;font-size:12px;margin-top:20px">Jeśli przycisk nie działa, wklej ten adres w przeglądarkę:<br/>` +
-    `<span style="word-break:break-all">${escapeHtml(resetUrl)}</span></p>`;
+    `<p style="color:#9ca3af;font-size:12px;margin-top:20px">Link bezpośredni:<br/>` +
+    `<a href="${escapeHtml(resetUrl)}" target="_blank" rel="noopener noreferrer" style="word-break:break-all;color:#4f46e5">${escapeHtml(resetUrl)}</a></p>`;
 
   await sendEmail(cfg, {
     to,
@@ -428,12 +449,4 @@ export async function sendTenantDeletionCanceledEmail(cfg: AppConfig, to: string
     html: brandHtml(cfg, inner),
     devLogHint: `deletion canceled dla ${to}`,
   });
-}
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
 }
