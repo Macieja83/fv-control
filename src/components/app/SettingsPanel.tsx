@@ -73,9 +73,9 @@ export function SettingsPanel() {
 
   const [subErr, setSubErr] = useState<string | null>(null)
 
-  const [checkoutLoadingMethod, setCheckoutLoadingMethod] = useState<'BLIK' | null>(null)
+  const [checkoutLoadingMethod, setCheckoutLoadingMethod] = useState<'BLIK' | 'CARD' | null>(null)
 
-  const [billingModalMethod, setBillingModalMethod] = useState<'BLIK' | null>(null)
+  const [billingModalMethod, setBillingModalMethod] = useState<'BLIK' | 'CARD' | null>(null)
 
 
 
@@ -230,7 +230,7 @@ export function SettingsPanel() {
 
     planCode: 'pro',
 
-    paymentMethod: 'BLIK',
+    paymentMethod: 'BLIK' | 'CARD',
 
   ) => {
 
@@ -276,7 +276,7 @@ export function SettingsPanel() {
 
     planCode: 'pro',
 
-    paymentMethod: 'BLIK',
+    paymentMethod: 'BLIK' | 'CARD',
 
   ) => {
 
@@ -520,7 +520,7 @@ export function SettingsPanel() {
 
             <strong>PRO prepaid:</strong> zostało ok. <strong>{prepaid.prepaidDaysRemaining}</strong> dni do końca opłaconego
 
-            okresu ({new Date(prepaid.prepaidEndsAt).toLocaleString('pl-PL')}). Możesz przedłużyć dostęp BLIK
+            okresu ({new Date(prepaid.prepaidEndsAt).toLocaleString('pl-PL')}). Możesz przedłużyć dostęp BLIK albo kartą
 
             na kolejne 30 dni.
 
@@ -534,7 +534,7 @@ export function SettingsPanel() {
 
             <strong>PRO prepaid:</strong> opłacony okres minął. Aby z powrotem korzystać z limitów PRO, opłać kolejny miesiąc
 
-            BLIKiem.
+            BLIKiem albo kartą.
 
           </div>
 
@@ -628,9 +628,9 @@ export function SettingsPanel() {
 
                 <p className="workspace-panel__muted settings-plan-tile__sub">
 
-                  MVP: płatność jednorazowa <strong>BLIK</strong> za 30 dni —
+                  MVP: płatność jednorazowa <strong>BLIK</strong> albo <strong>karta / Apple Pay / Google Pay</strong> za 30 dni —
 
-                  przed końcem pokażemy przypomnienie. Karta wróci po domknięciu automatycznej FV dla recurring billing.
+                  przed końcem pokażemy przypomnienie. Karta recurring wróci po domknięciu automatycznej FV dla subskrypcji cyklicznych.
 
                 </p>
 
@@ -664,6 +664,22 @@ export function SettingsPanel() {
 
                   </button>
 
+                  <button
+
+                    type="button"
+
+                    className="btn-primary settings-plan-tile__btn"
+
+                    disabled={checkoutLoadingMethod !== null}
+
+                    onClick={() => void onCheckout('pro', 'CARD')}
+
+                  >
+
+                    {checkoutLoadingMethod === 'CARD' ? 'Przekierowanie...' : 'Karta / Apple Pay / Google Pay - 30 dni'}
+
+                  </button>
+
                 </div>
 
                 {subscription && subscription.billingKind !== 'STRIPE_PREPAID_BLIK' && (
@@ -688,7 +704,7 @@ export function SettingsPanel() {
 
                   <p className="workspace-panel__muted settings-plan-tile__hint">
 
-                    PRO opłacony prepaid — przedłuż kolejną płatnością BLIK.
+                    PRO opłacony prepaid — przedłuż kolejną płatnością BLIK albo kartą.
 
                   </p>
 
@@ -700,7 +716,7 @@ export function SettingsPanel() {
 
             <p className="workspace-panel__muted" style={{ marginTop: 12 }}>
 
-              MVP używa płatności prepaid BLIK za 67 PLN brutto (30 dni). Karta recurring jest wyłączona do Sprint 2,
+              MVP używa płatności prepaid BLIK albo karta / Apple Pay / Google Pay za 67 PLN brutto (30 dni). Karta recurring jest wyłączona do Sprint 2,
               żeby każda płatność miała spójny flow FV VAT + KSeF.
 
             </p>
@@ -733,7 +749,7 @@ export function SettingsPanel() {
               KSeF poniżej)
             </li>
             <li>
-              {workspace?.hasProEntitlement ? '✅' : '⬜'} Aktywny plan PRO (BLIK)
+              {workspace?.hasProEntitlement ? '✅' : '⬜'} Aktywny plan PRO (BLIK / karta)
             </li>
           </ul>
         </section>

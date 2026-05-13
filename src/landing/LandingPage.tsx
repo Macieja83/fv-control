@@ -424,7 +424,7 @@ export default function LandingPage({ onNavigateAuth, onNavigateLegal, onNavigat
                 </div>
                 <ul>
                   <li>Bez limitu dokumentów</li>
-                  <li>BLIK (prepaid 30 dni)</li>
+                  <li>BLIK · karta · Apple Pay · Google Pay (prepaid 30 dni)</li>
                   <li>Bez automatycznego odnowienia w MVP</li>
                   <li>Faktura VAT (KSeF) za subskrypcję</li>
                 </ul>

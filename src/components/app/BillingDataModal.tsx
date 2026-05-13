@@ -123,7 +123,7 @@ export function BillingDataModal({ open, onClose, onSuccess }: Props) {
           </button>
         </header>
         <p className="billing-data-modal__lead">
-          Zanim przejdziesz do płatności BLIK, uzupełnij dane firmy — wystawimy
+          Zanim przejdziesz do płatności BLIK albo kartą, uzupełnij dane firmy — wystawimy
           fakturę VAT za subskrypcję i wyślemy ją do KSeF + na podany email.
         </p>
         <form className="billing-data-modal__form" onSubmit={(e) => void onSubmit(e)}>

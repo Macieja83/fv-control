@@ -9,8 +9,8 @@ type CheckoutProvider = "STRIPE" | "P24";
 type CheckoutPaymentMethod = "CARD" | "BLIK" | "P24" | "GOOGLE_PAY" | "APPLE_PAY";
 
 /** Mapowanie z naszego paymentMethod na Stripe API `payment_method_types[]` value. */
-function stripePaymentMethodType(method: "blik"): string {
-  return method; // Stripe używa lower-case identyfikatorów — `blik`, `p24`. Mapowanie 1:1 dla MVP.
+function stripePaymentMethodType(method: "blik" | "card"): string {
+  return method;
 }
 
 export async function getCurrentSubscription(prisma: PrismaClient, tenantId: string) {
@@ -30,7 +30,7 @@ export async function getCurrentSubscription(prisma: PrismaClient, tenantId: str
 async function createStripePrepaid30dSession(
   prisma: PrismaClient,
   tenantId: string,
-  method: "blik",
+  method: "blik" | "card",
   input: { successUrl: string; cancelUrl: string },
 ) {
   const cfg = loadConfig();
@@ -45,7 +45,7 @@ async function createStripePrepaid30dSession(
   });
 
   const unitAmount = PRO_PLAN_PRICE_PLN * 100;
-  const methodLabel = "BLIK";
+  const methodLabel = method === "card" ? "karta / Apple Pay / Google Pay" : "BLIK";
   const params = new URLSearchParams({
     mode: "payment",
     locale: "pl",
@@ -110,14 +110,21 @@ export async function createCheckoutSession(
     });
   }
 
+  if (input.paymentMethod === "CARD" || input.paymentMethod === "GOOGLE_PAY" || input.paymentMethod === "APPLE_PAY") {
+    return createStripePrepaid30dSession(prisma, tenantId, "card", {
+      successUrl: input.successUrl,
+      cancelUrl: input.cancelUrl,
+    });
+  }
+
   if (input.paymentMethod === "P24") {
     // 2026-05-10: P24 jako Stripe payment method (Ścieżka A z research/sales-ready-p24.md).
     // Stripe nie wspiera recurring billing dla P24 → traktujemy jak prepaid 30-day (analogicznie BLIK).
-    throw AppError.unavailable("Przelewy24 jest wylaczone w Sprint 1. Wybierz BLIK - daje dostep PRO na 30 dni.");
+    throw AppError.unavailable("Przelewy24 jest wylaczone w Sprint 1. Wybierz BLIK albo karte - oba daja dostep PRO na 30 dni.");
   }
 
   throw AppError.unavailable(
-    "Płatność kartą jest tymczasowo wyłączona w MVP. Wybierz BLIK — daje dostęp PRO na 30 dni i jest zgodny z aktualnym flow faktury VAT.",
+    "Wybierz BLIK albo karte - oba daja dostep PRO na 30 dni i sa zgodne z aktualnym flow faktury VAT.",
   );
 }
 
@@ -172,7 +179,7 @@ export async function createBillingPortalSession(
   }
   if (current.billingKind === "STRIPE_PREPAID_BLIK") {
     throw AppError.validation(
-      "Portal Stripe dotyczy subskrypcji z kartą. Przy PRO prepaid przedłuż dostęp płatnością BLIK.",
+      "Portal Stripe dotyczy subskrypcji cyklicznych. Przy PRO prepaid przedluz dostep platnoscia BLIK albo karta.",
     );
   }
 
