@@ -3,12 +3,20 @@
 .login-page {
   min-height: 100svh;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 1rem;
   padding: 1.5rem;
   font-family: 'DM Sans', system-ui, sans-serif;
   background: var(--surface-0, #f6f7f9);
   color: var(--text, #3d4350);
+}
+
+.login-page__top {
+  width: 100%;
+  max-width: 400px;
+  flex-shrink: 0;
 }
 
 html[data-theme='dark'] .login-page {
@@ -27,29 +35,45 @@ html[data-theme='dark'] .login-page {
 }
 
 .login-back-home {
-  display: block;
-  width: fit-content;
-  max-width: 100%;
-  margin: 0 0 1rem;
-  padding: 0;
-  border: none;
-  background: transparent;
+  box-sizing: border-box;
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0.65rem 1rem;
+  border: 1px solid var(--border, #cbd5e1);
+  border-radius: 10px;
+  background: var(--surface-1, #ffffff);
   font: inherit;
-  font-size: 0.875rem;
+  font-size: 0.9375rem;
   font-weight: 600;
-  color: var(--text-muted, #6b7285);
+  color: var(--text-heading, #0f172a);
   cursor: pointer;
-  text-align: left;
-  text-decoration: underline;
-  text-underline-offset: 3px;
+  text-align: center;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
 }
 
 .login-back-home:hover {
-  color: #2563eb;
+  border-color: #2563eb;
+  color: #1d4ed8;
+}
+
+.login-back-home:focus-visible {
+  outline: 2px solid rgba(37, 99, 235, 0.35);
+  outline-offset: 2px;
+}
+
+html[data-theme='dark'] .login-back-home {
+  background: var(--surface-1, #141821);
+  border-color: var(--border, #3d4a63);
+  color: var(--text-heading, #f1f4fa);
 }
 
 html[data-theme='dark'] .login-back-home:hover {
-  color: #60a5fa;
+  border-color: #60a5fa;
+  color: #93c5fd;
 }
 
 html[data-theme='dark'] .login-card {

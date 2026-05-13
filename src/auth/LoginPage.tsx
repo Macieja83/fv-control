@@ -182,12 +182,14 @@ export default function LoginPage({
 
   return (
     <div className="login-page">
-      <div className="login-card" role="main" aria-labelledby="login-title">
-        {onNavigateHome && (
+      {onNavigateHome ? (
+        <div className="login-page__top">
           <button type="button" className="login-back-home" onClick={onNavigateHome} aria-label="Powrót na stronę główną">
             ← Strona główna
           </button>
-        )}
+        </div>
+      ) : null}
+      <div className="login-card" role="main" aria-labelledby="login-title">
         <div className="login-card__brand">
           <span className="login-card__logo" aria-hidden />
           <div>
