@@ -17,11 +17,11 @@ const FAQ: Array<{ q: string; a: string }> = [
   },
   {
     q: 'Czy mogę zrezygnować w trakcie miesiąca?',
-    a: 'W MVP PRO jest opłacany jednorazowo na 30 dni przez BLIK albo Przelewy24. Nie ma automatycznego odnowienia — po końcu okresu możesz opłacić kolejny miesiąc.',
+    a: 'W MVP PRO jest opłacany jednorazowo na 30 dni przez BLIK. Nie ma automatycznego odnowienia — po końcu okresu możesz opłacić kolejny miesiąc.',
   },
   {
     q: 'Jakie metody płatności obsługujecie?',
-    a: 'Plan PRO w MVP przyjmuje BLIK oraz Przelewy24 jako jednorazową płatność za 30 dni dostępu. Płatności obsługuje Stripe — PCI-DSS Level 1.',
+    a: 'Plan PRO w MVP przyjmuje BLIK jako jednorazową płatność za 30 dni dostępu. Płatności obsługuje Stripe — PCI-DSS Level 1.',
   },
   {
     q: 'Czy dostanę fakturę VAT za subskrypcję?',
@@ -109,7 +109,7 @@ export default function PricingPage({ onNavigateAuth, onNavigateLegal, onNavigat
                 <p className="pricing-plan__lead">Dla firm aktywnie wystawiających i odbierających faktury.</p>
                 <ul className="pricing-plan__features">
                   <li><strong>Bez limitu</strong> dokumentów</li>
-                  <li>BLIK · Przelewy24 (prepaid 30 dni)</li>
+                  <li>BLIK (prepaid 30 dni)</li>
                   <li>Bez automatycznego odnowienia w MVP</li>
                   <li><strong>Faktura VAT (KSeF)</strong> za subskrypcję — automatycznie</li>
                   <li>Synchronizacja KSeF i IMAP w czasie rzeczywistym</li>
@@ -125,7 +125,7 @@ export default function PricingPage({ onNavigateAuth, onNavigateLegal, onNavigat
             </div>
 
             <p className="pricing-plans__note">
-              Wszystkie ceny brutto. MVP: jednorazowa płatność BLIK / Przelewy24 (dostęp na 30 dni).
+              Wszystkie ceny brutto. MVP: jednorazowa płatność BLIK (dostęp na 30 dni).
               Płatności obsługuje Stripe (PCI-DSS Level 1).
             </p>
           </div>
@@ -193,8 +193,8 @@ export default function PricingPage({ onNavigateAuth, onNavigateLegal, onNavigat
                     <td>API podstawowe</td>
                   </tr>
                   <tr>
-                    <td>Płatność BLIK / P24</td>
-                    <td className="td-highlight">✓ BLIK + P24</td>
+                    <td>Płatność BLIK</td>
+                    <td className="td-highlight">✓ BLIK</td>
                     <td>Karta + przelew</td>
                     <td>Karta + przelew</td>
                   </tr>

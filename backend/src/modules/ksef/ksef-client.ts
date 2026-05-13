@@ -17,7 +17,10 @@
 import {
   publicEncrypt,
   pbkdf2Sync,
+  createCipheriv,
   createDecipheriv,
+  createHash,
+  randomBytes,
   X509Certificate,
   constants as cryptoConstants,
 } from "node:crypto";
@@ -64,6 +67,30 @@ export type KsefMetadataPage = {
   isTruncated: boolean;
   permanentStorageHwmDate: string;
   invoices: KsefInvoiceMetadata[];
+};
+
+type KsefPublicKeyUsage = "KsefTokenEncryption" | "SymmetricKeyEncryption";
+
+type KsefPublicKeyCertificate = {
+  certificate: string;
+  publicKeyId?: string;
+  usage: KsefPublicKeyUsage[];
+};
+
+export type KsefOnlineInvoiceEncryption = {
+  sessionEncryption: {
+    encryptedSymmetricKey: string;
+    initializationVector: string;
+    publicKeyId?: string;
+  };
+  invoicePayload: {
+    invoiceHash: string;
+    invoiceSize: number;
+    encryptedInvoiceHash: string;
+    encryptedInvoiceSize: number;
+    encryptedInvoiceContent: string;
+    offlineMode: false;
+  };
 };
 
 // ─── PKCS#5 / PBES2 token decryption ───
@@ -251,8 +278,8 @@ export class KsefClient {
   private async authenticateToken(): Promise<KsefSessionTokens> {
     if (this.authMode.kind !== "token") throw new Error("Token auth mode required.");
     const { challenge, timestampMs } = await this.getChallenge();
-    const publicKey = await this.fetchPublicKey();
-    const encrypted = this.encryptToken(this.authMode.ksefToken, timestampMs, publicKey);
+    const publicKey = await this.fetchPublicKey("KsefTokenEncryption");
+    const encrypted = this.encryptToken(this.authMode.ksefToken, timestampMs, publicKey.certificate);
 
     const { referenceNumber, authToken } = await this.initTokenAuth(challenge, encrypted);
     await this.pollAuthStatus(referenceNumber, authToken);
@@ -408,6 +435,32 @@ export class KsefClient {
     return res.json() as Promise<unknown>;
   }
 
+  async prepareOnlineInvoiceEncryption(xml: string): Promise<KsefOnlineInvoiceEncryption> {
+    const cert = await this.fetchPublicKey("SymmetricKeyEncryption");
+    const cipherKey = randomBytes(32);
+    const cipherIv = randomBytes(16);
+    const xmlBytes = Buffer.from(xml, "utf-8");
+    const cipher = createCipheriv("aes-256-cbc", cipherKey, cipherIv);
+    const encryptedInvoice = Buffer.concat([cipher.update(xmlBytes), cipher.final()]);
+
+    const encryptedSymmetricKey = this.encryptWithCertificate(cipherKey, cert.certificate);
+    return {
+      sessionEncryption: {
+        encryptedSymmetricKey,
+        initializationVector: cipherIv.toString("base64"),
+        ...(cert.publicKeyId ? { publicKeyId: cert.publicKeyId } : {}),
+      },
+      invoicePayload: {
+        invoiceHash: sha256Base64(xmlBytes),
+        invoiceSize: xmlBytes.length,
+        encryptedInvoiceHash: sha256Base64(encryptedInvoice),
+        encryptedInvoiceSize: encryptedInvoice.length,
+        encryptedInvoiceContent: encryptedInvoice.toString("base64"),
+        offlineMode: false,
+      },
+    };
+  }
+
   async closeOnlineSession(sessionReferenceNumber: string): Promise<unknown> {
     const res = await this.authedFetch(
       `/sessions/online/${encodeURIComponent(sessionReferenceNumber)}/close`,
@@ -432,25 +485,28 @@ export class KsefClient {
     return { challenge: body.challenge, timestampMs: body.timestampMs };
   }
 
-  private async fetchPublicKey(): Promise<string> {
+  private async fetchPublicKey(usage: KsefPublicKeyUsage): Promise<KsefPublicKeyCertificate> {
     const res = await fetch(`${this.baseUrl}/security/public-key-certificates`);
     if (!res.ok) throw await this.apiError(res, "fetch public key");
-    const certs = (await res.json()) as Array<{ certificate: string; usage: string[] }>;
-    const tokenCert = certs.find((c) => c.usage.includes("KsefTokenEncryption"));
-    if (!tokenCert) throw new Error("KSeF: no KsefTokenEncryption certificate found.");
-    return tokenCert.certificate;
+    const certs = (await res.json()) as KsefPublicKeyCertificate[];
+    const cert = certs.find((c) => c.usage.includes(usage));
+    if (!cert) throw new Error(`KSeF: no ${usage} certificate found.`);
+    return cert;
   }
 
   /** Encrypt `ksefToken|timestampMs` with MF public RSA key using RSA-OAEP + SHA-256. */
   private encryptToken(ksefToken: string, timestampMs: number, certBase64: string): string {
-    const certDer = Buffer.from(certBase64, "base64");
-    const x509 = new X509Certificate(certDer);
     const plaintext = Buffer.from(`${ksefToken}|${timestampMs}`, "utf-8");
-    const encrypted = publicEncrypt(
+    return this.encryptWithCertificate(plaintext, certBase64);
+  }
+
+  private encryptWithCertificate(plaintext: Buffer, certBase64: string): string {
+    const certDer = Buffer.from(normalizeKsefPemOrBareBase64(certBase64), "base64");
+    const x509 = new X509Certificate(certDer);
+    return publicEncrypt(
       { key: x509.publicKey, padding: cryptoConstants.RSA_PKCS1_OAEP_PADDING, oaepHash: "sha256" },
       plaintext,
-    );
-    return encrypted.toString("base64");
+    ).toString("base64");
   }
 
   private async initXadesAuth(signedXml: string): Promise<{ referenceNumber: string; authToken: string }> {
@@ -578,4 +634,8 @@ function parseKsefMetadata429WaitMs(res: Response, bodyText: string): number {
     return Math.min(600_000, Math.max(5_000, parseInt(m[1], 10) * 1000 + 2_000));
   }
   return 70_000;
+}
+
+function sha256Base64(input: Buffer): string {
+  return createHash("sha256").update(input).digest("base64");
 }

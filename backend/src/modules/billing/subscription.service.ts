@@ -9,7 +9,7 @@ type CheckoutProvider = "STRIPE" | "P24";
 type CheckoutPaymentMethod = "CARD" | "BLIK" | "P24" | "GOOGLE_PAY" | "APPLE_PAY";
 
 /** Mapowanie z naszego paymentMethod na Stripe API `payment_method_types[]` value. */
-function stripePaymentMethodType(method: "blik" | "p24"): string {
+function stripePaymentMethodType(method: "blik"): string {
   return method; // Stripe używa lower-case identyfikatorów — `blik`, `p24`. Mapowanie 1:1 dla MVP.
 }
 
@@ -30,7 +30,7 @@ export async function getCurrentSubscription(prisma: PrismaClient, tenantId: str
 async function createStripePrepaid30dSession(
   prisma: PrismaClient,
   tenantId: string,
-  method: "blik" | "p24",
+  method: "blik",
   input: { successUrl: string; cancelUrl: string },
 ) {
   const cfg = loadConfig();
@@ -45,7 +45,7 @@ async function createStripePrepaid30dSession(
   });
 
   const unitAmount = PRO_PLAN_PRICE_PLN * 100;
-  const methodLabel = method === "p24" ? "Przelewy24" : "BLIK";
+  const methodLabel = "BLIK";
   const params = new URLSearchParams({
     mode: "payment",
     locale: "pl",
@@ -113,14 +113,11 @@ export async function createCheckoutSession(
   if (input.paymentMethod === "P24") {
     // 2026-05-10: P24 jako Stripe payment method (Ścieżka A z research/sales-ready-p24.md).
     // Stripe nie wspiera recurring billing dla P24 → traktujemy jak prepaid 30-day (analogicznie BLIK).
-    return createStripePrepaid30dSession(prisma, tenantId, "p24", {
-      successUrl: input.successUrl,
-      cancelUrl: input.cancelUrl,
-    });
+    throw AppError.unavailable("Przelewy24 jest wylaczone w Sprint 1. Wybierz BLIK - daje dostep PRO na 30 dni.");
   }
 
   throw AppError.unavailable(
-    "Płatność kartą jest tymczasowo wyłączona w MVP. Wybierz BLIK albo Przelewy24 — oba dają dostęp PRO na 30 dni i są zgodne z aktualnym flow faktury VAT.",
+    "Płatność kartą jest tymczasowo wyłączona w MVP. Wybierz BLIK — daje dostęp PRO na 30 dni i jest zgodny z aktualnym flow faktury VAT.",
   );
 }
 
@@ -175,7 +172,7 @@ export async function createBillingPortalSession(
   }
   if (current.billingKind === "STRIPE_PREPAID_BLIK") {
     throw AppError.validation(
-      "Portal Stripe dotyczy subskrypcji z kartą. Przy PRO prepaid przedłuż dostęp płatnością BLIK albo Przelewy24.",
+      "Portal Stripe dotyczy subskrypcji z kartą. Przy PRO prepaid przedłuż dostęp płatnością BLIK.",
     );
   }
 

@@ -2,7 +2,7 @@ import type { PrismaClient } from "@prisma/client";
 import { loadConfig } from "../../config.js";
 import { AppError } from "../../lib/errors.js";
 import { loadKsefClientForTenant } from "../ksef/ksef-tenant-credentials.service.js";
-import { buildFa3InvoiceXml, sha256HexUtf8, type Fa3LineInput } from "./ksef-fa3-xml.js";
+import { buildFa3InvoiceXml, type Fa3LineInput } from "./ksef-fa3-xml.js";
 import { serializeInvoiceDetail } from "./invoice-serialize.js";
 
 async function applyKsefSubmitStub(prisma: PrismaClient, tenantId: string, invoiceId: string, payload: object) {
@@ -106,10 +106,8 @@ export async function submitInvoiceToKsef(prisma: PrismaClient, tenantId: string
     vatTotal: inv.vatTotal.toString(),
     grossTotal: inv.grossTotal.toString(),
   });
-  const hash = sha256HexUtf8(xml);
-  const size = Buffer.byteLength(xml, "utf-8");
-
   await client!.authenticate();
+  const encrypted = await client!.prepareOnlineInvoiceEncryption(xml);
 
   const sessionBody = {
     formCode: {
@@ -117,6 +115,7 @@ export async function submitInvoiceToKsef(prisma: PrismaClient, tenantId: string
       schemaVersion: "1-0E",
       value: "FA",
     },
+    encryption: encrypted.sessionEncryption,
   };
   const sessionJson = (await client!.openOnlineSessionForm(sessionBody)) as Record<string, unknown>;
   const sessionRef =
@@ -132,26 +131,15 @@ export async function submitInvoiceToKsef(prisma: PrismaClient, tenantId: string
 
   let sendJson: unknown;
   try {
-    sendJson = await client!.postOnlineInvoice(sessionRef, {
-      invoiceHash: hash,
-      invoiceSize: size,
-      invoicePayload: Buffer.from(xml, "utf-8").toString("base64"),
-    });
-  } catch (e1) {
+    sendJson = await client!.postOnlineInvoice(sessionRef, encrypted.invoicePayload);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
     try {
-      sendJson = await client!.postOnlineInvoice(sessionRef, {
-        invoiceBody: Buffer.from(xml, "utf-8").toString("base64"),
-      });
-    } catch (e2) {
-      const m1 = e1 instanceof Error ? e1.message : String(e1);
-      const m2 = e2 instanceof Error ? e2.message : String(e2);
-      try {
-        await client!.closeOnlineSession(sessionRef);
-      } catch {
-        /* ignore */
-      }
-      throw AppError.validation(`KSeF: wysyłka nie powiodła się (${m1}) / fallback (${m2})`);
+      await client!.closeOnlineSession(sessionRef);
+    } catch {
+      /* ignore */
     }
+    throw AppError.validation(`KSeF: wysyłka nie powiodła się (${msg})`);
   }
 
   const ksefNo = firstKsefNumber(sendJson);
@@ -176,7 +164,7 @@ export async function submitInvoiceToKsef(prisma: PrismaClient, tenantId: string
         tenantId,
         invoiceId,
         eventType: "KSEF_SUBMIT_REQUESTED",
-        payload: { live: true, sessionRef, ksefNumber: ksefNo, invoiceHash: hash } as object,
+        payload: { live: true, sessionRef, ksefNumber: ksefNo, invoiceHash: encrypted.invoicePayload.invoiceHash } as object,
       },
     });
   });

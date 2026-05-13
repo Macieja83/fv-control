@@ -65,11 +65,11 @@ export async function fetchBillingSubscriptionState(token: string): Promise<{
 export async function createSubscriptionCheckout(
   token: string,
   input: {
-    provider: 'STRIPE' | 'P24'
+    provider: 'STRIPE'
     planCode: 'free' | 'pro'
     successUrl: string
     cancelUrl: string
-    paymentMethod?: 'CARD' | 'BLIK' | 'P24' | 'GOOGLE_PAY' | 'APPLE_PAY'
+    paymentMethod?: 'CARD' | 'BLIK' | 'GOOGLE_PAY' | 'APPLE_PAY'
   },
 ): Promise<{ checkoutUrl: string }> {
   const res = await fetch('/api/v1/billing/subscription/checkout', {
