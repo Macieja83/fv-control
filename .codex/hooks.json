@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File ..\\ai-mission-control\\infrastructure\\scripts\\codex-session-start.ps1"
+          }
+        ]
+      }
+    ]
+  }
+}
