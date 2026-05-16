@@ -37,6 +37,11 @@ const KSEF_URLS: Record<string, string> = {
 export const MAX_AUTH_POLL_ATTEMPTS = 40;
 export const AUTH_POLL_INTERVAL_MS = 3_000;
 
+// KSeF v2 online session jest asynchroniczna: numer KSeF + UPO po przetworzeniu.
+// Budzet pollingu wyniku sesji (mirror auth). 30x4s=120s; timeout => rekoncyliacja async.
+export const MAX_SESSION_POLL_ATTEMPTS = 30;
+export const SESSION_POLL_INTERVAL_MS = 4_000;
+
 // ─── Types ───
 
 export type KsefSessionTokens = {
@@ -220,6 +225,63 @@ type AuthMode =
   | { kind: "token"; ksefToken: string }
   | { kind: "certificate"; privateKeyDer: Buffer; certDer: Buffer };
 
+export type KsefSessionStatusJson = Record<string, unknown>;
+export type KsefSessionInvoicesPage = Record<string, unknown>;
+
+/** Token kontynuacji paginacji /sessions/{ref}/invoices (rozne casingi MF). */
+export function continuationTokenOf(page: unknown): string | undefined {
+  if (!page || typeof page !== "object") return undefined;
+  const o = page as Record<string, unknown>;
+  const t = o.continuationToken ?? o.ContinuationToken;
+  return typeof t === "string" && t.trim() ? t : undefined;
+}
+
+/** invoiceReferenceNumber z odpowiedzi postOnlineInvoice (defensywne casingi). */
+export function extractInvoiceReferenceNumber(sendJson: unknown): string | null {
+  if (!sendJson || typeof sendJson !== "object") return null;
+  const o = sendJson as Record<string, unknown>;
+  const v =
+    o.invoiceReferenceNumber ?? o.InvoiceReferenceNumber ?? o.referenceNumber ?? o.ReferenceNumber;
+  return typeof v === "string" && v.trim() ? v.trim() : null;
+}
+
+export type SessionInvoiceLookup = {
+  outcome: "accepted" | "rejected" | "pending" | "not-found";
+  ksefNumber?: string;
+  statusCode?: number;
+  statusDescription?: string;
+};
+
+/** Wynik konkretnej FV (po invoiceReferenceNumber) na stronie /sessions/{ref}/invoices. */
+export function findSessionInvoiceResult(
+  page: unknown,
+  invoiceReferenceNumber: string,
+): SessionInvoiceLookup {
+  if (!page || typeof page !== "object") return { outcome: "not-found" };
+  const o = page as Record<string, unknown>;
+  const arr = o.invoices ?? o.Invoices;
+  if (!Array.isArray(arr)) return { outcome: "not-found" };
+  for (const raw of arr) {
+    if (!raw || typeof raw !== "object") continue;
+    const r = raw as Record<string, unknown>;
+    const ref = r.invoiceReferenceNumber ?? r.InvoiceReferenceNumber;
+    if (typeof ref !== "string" || ref !== invoiceReferenceNumber) continue;
+    const ksefRaw = r.ksefNumber ?? r.KsefNumber;
+    const ksefNumber = typeof ksefRaw === "string" && ksefRaw.trim() ? ksefRaw.trim() : undefined;
+    const st = (r.status ?? r.Status) as Record<string, unknown> | undefined;
+    const codeRaw = st ? st.code ?? st.Code : undefined;
+    const code = typeof codeRaw === "number" ? codeRaw : undefined;
+    const descRaw = st ? st.description ?? st.Description : undefined;
+    const desc = typeof descRaw === "string" ? descRaw : undefined;
+    if (ksefNumber)
+      return { outcome: "accepted", ksefNumber, statusCode: code, statusDescription: desc };
+    if (code !== undefined && code >= 400)
+      return { outcome: "rejected", statusCode: code, statusDescription: desc };
+    return { outcome: "pending", statusCode: code, statusDescription: desc };
+  }
+  return { outcome: "not-found" };
+}
+
 export class KsefClient {
   private readonly baseUrl: string;
   private tokens: KsefSessionTokens | null = null;
@@ -341,7 +403,7 @@ export class KsefClient {
       pageOffset: String(pageOffset),
       pageSize: String(Math.min(pageSize, 250)),
     });
-    const path = `/invoices/query/metadata?${params}`;
+    const path = `/invoices/query/metadata?${params.toString()}`;
     const max429Attempts = 12;
 
     for (let attempt = 0; attempt < max429Attempts; attempt++) {
@@ -418,7 +480,7 @@ export class KsefClient {
       body: JSON.stringify(body),
     });
     if (!res.ok) throw await this.apiError(res, "open online session");
-    return res.json() as Promise<unknown>;
+    return res.json();
   }
 
   /** Wysłanie faktury w ramach sesji online (payload zależny od wersji API). */
@@ -432,7 +494,7 @@ export class KsefClient {
       },
     );
     if (!res.ok) throw await this.apiError(res, "post online invoice");
-    return res.json() as Promise<unknown>;
+    return res.json();
   }
 
   async prepareOnlineInvoiceEncryption(xml: string): Promise<KsefOnlineInvoiceEncryption> {
@@ -474,6 +536,78 @@ export class KsefClient {
     } catch {
       return { raw: text };
     }
+  }
+
+  // ─── Online session status / UPO (async issuance result) ───
+
+  /** GET /sessions/{ref} — status sesji + liczniki + (po close) upo.pages[]. */
+  async getSessionStatus(sessionReferenceNumber: string): Promise<KsefSessionStatusJson> {
+    const res = await this.authedFetch(
+      `/sessions/${encodeURIComponent(sessionReferenceNumber)}`,
+      { method: "GET" },
+    );
+    if (!res.ok) throw await this.apiError(res, "get session status");
+    return (await res.json()) as KsefSessionStatusJson;
+  }
+
+  /** GET /sessions/{ref}/invoices — FV sesji z numerem KSeF (paginacja continuationToken). */
+  async getSessionInvoices(
+    sessionReferenceNumber: string,
+    continuationToken?: string,
+  ): Promise<KsefSessionInvoicesPage> {
+    const qs = continuationToken
+      ? `?continuationToken=${encodeURIComponent(continuationToken)}`
+      : "";
+    const res = await this.authedFetch(
+      `/sessions/${encodeURIComponent(sessionReferenceNumber)}/invoices${qs}`,
+      { method: "GET" },
+    );
+    if (!res.ok) throw await this.apiError(res, "get session invoices");
+    return (await res.json()) as KsefSessionInvoicesPage;
+  }
+
+  /** GET /sessions/{ref}/invoices/ksef/{ksefNumber}/upo — XAdES-signed UPO XML. */
+  async getSessionInvoiceUpoByKsef(
+    sessionReferenceNumber: string,
+    ksefNumber: string,
+  ): Promise<string> {
+    const res = await this.authedFetch(
+      `/sessions/${encodeURIComponent(sessionReferenceNumber)}/invoices/ksef/${encodeURIComponent(ksefNumber)}/upo`,
+      { method: "GET" },
+    );
+    if (!res.ok) throw await this.apiError(res, "get invoice upo");
+    return res.text();
+  }
+
+  /**
+   * Pętla pollująca wynik przetwarzania FV w sesji (mirror pollAuthStatus).
+   * { ksefNumber } po sukcesie; throw przy odrzuceniu; null przy timeout (=> reconcile).
+   */
+  async pollSessionInvoiceResult(
+    sessionReferenceNumber: string,
+    invoiceReferenceNumber: string,
+    opts?: { maxAttempts?: number; intervalMs?: number },
+  ): Promise<{ ksefNumber: string } | null> {
+    const maxAttempts = opts?.maxAttempts ?? MAX_SESSION_POLL_ATTEMPTS;
+    const intervalMs = opts?.intervalMs ?? SESSION_POLL_INTERVAL_MS;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      await sleep(intervalMs);
+      let token: string | undefined;
+      do {
+        const page = await this.getSessionInvoices(sessionReferenceNumber, token);
+        const found = findSessionInvoiceResult(page, invoiceReferenceNumber);
+        if (found.outcome === "accepted" && found.ksefNumber) {
+          return { ksefNumber: found.ksefNumber };
+        }
+        if (found.outcome === "rejected") {
+          throw new Error(
+            `KSeF odrzucil fakture (${found.statusCode ?? "?"}): ${found.statusDescription ?? ""}`.trim(),
+          );
+        }
+        token = continuationTokenOf(page);
+      } while (token);
+    }
+    return null;
   }
 
   // ─── Auth internals ───
