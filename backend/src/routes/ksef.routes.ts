@@ -8,6 +8,7 @@ import { parseOrThrow } from "../lib/validate.js";
 import { enqueueKsefSync, getKsefQueueSnapshotForTenant } from "../lib/ksef-sync-queue.js";
 import { getEffectiveKsefApiEnv, readKsefEnvOverrideFromMetadata } from "../modules/ksef/ksef-effective-env.js";
 import { setTenantKsefApiEnvOverride } from "../modules/ksef/ksef-ingestion-settings.service.js";
+import { subscriptionGrantsProAccess, stripFreePlanLimitErrors } from "../modules/billing/subscription-plans.js";
 import { loadKsefClientForTenant, resolveKsefCredentialSource } from "../modules/ksef/ksef-tenant-credentials.service.js";
 
 const ksefEnvPatchSchema = z.object({
@@ -50,6 +51,13 @@ const ksefRoutes: FastifyPluginAsync = async (app) => {
 
       const ksefEnvOverride = readKsefEnvOverrideFromMetadata(meta);
 
+      const proSub = await app.prisma.subscription.findFirst({
+        where: { tenantId },
+        orderBy: { updatedAt: "desc" },
+        select: { planCode: true, status: true, billingKind: true, currentPeriodEnd: true },
+      });
+      const proEntitled = proSub ? subscriptionGrantsProAccess(proSub) : false;
+
       return {
         /** Rzeczywiste środowisko API dla tego tenanta (nadpisanie lub KSEF_ENV). */
         environment: effective,
@@ -81,7 +89,11 @@ const ksefRoutes: FastifyPluginAsync = async (app) => {
             ? (meta.lastSyncStats as Record<string, unknown>)
             : null,
         lastSyncErrorPreview:
-          meta && typeof meta.lastSyncErrorPreview === "string" ? meta.lastSyncErrorPreview : null,
+          meta && typeof meta.lastSyncErrorPreview === "string"
+            ? proEntitled
+              ? stripFreePlanLimitErrors(meta.lastSyncErrorPreview)
+              : meta.lastSyncErrorPreview
+            : null,
         invoiceCount: ksefInvoiceCount,
         queue: {
           redisAvailable: queueLive !== null,
@@ -98,7 +110,12 @@ const ksefRoutes: FastifyPluginAsync = async (app) => {
               : null,
           lastJobFinishedAt:
             meta && typeof meta.lastQueueFinishedAt === "string" ? meta.lastQueueFinishedAt : null,
-          lastJobError: meta && typeof meta.lastQueueError === "string" ? meta.lastQueueError : null,
+          lastJobError:
+            meta && typeof meta.lastQueueError === "string"
+              ? proEntitled
+                ? stripFreePlanLimitErrors(meta.lastQueueError)
+                : meta.lastQueueError
+              : null,
           lastJobAttempts: meta && typeof meta.lastQueueAttempts === "number" ? meta.lastQueueAttempts : null,
           lastJobMaxAttempts:
             meta && typeof meta.lastQueueMaxAttempts === "number" ? meta.lastQueueMaxAttempts : null,
