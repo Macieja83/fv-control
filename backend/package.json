@@ -25,6 +25,7 @@
     "refresh:dup-compliance": "tsx scripts/refresh-open-duplicate-compliance.ts",
     "cleanup:ksef-ksef-dups": "tsx scripts/cleanup-ksef-ksef-open-duplicates.ts",
     "ksef:sync-once": "tsx scripts/run-ksef-sync-once.ts",
+    "reconcile:ksef-outbound": "tsx scripts/reconcile-ksef-outbound.ts",
     "repair:dup-orientation": "tsx scripts/repair-invoice-duplicate-orientation.ts",
     "diagnose:invoices": "tsx scripts/diagnose-invoices.ts",
     "stats:issue-range": "tsx scripts/stats-invoices-issue-range.ts",

@@ -4,6 +4,7 @@ import { AppError } from "../../lib/errors.js";
 import { loadKsefClientForTenant } from "../ksef/ksef-tenant-credentials.service.js";
 import { buildFa3InvoiceXml, type Fa3LineInput } from "./ksef-fa3-xml.js";
 import { serializeInvoiceDetail } from "./invoice-serialize.js";
+import { extractInvoiceReferenceNumber } from "../ksef/ksef-client.js";
 
 async function applyKsefSubmitStub(prisma: PrismaClient, tenantId: string, invoiceId: string, payload: object) {
   await prisma.$transaction(async (tx) => {
@@ -106,8 +107,8 @@ export async function submitInvoiceToKsef(prisma: PrismaClient, tenantId: string
     vatTotal: inv.vatTotal.toString(),
     grossTotal: inv.grossTotal.toString(),
   });
-  await client!.authenticate();
-  const encrypted = await client!.prepareOnlineInvoiceEncryption(xml);
+  await client.authenticate();
+  const encrypted = await client.prepareOnlineInvoiceEncryption(xml);
 
   const sessionBody = {
     formCode: {
@@ -117,7 +118,7 @@ export async function submitInvoiceToKsef(prisma: PrismaClient, tenantId: string
     },
     encryption: encrypted.sessionEncryption,
   };
-  const sessionJson = (await client!.openOnlineSessionForm(sessionBody)) as Record<string, unknown>;
+  const sessionJson = (await client.openOnlineSessionForm(sessionBody)) as Record<string, unknown>;
   const sessionRef =
     (typeof sessionJson.referenceNumber === "string" && sessionJson.referenceNumber) ||
     (typeof sessionJson.sessionReferenceNumber === "string" && sessionJson.sessionReferenceNumber) ||
@@ -131,20 +132,25 @@ export async function submitInvoiceToKsef(prisma: PrismaClient, tenantId: string
 
   let sendJson: unknown;
   try {
-    sendJson = await client!.postOnlineInvoice(sessionRef, encrypted.invoicePayload);
+    sendJson = await client.postOnlineInvoice(sessionRef, encrypted.invoicePayload);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     try {
-      await client!.closeOnlineSession(sessionRef);
+      await client.closeOnlineSession(sessionRef);
     } catch {
       /* ignore */
     }
     throw AppError.validation(`KSeF: wysyłka nie powiodła się (${msg})`);
   }
 
+  // KSeF v2 online = async: postOnlineInvoice zwraca invoiceReferenceNumber (ACK),
+  // numer KSeF + UPO przydzielane po przetworzeniu. Numeru NIE pollujemy tu
+  // synchronicznie (ta funkcja jest też w ścieżce webhooka Stripe — blokada=retry storm).
+  // Persistujemy referencje; finalizacja w ksef-outbound-reconcile (async).
   const ksefNo = firstKsefNumber(sendJson);
+  const invoiceRef = extractInvoiceReferenceNumber(sendJson);
   try {
-    await client!.closeOnlineSession(sessionRef);
+    await client.closeOnlineSession(sessionRef);
   } catch {
     /* ignore close errors */
   }
@@ -156,7 +162,12 @@ export async function submitInvoiceToKsef(prisma: PrismaClient, tenantId: string
         ksefStatus: ksefNo ? "SENT" : "PENDING",
         ...(ksefNo ? { ksefNumber: ksefNo } : {}),
         ksefReferenceId: sessionRef.slice(0, 120),
-        rawPayload: { ...(inv.rawPayload as object | null), ksefLastSendResponse: sendJson } as object,
+        rawPayload: {
+          ...(inv.rawPayload as object | null),
+          ksefLastSendResponse: sendJson,
+          ksefSessionRef: sessionRef,
+          ksefInvoiceReferenceNumber: invoiceRef,
+        } as object,
       },
     });
     await tx.invoiceComplianceEvent.create({
@@ -164,7 +175,13 @@ export async function submitInvoiceToKsef(prisma: PrismaClient, tenantId: string
         tenantId,
         invoiceId,
         eventType: "KSEF_SUBMIT_REQUESTED",
-        payload: { live: true, sessionRef, ksefNumber: ksefNo, invoiceHash: encrypted.invoicePayload.invoiceHash } as object,
+        payload: {
+          live: true,
+          sessionRef,
+          invoiceReferenceNumber: invoiceRef,
+          ksefNumber: ksefNo,
+          invoiceHash: encrypted.invoicePayload.invoiceHash,
+        } as object,
       },
     });
   });
