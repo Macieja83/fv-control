@@ -56,6 +56,29 @@ export type EnqueueKsefSyncOptions = {
   autoDedupe?: boolean;
 };
 
+export type AutoDedupeAction = "skip" | "replace" | "add";
+
+/**
+ * Decyzja co zrobić z istniejącym auto-job (jobId `auto-ksef-<tenant>`) o danym
+ * stanie BullMQ, zanim dołożymy kolejny auto-sync:
+ * - pending (`waiting`/`delayed`/`active`/`waiting-children`) → `skip` (anti-stacking, limit MF)
+ * - dowolny inny stan (`completed`/`failed`/…) → `replace` (usuń stary, dołóż nowy —
+ *   inaczej BullMQ jobId-dedupe sprawia, że `q.add` to no-op i auto-sync zamiera po 1. runie)
+ * - brak joba → `add`
+ */
+export function decideAutoDedupeAction(existingState: string | null): AutoDedupeAction {
+  if (existingState == null) return "add";
+  if (
+    existingState === "waiting" ||
+    existingState === "delayed" ||
+    existingState === "active" ||
+    existingState === "waiting-children"
+  ) {
+    return "skip";
+  }
+  return "replace";
+}
+
 export async function enqueueKsefSync(
   job: KsefSyncJobData,
   opts?: EnqueueKsefSyncOptions,
@@ -67,15 +90,21 @@ export async function enqueueKsefSync(
     const existing = await q.getJob(autoJobId);
     if (existing) {
       const st = await existing.getState();
-      /** BullMQ — nie stackujemy drugiego auto-syncu, dopóki pierwszy nie zakończy się lub nie padnie. */
-      if (st === "waiting" || st === "delayed" || st === "active" || st === "waiting-children") {
+      const action = decideAutoDedupeAction(st);
+      /** Pending — nie stackujemy drugiego auto-syncu (limit MF ~20 zapytań metadanych / h). */
+      if (action === "skip") {
         return { jobId: existing.id ?? autoJobId, skipped: true };
       }
-      if (st === "failed") {
+      /**
+       * Stan terminalny (completed/failed/itp.) — stary auto job nadal istnieje w Redis
+       * (removeOnComplete:200 / removeOnFail:500) i blokuje `q.add` przez jobId-dedupe.
+       * Usuwamy go, by powstał świeży job. (Regression: BUGS.md KSeF auto-sync wedged 2026-05-16.)
+       */
+      if (action === "replace") {
         try {
           await existing.remove();
         } catch {
-          /* np. job właśnie w workerze */
+          /* job mógł właśnie wejść do workera; kolejny tick i tak ponowi */
         }
       }
     }
