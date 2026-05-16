@@ -2,7 +2,35 @@
   "permissions": {
     "allow": [
       "mcp__Claude_Preview__preview_start",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://100.106.177.44:8188/system_stats)",
+      "Bash(curl -s \"http://100.106.177.44:8188/history?max_items=20\")",
+      "Bash(curl -s \"http://100.106.177.44:8188/history?max_items=50\" -o \"C:/Users/ALTREO.PL/Desktop/ai-mission-control/n8n-workflows/comfyui-templates/_history_dump.json\")",
+      "Bash(where python *)",
+      "Bash(where py *)",
+      "Bash(where node *)",
+      "Bash(\"C:/ComfyUI_windows_portable/python_embeded/python.exe\" --version)",
+      "Bash(C:/ComfyUI_windows_portable/python_embeded/python.exe C:/Users/ALTREO.PL/Desktop/ai-mission-control/n8n-workflows/comfyui-templates/_convert_ui_to_api.py C:/ComfyUI_windows_portable/ComfyUI/user/default/workflows/01_PRODUCT_PHOTO/flux_krea_product_studio.json C:/Users/ALTREO.PL/Desktop/ai-mission-control/n8n-workflows/comfyui-templates/_object_info.json C:/Users/ALTREO.PL/Desktop/ai-mission-control/n8n-workflows/comfyui-templates/flux_krea_product_studio.json)",
+      "Bash(C:/ComfyUI_windows_portable/python_embeded/python.exe C:/Users/ALTREO.PL/Desktop/ai-mission-control/n8n-workflows/comfyui-templates/_convert_ui_to_api.py C:/ComfyUI_windows_portable/ComfyUI/user/default/workflows/02_SOCIAL_POSTS/qwen_post_with_text_1x1.json C:/Users/ALTREO.PL/Desktop/ai-mission-control/n8n-workflows/comfyui-templates/_object_info.json C:/Users/ALTREO.PL/Desktop/ai-mission-control/n8n-workflows/comfyui-templates/qwen_post_with_text_1x1.json)",
+      "Bash(C:/ComfyUI_windows_portable/python_embeded/python.exe C:/Users/ALTREO.PL/Desktop/ai-mission-control/n8n-workflows/comfyui-templates/_convert_ui_to_api.py C:/ComfyUI_windows_portable/ComfyUI/user/default/workflows/03_THUMBNAILS/youtube_thumb_16x9.json C:/Users/ALTREO.PL/Desktop/ai-mission-control/n8n-workflows/comfyui-templates/_object_info.json C:/Users/ALTREO.PL/Desktop/ai-mission-control/n8n-workflows/comfyui-templates/youtube_thumb_16x9.json)",
+      "Bash(C:/ComfyUI_windows_portable/python_embeded/python.exe C:/Users/ALTREO.PL/Desktop/ai-mission-control/n8n-workflows/comfyui-templates/_convert_ui_to_api.py C:/ComfyUI_windows_portable/ComfyUI/user/default/workflows/04_VIDEO_ADS/wan22_product_showcase_5s.json C:/Users/ALTREO.PL/Desktop/ai-mission-control/n8n-workflows/comfyui-templates/_object_info.json C:/Users/ALTREO.PL/Desktop/ai-mission-control/n8n-workflows/comfyui-templates/wan22_product_showcase_5s.json)",
+      "Bash(C:/ComfyUI_windows_portable/python_embeded/python.exe C:/Users/ALTREO.PL/Desktop/ai-mission-control/n8n-workflows/comfyui-templates/_convert_ui_to_api.py C:/ComfyUI_windows_portable/ComfyUI/user/default/workflows/04_VIDEO_ADS/wan22_lifestyle_video_9x16.json C:/Users/ALTREO.PL/Desktop/ai-mission-control/n8n-workflows/comfyui-templates/_object_info.json C:/Users/ALTREO.PL/Desktop/ai-mission-control/n8n-workflows/comfyui-templates/wan22_lifestyle_video_9x16.json)",
+      "Bash(C:/ComfyUI_windows_portable/python_embeded/python.exe -c ' *)",
+      "Bash(curl -s \"http://100.106.177.44:8188/queue\")",
+      "Bash(curl -s \"http://100.106.177.44:8188/history/1193f9d9-476e-416c-90d4-ecaee10f43f4\")",
+      "Bash(C:/ComfyUI_windows_portable/python_embeded/python.exe C:/Users/ALTREO.PL/Desktop/ai-mission-control/n8n-workflows/comfyui-templates/_debug_post.py wan22_product_showcase_5s.json)",
+      "Bash(curl -s \"http://100.106.177.44:8188/history/e5b2c18e-45b3-44c9-bf37-cee6ee6cecd1\")",
+      "Read(//c/ComfyUI_windows_portable/ComfyUI/models/text_encoders/**)",
+      "Read(//c/ComfyUI_windows_portable/ComfyUI/models/clip/**)",
+      "Bash(C:/ComfyUI_windows_portable/python_embeded/python.exe C:/Users/ALTREO.PL/Desktop/ai-mission-control/n8n-workflows/comfyui-templates/_build_native_wan22.py)",
+      "Bash(curl -s \"http://100.106.177.44:8188/history/0c4bdd19-f92f-4bfc-b166-ca28578bf07e\")",
+      "Bash(C:/ComfyUI_windows_portable/python_embeded/python.exe C:/Users/ALTREO.PL/Desktop/ai-mission-control/n8n-workflows/comfyui-templates/_extend_n8n.py)",
+      "Bash(curl -s -w '\\\\n%{http_code}\\\\n' -X PUT https://n8n.resta.biz/api/v1/workflows/LDc9tIesgNGPiPmJ -H 'X-N8N-API-KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1MzUxMDJmYi03OTQyLTQ3NWQtOWM5ZS0xZTJkOTI4ZTk2ZDgiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwianRpIjoiMmUwNTY0ODQtMzRjNS00ZGE0LTkwYTctNWMwOGVlNDJlMTIzIiwiaWF0IjoxNzc3NDA4MDg4fQ.Az1uWluIaLXy4BOOnUnY_1F1SyeJVumKZqAqbV5PYmg' -H 'Content-Type: application/json' --data-binary @C:/Users/ALTREO.PL/Desktop/ai-mission-control/n8n-workflows/_router_put_body.json)",
+      "Bash(curl -s -w '\\\\nHTTP_CODE:%{http_code}\\\\n' -X PUT https://n8n.resta.biz/api/v1/workflows/LDc9tIesgNGPiPmJ -H 'X-N8N-API-KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1MzUxMDJmYi03OTQyLTQ3NWQtOWM5ZS0xZTJkOTI4ZTk2ZDgiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwianRpIjoiMmUwNTY0ODQtMzRjNS00ZGE0LTkwYTctNWMwOGVlNDJlMTIzIiwiaWF0IjoxNzc3NDA4MDg4fQ.Az1uWluIaLXy4BOOnUnY_1F1SyeJVumKZqAqbV5PYmg' -H 'Content-Type: application/json' --data-binary @C:/Users/ALTREO.PL/Desktop/ai-mission-control/n8n-workflows/_router_put_body.json)",
+      "Bash(curl -s -o /dev/null -w \"OPTIONS %{http_code}\\\\n\" -X OPTIONS \"https://n8n.resta.biz/webhook/ee2af39d-d02a-417b-8288-c19d8877c57c\")",
+      "Bash(curl -s -o /dev/null -w \"GET %{http_code}\\\\n\" -X GET \"https://n8n.resta.biz/webhook/ee2af39d-d02a-417b-8288-c19d8877c57c\")",
+      "Bash(curl -s -w '\\\\nHTTP_CODE:%{http_code}\\\\n' -X POST https://n8n.resta.biz/webhook/ee2af39d-d02a-417b-8288-c19d8877c57c -H 'Content-Type: application/json' -d '{\"update_id\":111111111,\"message\":{\"message_id\":1001,\"from\":{\"id\":5166626702,\"is_bot\":false,\"first_name\":\"Marcin\",\"language_code\":\"pl\"},\"chat\":{\"id\":5166626702,\"first_name\":\"Marcin\",\"type\":\"private\"},\"date\":1777892100,\"text\":\"/thumb AI tutorial how to build agents, exciting clickbait yellow arrow red text\"}}')",
+      "Bash(curl -s -X GET 'https://n8n.resta.biz/api/v1/executions/351?includeData=true' -H 'X-N8N-API-KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1MzUxMDJmYi03OTQyLTQ3NWQtOWM5ZS0xZTJkOTI4ZTk2ZDgiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwianRpIjoiMmUwNTY0ODQtMzRjNS00ZGE0LTkwYTctNWMwOGVlNDJlMTIzIiwiaWF0IjoxNzc3NDA4MDg4fQ.Az1uWluIaLXy4BOOnUnY_1F1SyeJVumKZqAqbV5PYmg' -o C:/Users/ALTREO.PL/AppData/Local/Temp/exec351.json)"
     ]
   }
 }
