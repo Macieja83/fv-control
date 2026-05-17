@@ -98,6 +98,13 @@ const envSchema = z.object({
    */
   RATE_LIMIT_KSEF_SYNC_MAX: z.coerce.number().int().min(0).default(8),
   RATE_LIMIT_KSEF_SYNC_WINDOW_MS: z.coerce.number().int().min(0).default(300_000),
+  // B18 customer chat widget. Bearer dla internal/admin endpointow (Discord bot forwarding);
+  // gdy pusty -> internal endpointy zwracaja 503 (feature-gated). Anty-spam: spec decyzja #6.
+  SUPPORT_ADMIN_BEARER_TOKEN: z.string().min(16).optional(),
+  RATE_LIMIT_SUPPORT_TICKET_MAX: z.coerce.number().int().min(0).default(5),
+  RATE_LIMIT_SUPPORT_TICKET_WINDOW_MS: z.coerce.number().int().min(0).default(3_600_000),
+  RATE_LIMIT_SUPPORT_MESSAGE_MAX: z.coerce.number().int().min(0).default(30),
+  RATE_LIMIT_SUPPORT_MESSAGE_WINDOW_MS: z.coerce.number().int().min(0).default(3_600_000),
   APP_NAME: z.string().default("FVControl API"),
   APP_VERSION: z.string().default("1.0.0"),
 
