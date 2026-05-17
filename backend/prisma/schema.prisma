@@ -231,7 +231,9 @@ enum SubscriptionProvider {
   STRIPE
 }
 
-/** null = legacy (infer recurring if providerSubscriptionId set) */
+/**
+ * null = legacy (infer recurring if providerSubscriptionId set)
+ */
 enum SubscriptionBillingKind {
   STRIPE_RECURRING
   STRIPE_PREPAID_BLIK
@@ -249,42 +251,43 @@ enum AuthProvider {
 // --- Core tenant / RBAC ---
 
 model Tenant {
-  id        String   @id @default(uuid()) @db.Uuid
+  id        String    @id @default(uuid()) @db.Uuid
   name      String
-  nip       String?  @unique
+  nip       String?   @unique
   deletedAt DateTime?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
-  users                  User[]
-  roles                  Role[]
-  contractors            Contractor[]
-  invoices               Invoice[]
-  integrationsPos        IntegrationPos[]
-  documents              Document[]
-  mailboxes              Mailbox[]
-  ingestionSources       IngestionSource[]
-  processingJobs         ProcessingJob[]
-  integrationCredentials IntegrationCredential[]
-  auditLogs              AuditLog[]
-  idempotencyKeys        IdempotencyKey[]
-  invoiceDuplicates      InvoiceDuplicate[]
-  settings               TenantSetting[]
-  extractionRuns         ExtractionRun[]
-  invoiceSources         InvoiceSourceRecord[]
-  complianceEvents       InvoiceComplianceEvent[]
-  accountingExports      AccountingExport[]
-  sourceMessages         SourceMessage[]
-  agreements             Agreement[]
-  subscriptions          Subscription[]
+  users                   User[]
+  roles                   Role[]
+  contractors             Contractor[]
+  invoices                Invoice[]
+  integrationsPos         IntegrationPos[]
+  documents               Document[]
+  mailboxes               Mailbox[]
+  ingestionSources        IngestionSource[]
+  processingJobs          ProcessingJob[]
+  integrationCredentials  IntegrationCredential[]
+  auditLogs               AuditLog[]
+  idempotencyKeys         IdempotencyKey[]
+  invoiceDuplicates       InvoiceDuplicate[]
+  settings                TenantSetting[]
+  extractionRuns          ExtractionRun[]
+  invoiceSources          InvoiceSourceRecord[]
+  complianceEvents        InvoiceComplianceEvent[]
+  accountingExports       AccountingExport[]
+  sourceMessages          SourceMessage[]
+  agreements              Agreement[]
+  subscriptions           Subscription[]
   emailVerificationTokens EmailVerificationToken[]
   passwordResetTokens     PasswordResetToken[]
-  mobileCaptureHandoffs  MobileCaptureHandoff[]
+  mobileCaptureHandoffs   MobileCaptureHandoff[]
+  supportTickets          SupportTicket[]
 }
 
 model Permission {
-  id    String @id @default(uuid()) @db.Uuid
-  key   String @unique
+  id    String           @id @default(uuid()) @db.Uuid
+  key   String           @unique
   roles RolePermission[]
 }
 
@@ -306,10 +309,10 @@ model Role {
 }
 
 model RolePermission {
-  roleId       String @db.Uuid
-  permissionId String @db.Uuid
-  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
-  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  roleId       String     @db.Uuid
+  permissionId String     @db.Uuid
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
 
   @@id([roleId, permissionId])
   @@map("role_permissions")
@@ -326,62 +329,65 @@ model UserRoleLink {
 }
 
 model User {
-  id           String   @id @default(uuid()) @db.Uuid
-  tenantId     String   @db.Uuid
-  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  email        String   @unique
-  passwordHash String?
-  emailVerified Boolean @default(true)
-  role         UserRole
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id            String   @id @default(uuid()) @db.Uuid
+  tenantId      String   @db.Uuid
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  email         String   @unique
+  passwordHash  String?
+  emailVerified Boolean  @default(true)
+  role          UserRole
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  refreshTokens   RefreshToken[]
-  invoicesCreated Invoice[]       @relation("InvoiceCreatedBy")
-  agreementsCreated Agreement[]   @relation("AgreementCreatedBy")
-  invoiceEvents   InvoiceEvent[]
-  roleLinks       UserRoleLink[]
-  auditLogs       AuditLog[]      @relation("AuditActor")
-  authIdentities  AuthIdentity[]
+  refreshTokens           RefreshToken[]
+  invoicesCreated         Invoice[]                @relation("InvoiceCreatedBy")
+  agreementsCreated       Agreement[]              @relation("AgreementCreatedBy")
+  invoiceEvents           InvoiceEvent[]
+  roleLinks               UserRoleLink[]
+  auditLogs               AuditLog[]               @relation("AuditActor")
+  authIdentities          AuthIdentity[]
   emailVerificationTokens EmailVerificationToken[]
   passwordResetTokens     PasswordResetToken[]
-  mobileCaptureHandoffs  MobileCaptureHandoff[]
+  mobileCaptureHandoffs   MobileCaptureHandoff[]
+  supportTickets          SupportTicket[]
 
   @@index([tenantId])
 }
 
 model Subscription {
-  id                  String               @id @default(uuid()) @db.Uuid
-  tenantId            String               @db.Uuid
-  tenant              Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  status              SubscriptionStatus
-  provider            SubscriptionProvider @default(MANUAL)
-  planCode            String               @default("starter")
-  /** null = legacy; PREPAID_BLIK = jednorazowe płatności BLIK, okres w currentPeriodEnd */
-  billingKind         SubscriptionBillingKind?
-  providerCustomerId  String?
+  id                     String                   @id @default(uuid()) @db.Uuid
+  tenantId               String                   @db.Uuid
+  tenant                 Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  status                 SubscriptionStatus
+  provider               SubscriptionProvider     @default(MANUAL)
+  planCode               String                   @default("starter")
+  /**
+   * null = legacy; PREPAID_BLIK = jednorazowe płatności BLIK, okres w currentPeriodEnd
+   */
+  billingKind            SubscriptionBillingKind?
+  providerCustomerId     String?
   providerSubscriptionId String?
-  currentPeriodStart  DateTime?
-  currentPeriodEnd    DateTime?
-  trialEndsAt         DateTime?
-  createdAt           DateTime             @default(now())
-  updatedAt           DateTime             @updatedAt
+  currentPeriodStart     DateTime?
+  currentPeriodEnd       DateTime?
+  trialEndsAt            DateTime?
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime                 @updatedAt
 
   @@index([tenantId, status])
   @@map("subscriptions")
 }
 
 model EmailVerificationToken {
-  id         String   @id @default(uuid()) @db.Uuid
-  tenantId   String   @db.Uuid
-  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  userId     String   @db.Uuid
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tokenHash  String   @unique
+  id         String    @id @default(uuid()) @db.Uuid
+  tenantId   String    @db.Uuid
+  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId     String    @db.Uuid
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String    @unique
   expiresAt  DateTime
   consumedAt DateTime?
-  createdAt  DateTime @default(now())
+  createdAt  DateTime  @default(now())
 
   @@index([userId, expiresAt])
   @@index([tenantId, expiresAt])
@@ -389,15 +395,15 @@ model EmailVerificationToken {
 }
 
 model PasswordResetToken {
-  id         String   @id @default(uuid()) @db.Uuid
-  tenantId   String   @db.Uuid
-  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  userId     String   @db.Uuid
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tokenHash  String   @unique
+  id         String    @id @default(uuid()) @db.Uuid
+  tenantId   String    @db.Uuid
+  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId     String    @db.Uuid
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String    @unique
   expiresAt  DateTime
   consumedAt DateTime?
-  createdAt  DateTime @default(now())
+  createdAt  DateTime  @default(now())
 
   @@index([userId, expiresAt])
   @@index([tenantId, expiresAt])
@@ -457,9 +463,9 @@ model Contractor {
 // --- Documents & invoices (FVControl) ---
 
 model Document {
-  id               String             @id @default(uuid()) @db.Uuid
-  tenantId         String             @db.Uuid
-  tenant           Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  id               String               @id @default(uuid()) @db.Uuid
+  tenantId         String               @db.Uuid
+  tenant           Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   sha256           String
   storageKey       String
   storageBucket    String?
@@ -467,16 +473,16 @@ model Document {
   sizeBytes        Int
   sourceType       IngestionSourceType?
   sourceExternalId String?
-  metadata         Json?              @db.JsonB
+  metadata         Json?                @db.JsonB
   deletedAt        DateTime?
-  createdAt        DateTime           @default(now())
-  updatedAt        DateTime           @updatedAt
-  updatedById      String?            @db.Uuid
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  updatedById      String?              @db.Uuid
 
-  invoices       Invoice[]       @relation("InvoicePrimaryDocument")
-  invoiceFiles   InvoiceFile[]
-  extractionRuns ExtractionRun[]
-  processingJobs ProcessingJob[]
+  invoices          Invoice[]          @relation("InvoicePrimaryDocument")
+  invoiceFiles      InvoiceFile[]
+  extractionRuns    ExtractionRun[]
+  processingJobs    ProcessingJob[]
   sourceAttachments SourceAttachment[]
   agreement         Agreement?
 
@@ -487,26 +493,26 @@ model Document {
 }
 
 model Agreement {
-  id                String            @id @default(uuid()) @db.Uuid
-  tenantId          String            @db.Uuid
-  tenant            Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  contractorId      String?           @db.Uuid
-  contractor        Contractor?       @relation(fields: [contractorId], references: [id], onDelete: SetNull)
-  primaryDocId      String            @unique @db.Uuid
-  primaryDoc        Document          @relation(fields: [primaryDocId], references: [id], onDelete: Cascade)
+  id                String          @id @default(uuid()) @db.Uuid
+  tenantId          String          @db.Uuid
+  tenant            Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contractorId      String?         @db.Uuid
+  contractor        Contractor?     @relation(fields: [contractorId], references: [id], onDelete: SetNull)
+  primaryDocId      String          @unique @db.Uuid
+  primaryDoc        Document        @relation(fields: [primaryDocId], references: [id], onDelete: Cascade)
   title             String
   subject           String?
   counterpartyName  String?
   counterpartyNip   String?
-  signedAt          DateTime?         @db.Date
-  validUntil        DateTime?         @db.Date
-  status            AgreementStatus   @default(PROCESSING)
+  signedAt          DateTime?       @db.Date
+  validUntil        DateTime?       @db.Date
+  status            AgreementStatus @default(PROCESSING)
   notes             String?
-  normalizedPayload Json?             @db.JsonB
-  createdById       String            @db.Uuid
-  createdBy         User              @relation("AgreementCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
+  normalizedPayload Json?           @db.JsonB
+  createdById       String          @db.Uuid
+  createdBy         User            @relation("AgreementCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
 
   @@index([tenantId, status])
   @@index([tenantId, createdAt])
@@ -514,34 +520,34 @@ model Agreement {
 }
 
 model Invoice {
-  id            String        @id @default(uuid()) @db.Uuid
-  tenantId      String        @db.Uuid
-  tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  contractorId  String?       @db.Uuid
-  contractor    Contractor?   @relation(fields: [contractorId], references: [id], onDelete: Restrict)
-  primaryDocId  String?       @db.Uuid
-  primaryDoc    Document?     @relation("InvoicePrimaryDocument", fields: [primaryDocId], references: [id], onDelete: SetNull)
-  number        String
-  issueDate     DateTime      @db.Date
-  saleDate      DateTime?     @db.Date
-  dueDate       DateTime?     @db.Date
-  currency      String        @default("PLN")
-  netTotal      Decimal       @db.Decimal(14, 2)
-  vatTotal      Decimal       @db.Decimal(14, 2)
-  grossTotal    Decimal       @db.Decimal(14, 2)
-  status        InvoiceStatus
-  source        InvoiceSource @default(MANUAL)
+  id               String               @id @default(uuid()) @db.Uuid
+  tenantId         String               @db.Uuid
+  tenant           Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contractorId     String?              @db.Uuid
+  contractor       Contractor?          @relation(fields: [contractorId], references: [id], onDelete: Restrict)
+  primaryDocId     String?              @db.Uuid
+  primaryDoc       Document?            @relation("InvoicePrimaryDocument", fields: [primaryDocId], references: [id], onDelete: SetNull)
+  number           String
+  issueDate        DateTime             @db.Date
+  saleDate         DateTime?            @db.Date
+  dueDate          DateTime?            @db.Date
+  currency         String               @default("PLN")
+  netTotal         Decimal              @db.Decimal(14, 2)
+  vatTotal         Decimal              @db.Decimal(14, 2)
+  grossTotal       Decimal              @db.Decimal(14, 2)
+  status           InvoiceStatus
+  source           InvoiceSource        @default(MANUAL)
   /// Canonical ingestion channel when known
-  ingestionKind IngestionSourceType?
+  ingestionKind    IngestionSourceType?
   sourceExternalId String?
   /// NIP|number|issueDate|gross|currency — hashed in service layer
   fingerprint      String?
   notes            String?
-  createdById      String        @db.Uuid
-  createdBy        User          @relation("InvoiceCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
-  updatedById      String?       @db.Uuid
+  createdById      String               @db.Uuid
+  createdBy        User                 @relation("InvoiceCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  updatedById      String?              @db.Uuid
 
   /// Compliance / KSeF filter layer (see docs/compliance-rules.md)
   ledgerKind        InvoiceLedgerKind       @default(PURCHASE) @map("ledger_kind")
@@ -564,16 +570,16 @@ model Invoice {
   /// Kategoria raportowa (wydatki / przychody) — ustawiana ręcznie w UI; agregacja w Raportach.
   reportCategory    String?                 @map("report_category") @db.VarChar(200)
 
-  items            InvoiceItem[]
-  files            InvoiceFile[]
-  events           InvoiceEvent[]
-  links            InvoiceLink[]
-  duplicatesAsA    InvoiceDuplicate[] @relation("DupCandidate")
-  duplicatesAsB    InvoiceDuplicate[] @relation("DupCanonical")
-  extractionRuns   ExtractionRun[]
-  processingJobs   ProcessingJob[]
-  sourceRecords    InvoiceSourceRecord[]
-  complianceTrail  InvoiceComplianceEvent[]
+  items           InvoiceItem[]
+  files           InvoiceFile[]
+  events          InvoiceEvent[]
+  links           InvoiceLink[]
+  duplicatesAsA   InvoiceDuplicate[]       @relation("DupCandidate")
+  duplicatesAsB   InvoiceDuplicate[]       @relation("DupCanonical")
+  extractionRuns  ExtractionRun[]
+  processingJobs  ProcessingJob[]
+  sourceRecords   InvoiceSourceRecord[]
+  complianceTrail InvoiceComplianceEvent[]
 
   @@unique([tenantId, number])
   @@unique([tenantId, ingestionKind, sourceExternalId])
@@ -589,16 +595,16 @@ model Invoice {
 }
 
 model InvoiceItem {
-  id         String   @id @default(uuid()) @db.Uuid
-  invoiceId  String   @db.Uuid
-  invoice    Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  id         String  @id @default(uuid()) @db.Uuid
+  invoiceId  String  @db.Uuid
+  invoice    Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   name       String
-  quantity   Decimal  @db.Decimal(12, 3)
+  quantity   Decimal @db.Decimal(12, 3)
   unit       String?
-  netPrice   Decimal  @db.Decimal(14, 2)
-  vatRate    Decimal  @db.Decimal(5, 2)
-  netValue   Decimal  @db.Decimal(14, 2)
-  grossValue Decimal  @db.Decimal(14, 2)
+  netPrice   Decimal @db.Decimal(14, 2)
+  vatRate    Decimal @db.Decimal(5, 2)
+  netValue   Decimal @db.Decimal(14, 2)
+  grossValue Decimal @db.Decimal(14, 2)
 
   @@index([invoiceId])
 }
@@ -642,13 +648,13 @@ model InvoiceEvent {
 }
 
 model InvoiceLink {
-  id             String             @id @default(uuid()) @db.Uuid
-  invoiceId      String             @db.Uuid
-  invoice        Invoice            @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  targetSystem   IngestionSourceType
-  externalId     String
-  metadata       Json?              @db.JsonB
-  createdAt      DateTime           @default(now())
+  id           String              @id @default(uuid()) @db.Uuid
+  invoiceId    String              @db.Uuid
+  invoice      Invoice             @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  targetSystem IngestionSourceType
+  externalId   String
+  metadata     Json?               @db.JsonB
+  createdAt    DateTime            @default(now())
 
   @@unique([invoiceId, targetSystem, externalId])
   @@index([invoiceId])
@@ -677,19 +683,19 @@ model InvoiceDuplicate {
 }
 
 model ExtractionRun {
-  id          String   @id @default(uuid()) @db.Uuid
-  tenantId    String   @db.Uuid
-  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  documentId  String   @db.Uuid
-  document    Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  invoiceId   String?  @db.Uuid
-  invoice     Invoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
-  provider    String
-  model       String?
-  rawJson     Json?    @db.JsonB
-  confidence  Decimal? @db.Decimal(5, 4)
-  errorCode   String?
-  createdAt   DateTime @default(now())
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @db.Uuid
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  documentId String   @db.Uuid
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  invoiceId  String?  @db.Uuid
+  invoice    Invoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  provider   String
+  model      String?
+  rawJson    Json?    @db.JsonB
+  confidence Decimal? @db.Decimal(5, 4)
+  errorCode  String?
+  createdAt  DateTime @default(now())
 
   @@index([documentId])
   @@index([invoiceId])
@@ -725,14 +731,14 @@ model ProcessingJob {
 }
 
 model ProcessingAttempt {
-  id         String   @id @default(uuid()) @db.Uuid
-  jobId      String   @db.Uuid
+  id         String        @id @default(uuid()) @db.Uuid
+  jobId      String        @db.Uuid
   job        ProcessingJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
   attemptNo  Int
   step       PipelineStep
   errorClass String?
   message    String?
-  startedAt  DateTime @default(now())
+  startedAt  DateTime      @default(now())
   endedAt    DateTime?
 
   @@index([jobId])
@@ -742,16 +748,16 @@ model ProcessingAttempt {
 // --- Mail & ingestion registry ---
 
 model Mailbox {
-  id             String          @id @default(uuid()) @db.Uuid
-  tenantId       String          @db.Uuid
-  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  provider       MailboxProvider
-  label          String
-  credentialId   String?         @db.Uuid
-  credential     IntegrationCredential? @relation(fields: [credentialId], references: [id], onDelete: SetNull)
-  isActive       Boolean         @default(true)
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  id           String                 @id @default(uuid()) @db.Uuid
+  tenantId     String                 @db.Uuid
+  tenant       Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  provider     MailboxProvider
+  label        String
+  credentialId String?                @db.Uuid
+  credential   IntegrationCredential? @relation(fields: [credentialId], references: [id], onDelete: SetNull)
+  isActive     Boolean                @default(true)
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
 
   syncState      MailboxSyncState?
   sourceMessages SourceMessage[]
@@ -762,37 +768,37 @@ model Mailbox {
 }
 
 model MailboxSyncState {
-  id              String   @id @default(uuid()) @db.Uuid
-  mailboxId       String   @unique @db.Uuid
-  mailbox         Mailbox  @relation(fields: [mailboxId], references: [id], onDelete: Cascade)
-  historyId       String?
-  uidValidity     Int?
-  uidNext         Int?
-  lastSyncedAt    DateTime?
-  lastError       String?
+  id                   String                @id @default(uuid()) @db.Uuid
+  mailboxId            String                @unique @db.Uuid
+  mailbox              Mailbox               @relation(fields: [mailboxId], references: [id], onDelete: Cascade)
+  historyId            String?
+  uidValidity          Int?
+  uidNext              Int?
+  lastSyncedAt         DateTime?
+  lastError            String?
   /// Zenbox IMAP: IDLE | RUNNING | ERROR
-  imapSyncStatus      ImapMailboxSyncStatus @default(IDLE) @map("imap_sync_status")
+  imapSyncStatus       ImapMailboxSyncStatus @default(IDLE) @map("imap_sync_status")
   /// Last successfully processed IMAP UID (inclusive cursor).
-  imapLastProcessedUid BigInt?              @map("imap_last_processed_uid")
+  imapLastProcessedUid BigInt?               @map("imap_last_processed_uid")
   /// UIDVALIDITY from server (string for forward-compat).
-  imapUidValidityStr   String?              @map("imap_uid_validity_str")
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  imapUidValidityStr   String?               @map("imap_uid_validity_str")
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
 
   @@index([mailboxId, imapLastProcessedUid])
   @@map("mailbox_sync_state")
 }
 
 model IngestionSource {
-  id        String             @id @default(uuid()) @db.Uuid
-  tenantId  String             @db.Uuid
-  tenant    Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  id        String              @id @default(uuid()) @db.Uuid
+  tenantId  String              @db.Uuid
+  tenant    Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   kind      IngestionSourceType
   label     String
-  isEnabled Boolean            @default(true)
-  metadata  Json?              @db.JsonB
-  createdAt DateTime           @default(now())
-  updatedAt DateTime           @updatedAt
+  isEnabled Boolean             @default(true)
+  metadata  Json?               @db.JsonB
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
 
   @@unique([tenantId, kind, label])
   @@index([tenantId])
@@ -817,22 +823,22 @@ model IntegrationPos {
 }
 
 model IntegrationCredential {
-  id           String                   @id @default(uuid()) @db.Uuid
-  tenantId     String                   @db.Uuid
-  tenant       Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  connector    ConnectorType
-  kind         IntegrationCredentialKind
-  label        String
+  id              String                    @id @default(uuid()) @db.Uuid
+  tenantId        String                    @db.Uuid
+  tenant          Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  connector       ConnectorType
+  kind            IntegrationCredentialKind
+  label           String
   secretEncrypted String
   /// Encryption / rotation bookkeeping (increment on credential rotation).
-  keyVersion   Int                      @default(1) @map("key_version")
-  metadata     Json?                    @db.JsonB
-  rotatedAt    DateTime?
-  expiresAt    DateTime?
-  isActive     Boolean                  @default(true)
-  createdAt    DateTime                 @default(now())
-  updatedAt    DateTime                 @updatedAt
-  createdById  String?                  @db.Uuid
+  keyVersion      Int                       @default(1) @map("key_version")
+  metadata        Json?                     @db.JsonB
+  rotatedAt       DateTime?
+  expiresAt       DateTime?
+  isActive        Boolean                   @default(true)
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+  createdById     String?                   @db.Uuid
 
   mailboxes Mailbox[]
 
@@ -842,22 +848,22 @@ model IntegrationCredential {
 }
 
 model SourceMessage {
-  id                String                  @id @default(uuid()) @db.Uuid
-  tenantId          String                  @db.Uuid
-  tenant            Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  id                String                   @id @default(uuid()) @db.Uuid
+  tenantId          String                   @db.Uuid
+  tenant            Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   provider          IngestionChannelProvider
-  accountKey        String                  @map("account_key")
-  mailboxId         String?                 @db.Uuid
-  mailbox           Mailbox?                @relation(fields: [mailboxId], references: [id], onDelete: SetNull)
-  externalMessageId String                  @map("external_message_id")
-  imapUid           BigInt                  @map("imap_uid")
-  receivedAt        DateTime                @map("received_at")
+  accountKey        String                   @map("account_key")
+  mailboxId         String?                  @db.Uuid
+  mailbox           Mailbox?                 @relation(fields: [mailboxId], references: [id], onDelete: SetNull)
+  externalMessageId String                   @map("external_message_id")
+  imapUid           BigInt                   @map("imap_uid")
+  receivedAt        DateTime                 @map("received_at")
   subject           String?
-  fromAddress       String?                 @map("from_address")
-  rawHeaders        Json?                   @map("raw_headers") @db.JsonB
-  processedAt       DateTime?               @map("processed_at")
-  createdAt         DateTime                @default(now())
-  updatedAt         DateTime                @updatedAt
+  fromAddress       String?                  @map("from_address")
+  rawHeaders        Json?                    @map("raw_headers") @db.JsonB
+  processedAt       DateTime?                @map("processed_at")
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
   attachments       SourceAttachment[]
 
   @@unique([tenantId, provider, accountKey, externalMessageId])
@@ -900,18 +906,18 @@ model BillingWebhookEvent {
 }
 
 model AuditLog {
-  id         String           @id @default(uuid()) @db.Uuid
-  tenantId   String           @db.Uuid
-  tenant     Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  actorId    String?          @db.Uuid
-  actor      User?            @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+  id         String          @id @default(uuid()) @db.Uuid
+  tenantId   String          @db.Uuid
+  tenant     Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  actorId    String?         @db.Uuid
+  actor      User?           @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
   action     String
   entityType AuditEntityType
   entityId   String?
-  metadata   Json             @db.JsonB
+  metadata   Json            @db.JsonB
   ip         String?
   requestId  String?
-  createdAt  DateTime         @default(now())
+  createdAt  DateTime        @default(now())
 
   @@index([tenantId, createdAt])
   @@index([entityType, entityId])
@@ -919,16 +925,16 @@ model AuditLog {
 }
 
 model InvoiceSourceRecord {
-  id               String                @id @default(uuid()) @db.Uuid
-  tenantId         String                @db.Uuid
-  tenant           Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  invoiceId        String?               @db.Uuid
-  invoice          Invoice?              @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  id               String                  @id @default(uuid()) @db.Uuid
+  tenantId         String                  @db.Uuid
+  tenant           Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  invoiceId        String?                 @db.Uuid
+  invoice          Invoice?                @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   intakeSourceType InvoiceIntakeSourceType @map("intake_source_type")
-  sourceAccount    String?               @map("source_account")
-  externalRef      String?               @map("external_ref")
-  metadata         Json?                 @db.JsonB
-  createdAt        DateTime              @default(now())
+  sourceAccount    String?                 @map("source_account")
+  externalRef      String?                 @map("external_ref")
+  metadata         Json?                   @db.JsonB
+  createdAt        DateTime                @default(now())
 
   @@index([tenantId, intakeSourceType])
   @@index([invoiceId])
@@ -936,14 +942,14 @@ model InvoiceSourceRecord {
 }
 
 model InvoiceComplianceEvent {
-  id         String              @id @default(uuid()) @db.Uuid
-  tenantId   String              @db.Uuid
-  tenant     Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  invoiceId  String              @db.Uuid
-  invoice    Invoice             @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  eventType  ComplianceEventType @map("event_type")
-  payload    Json                @db.JsonB
-  createdAt  DateTime            @default(now())
+  id        String              @id @default(uuid()) @db.Uuid
+  tenantId  String              @db.Uuid
+  tenant    Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  invoiceId String              @db.Uuid
+  invoice   Invoice             @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  eventType ComplianceEventType @map("event_type")
+  payload   Json                @db.JsonB
+  createdAt DateTime            @default(now())
 
   @@index([tenantId, invoiceId])
   @@index([invoiceId, createdAt])
@@ -984,13 +990,13 @@ model IdempotencyKey {
 }
 
 model TenantSetting {
-  id        String   @id @default(uuid()) @db.Uuid
-  tenantId  String   @db.Uuid
-  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  key       String
-  valueJson Json     @db.JsonB
-  updatedAt DateTime @updatedAt
-  updatedById String? @db.Uuid
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @db.Uuid
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  key         String
+  valueJson   Json     @db.JsonB
+  updatedAt   DateTime @updatedAt
+  updatedById String?  @db.Uuid
 
   @@unique([tenantId, key])
   @@map("tenant_settings")
@@ -1012,4 +1018,75 @@ model MobileCaptureHandoff {
   @@index([token])
   @@index([expiresAt])
   @@map("mobile_capture_handoffs")
+}
+
+// === B18 Customer chat widget (Sprint 1 scope addition 2026-05-14, spec accepted 2026-05-17) ===
+
+enum SupportTicketStatus {
+  OPEN
+  IN_PROGRESS
+  WAITING_USER
+  RESOLVED
+  CLOSED
+}
+
+enum SupportSeverity {
+  P0
+  P1
+  P2
+}
+
+/// Decyzja Marcina 2026-05-17 (#3): wartosc `AI` obecna od pierwszej migracji
+/// (future-proof Sprint 2 Haiku FAQ); logika AI OFF w MVP, enum gotowy by uniknac migracji.
+enum SupportAuthorType {
+  CLIENT
+  STAFF
+  SYSTEM
+  AI
+}
+
+/// Zgloszenie support od zalogowanego klienta SaaS (B18 customer chat widget).
+model SupportTicket {
+  id       String  @id @default(uuid()) @db.Uuid
+  tenantId String  @map("tenant_id") @db.Uuid
+  tenant   Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId   String? @map("user_id") @db.Uuid
+  user     User?   @relation(fields: [userId], references: [id])
+
+  subject   String              @db.VarChar(200)
+  status    SupportTicketStatus @default(OPEN)
+  severity  SupportSeverity?
+  component String?             @db.VarChar(50)
+
+  vaultBugRef     String? @map("vault_bug_ref") @db.VarChar(200)
+  discordThreadId String? @map("discord_thread_id") @db.VarChar(50)
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  closedAt  DateTime? @map("closed_at")
+
+  messages SupportMessage[]
+
+  @@index([tenantId, status])
+  @@index([severity, status])
+  @@map("support_tickets")
+}
+
+/// Pojedyncza wiadomosc w watku support (klient / staff / system / AI).
+model SupportMessage {
+  id       String        @id @default(uuid()) @db.Uuid
+  ticketId String        @map("ticket_id") @db.Uuid
+  ticket   SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  authorType   SupportAuthorType @map("author_type")
+  authorUserId String?           @map("author_user_id") @db.Uuid
+  authorLabel  String?           @map("author_label") @db.VarChar(100)
+
+  content     String @db.Text
+  attachments Json?
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([ticketId, createdAt])
+  @@map("support_messages")
 }
