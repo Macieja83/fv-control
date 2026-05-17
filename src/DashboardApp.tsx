@@ -26,6 +26,7 @@ import {
   type SalesInvoiceInitialData,
 } from './components/dashboard/SalesInvoiceDialog'
 import { useInvoiceDashboard } from './hooks/useInvoiceDashboard'
+import { SupportWidget } from './components/support/SupportWidget'
 import './styles/dashboard.css'
 
 function readNavFromLocation(): AppNavKey {
@@ -315,6 +316,7 @@ export default function DashboardApp() {
           return updateSalesInvoice(editingSalesInvoiceId, body)
         }}
       />
+      <SupportWidget />
     </div>
   )
 }
